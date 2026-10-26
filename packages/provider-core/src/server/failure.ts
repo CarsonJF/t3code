@@ -26,6 +26,15 @@ export class ContextHandoffBudgetError extends Schema.TaggedError<ContextHandoff
   }
 }
 
+export class ContextHandoffBackgroundWorkError extends Schema.TaggedError<ContextHandoffBackgroundWorkError>()(
+  "ContextHandoffBackgroundWorkError",
+  {},
+) {
+  override get message() {
+    return "The target provider still has background work running. Wait for it to finish or stop it before retrying the handoff.";
+  }
+}
+
 export const MAX_PROVIDER_FAILURE_MESSAGE_LENGTH = 4_096;
 const MAX_PROVIDER_FAILURE_CODE_LENGTH = 128;
 
@@ -87,6 +96,11 @@ function curatedCauseMessages(cause: unknown): {
       switch (tag) {
         case "ContextHandoffBudgetError":
           return { known: new ContextHandoffBudgetError().message, category: categoryMessage() };
+        case "ContextHandoffBackgroundWorkError":
+          return {
+            known: new ContextHandoffBackgroundWorkError().message,
+            category: categoryMessage(),
+          };
         case "AcpModelSelectionError":
         case "ClaudeBackgroundWorkBlocksQueryReplacementError":
         case "ClaudeAppendSystemPromptFileError":

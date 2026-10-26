@@ -114,6 +114,7 @@ function makeTestAdapter(input: {
   readonly failedRunOrdinals?: ReadonlySet<number>;
   readonly interruptedRunOrdinals?: ReadonlySet<number>;
   readonly holdRunOrdinal?: number;
+  readonly pendingBackgroundWork?: Ref.Ref<boolean>;
   readonly holdFirstTurn?: Deferred.Deferred<void>;
   readonly releaseFirstTurn?: Deferred.Deferred<void>;
 }): ProviderAdapter.ProviderAdapterV2["Service"] {
@@ -145,6 +146,11 @@ function makeTestAdapter(input: {
           providerSessionId: sessionInput.providerSessionId,
           providerSession,
           events: Stream.fromPubSub(events),
+          ...(input.pendingBackgroundWork === undefined
+            ? {}
+            : {
+                hasPendingBackgroundWorkForThread: () => Ref.get(input.pendingBackgroundWork!),
+              }),
           ...(input.getModelContextWindow === undefined
             ? {}
             : { getModelContextWindow: input.getModelContextWindow }),
@@ -416,6 +422,8 @@ describe("orchestration v2 provider switching", () => {
     "screenshot-exhausted-target-fallback",
     "screenshot-exhausted-target-estimate-native",
     "screenshot-exhausted-target-oversized-native",
+    "screenshot-exhausted-target-tight-native",
+    "screenshot-exhausted-target-background-native",
     "prior-images-reasoning-change-replacement-small-native",
     "imported-prior-images-fallback",
     "prior-images-telemetry-native",
@@ -435,6 +443,7 @@ describe("orchestration v2 provider switching", () => {
         const failStartOnce = yield* Ref.make(false);
         const failResumeOnce = yield* Ref.make(false);
         const generation = yield* Ref.make(0);
+        const pendingBackgroundWork = yield* Ref.make(false);
         const priorImages = scenario.includes("prior-images");
         const exhaustedTarget = scenario.includes("exhausted-target");
         const replaceNative = scenario.includes("replacement");
@@ -475,6 +484,7 @@ describe("orchestration v2 provider switching", () => {
             ...(scenario.includes("retry") || scenario.includes("unsent") ? { failStartOnce } : {}),
             ...(replaceNative ? { failResumeOnce, nativeThreadGeneration: generation } : {}),
             ...(exhaustedTarget ? { nativeThreadGeneration: generation } : {}),
+            ...(scenario.includes("target-background") ? { pendingBackgroundWork } : {}),
             ...(scenario.includes("reported-capacity")
               ? { initialContextUsage: { usedTokens: 999_999, maxTokens: 1_000_000 } }
               : {}),
@@ -503,7 +513,10 @@ describe("orchestration v2 provider switching", () => {
                         : 32_000,
                   }
                 : scenario === "large-current-input" || priorImages || exhaustedTarget
-                  ? { getModelContextWindow: () => 32_000 }
+                  ? {
+                      getModelContextWindow: () =>
+                        scenario.includes("target-tight") ? 25_121 : 32_000,
+                    }
                   : {}),
             ...(scenario.endsWith("-native") || scenario === "large-current-input"
               ? { injectedHistory }
@@ -550,7 +563,9 @@ describe("orchestration v2 provider switching", () => {
                     }))
                   : turnUsageScenario && ordinal >= targetOrdinal
                     ? [screenshot, { ...screenshot, id: "current-2" }]
-                    : scenario.startsWith("screenshot") && ordinal >= targetOrdinal
+                    : scenario.startsWith("screenshot") &&
+                        ordinal >= targetOrdinal &&
+                        (!exhaustedTarget || ordinal === targetOrdinal)
                       ? screenshots
                       : priorImages && ordinal === (scenario.startsWith("imported") ? 1 : 2)
                         ? [screenshot]
@@ -729,6 +744,7 @@ describe("orchestration v2 provider switching", () => {
             yield* Ref.set(failResumeOnce, true);
           }
           if (scenario.includes("retry")) yield* Ref.set(failStartOnce, true);
+          if (scenario.includes("target-background")) yield* Ref.set(pendingBackgroundWork, true);
           yield* dispatch(targetOrdinal, current, targetSelection);
           yield* wait(targetOrdinal);
           if (scenario.includes("retry")) {
@@ -814,11 +830,23 @@ describe("orchestration v2 provider switching", () => {
             yield* wait(targetOrdinal + 3);
           }
           const projection = yield* orchestrator.getThreadProjection(threadId);
-          if (scenario.includes("target-oversized")) {
+          if (
+            scenario.includes("target-oversized") ||
+            scenario.includes("target-tight") ||
+            scenario.includes("target-background")
+          ) {
             assert.equal(projection.runs.at(-1)?.status, "failed");
             assert.equal(yield* Ref.get(generation), 1);
             assert.equal(projection.messages.at(-1)!.text, current);
             assert.deepEqual(projection.messages.at(-1)!.attachments, screenshots);
+            if (scenario.includes("target-background")) {
+              assert.isTrue(yield* Ref.get(pendingBackgroundWork));
+              const failure = projection.turnItems.findLast((item) => item.type === "error");
+              assert.equal(
+                failure?.type === "error" ? failure.failure.message : null,
+                "The target provider still has background work running. Wait for it to finish or stop it before retrying the handoff.",
+              );
+            }
             return;
           }
           assert.equal(projection.runs.at(-1)?.status, "completed");
@@ -855,6 +883,17 @@ describe("orchestration v2 provider switching", () => {
               "Continue after automatic recovery",
             );
             assert.deepEqual(yield* Ref.get(injectedHistory), historyBeforeFollowup);
+            if (scenario.includes("target-estimate")) {
+              yield* dispatch(6, "Another source turn", CODEX_MODEL_SELECTION);
+              yield* wait(6);
+              yield* dispatch(7, "Return after recovery", CLAUDE_MODEL_SELECTION);
+              yield* wait(7);
+              assert.equal(
+                (yield* orchestrator.getThreadProjection(threadId)).runs.at(-1)?.status,
+                "completed",
+              );
+              assert.equal(yield* Ref.get(generation), 2);
+            }
             return;
           }
           if (priorImages) {
@@ -977,7 +1016,12 @@ describe("orchestration v2 provider switching", () => {
       }),
     ),
   );
-  it.live.each(["turn-start", "injection", "large-missed-request"] as const)(
+  it.live.each([
+    "turn-start",
+    "injection",
+    "large-missed-request",
+    "exhausted-target-retry",
+  ] as const)(
     "recovers %s failure without duplicating history in the same native thread",
     (failure) =>
       Effect.scoped(
@@ -1075,6 +1119,22 @@ describe("orchestration v2 provider switching", () => {
               failure !== "injection" ? "injected" : "pending",
             );
             const historyBeforeRetry = (yield* Ref.get(injectedHistory)).length;
+            if (failure === "exhausted-target-retry") {
+              const target = failed.providerThreads.find(
+                (thread) => thread.providerInstanceId === CLAUDE_MODEL_SELECTION.instanceId,
+              )!;
+              yield* (yield* EventSink.EventSinkV2).write({
+                events: [
+                  {
+                    id: EventId.make("exhausted-retry-usage"),
+                    type: "provider-thread.updated",
+                    threadId,
+                    occurredAt: yield* DateTime.now,
+                    payload: { ...target, contextUsage: { usedTokens: 30_000, maxTokens: 32_000 } },
+                  },
+                ],
+              });
+            }
             const retryText =
               failure === "large-missed-request" ? "y".repeat(10_000) : "Retry target request";
             yield* dispatch(3, retryText, CLAUDE_MODEL_SELECTION);
@@ -1082,7 +1142,7 @@ describe("orchestration v2 provider switching", () => {
             const retried = yield* orchestrator.getThreadProjection(threadId);
             const lastTurn = (yield* Ref.get(capturedTurns)).at(-1)!;
             assert.equal(lastTurn.text, retryText);
-            if (failure !== "injection") {
+            if (failure !== "injection" && failure !== "exhausted-target-retry") {
               const delta = yield* encodeJson(
                 (yield* Ref.get(injectedHistory)).slice(historyBeforeRetry),
               );

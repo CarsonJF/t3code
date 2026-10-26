@@ -9697,10 +9697,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             return existing;
           }
 
-          // Selection changes kill CLI background work; refuse until it finishes or Stop closes the process.
+          // Replacing this thread's process kills its background work, even with a new native identity.
           if (
             existing !== null &&
-            existing.nativeThreadId === nativeThreadId &&
+            (existing.nativeThreadId === nativeThreadId ||
+              existing.lastTurn?.input.threadId === turnInput.threadId) &&
             !existing.stopping &&
             (yield* liveProcessRunsBackgroundWork(existing))
           ) {
