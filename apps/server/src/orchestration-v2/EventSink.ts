@@ -385,6 +385,7 @@ const layerBase: Layer.Layer<
         return yield* runOutcomes.prepare(storedEvents);
       });
 
+    // The enclosing write or commit span already traces this per-event projection merge.
     const updateDelegatedCompletionOnly = Effect.fnUntraced(function* (
       events: ReadonlyArray<OrchestrationV2DomainEvent>,
       includesRun: (runId: RunId) => boolean,
