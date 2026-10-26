@@ -1854,6 +1854,13 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
         const goalStops = new Map<string, number>();
         const latestRunTurnId = (providerTurnId: ProviderTurnId) =>
           continuedRuns.get(providerTurnId)?.at(-1)?.providerTurnId ?? providerTurnId;
+        const isContinuedRunDescendant = (
+          candidate: ActiveCodexTurnContext,
+          context: ActiveCodexTurnContext,
+        ) =>
+          (continuedRuns.get(context.providerTurnId) ?? [context]).some((ancestor) =>
+            isDescendantCodexTurn(candidate, ancestor),
+          );
 
         const emitProviderEvent = (event: ProviderAdapter.ProviderAdapterV2Event) =>
           Queue.offer(events, event).pipe(Effect.asVoid);
@@ -5692,7 +5699,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           }) {
             const event = yield* makeRootTerminalEvent(input);
             const hasActiveDescendants = Array.from((yield* Ref.get(activeTurns)).values()).some(
-              (candidate) => isDescendantCodexTurn(candidate, input.context),
+              (candidate) => isContinuedRunDescendant(candidate, input.context),
             );
             // Failed roots leave native children working and must settle without them.
             // Interrupted roots wait for descendants because Stop interrupts the whole lineage.
@@ -5817,7 +5824,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               for (const [nativeTurnId, deferred] of current) {
                 if (
                   !activeTurnContexts.some((candidate) =>
-                    isDescendantCodexTurn(candidate, deferred.context),
+                    isContinuedRunDescendant(candidate, deferred.context),
                   )
                 ) {
                   updated.delete(nativeTurnId);
@@ -5883,7 +5890,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               if (input.status !== "completed" && !input.continueRun) {
                 yield* Ref.update(terminalizedNonCompletedNativeTurns, (current) => {
                   const updated = new Set(current);
-                  updated.add(input.nativeTurnId);
+                  for (const turn of continuedRuns.get(input.context.providerTurnId) ?? [
+                    input.context,
+                  ])
+                    updated.add(turn.nativeTurnId);
                   return updated;
                 });
               }
@@ -6208,6 +6218,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                       Effect.gen(function* () {
                         if (
                           (yield* Ref.get(activeTurns)).get(terminal.nativeTurnId) !== context ||
+                          goalStops.has(nativeThreadId) ||
                           (yield* Ref.get(interruptingNativeTurns)).has(terminal.nativeTurnId)
                         )
                           return false;
@@ -6252,9 +6263,8 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                           if (context.capacityRetryPending !== undefined) {
                             yield* Deferred.succeed(context.capacityRetryPending, undefined);
                           }
-                          yield* emitRootTerminal(
-                            context,
-                            yield* makeRootTerminalEvent({ ...terminal, providerRetry: state }),
+                          yield* turnTerminalizationPermit.withPermits(1)(
+                            emitOrDeferRootTerminal({ ...terminal, providerRetry: state }),
                           );
                         }),
                       ),
@@ -7413,7 +7423,22 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               );
             },
             (effect, requestedInput) =>
-              effect.pipe(
+              Effect.acquireUseRelease(
+                Effect.sync(() => {
+                  const nativeThreadId = requestedInput.providerThread.nativeThreadRef?.nativeId;
+                  if (nativeThreadId != null)
+                    goalStops.set(nativeThreadId, (goalStops.get(nativeThreadId) ?? 0) + 1);
+                  return nativeThreadId;
+                }),
+                () => effect,
+                (nativeThreadId) =>
+                  Effect.sync(() => {
+                    if (nativeThreadId == null) return;
+                    const stops = (goalStops.get(nativeThreadId) ?? 1) - 1;
+                    if (stops > 0) goalStops.set(nativeThreadId, stops);
+                    else goalStops.delete(nativeThreadId);
+                  }),
+              ).pipe(
                 Effect.mapError(
                   (cause) =>
                     new ProviderAdapter.ProviderAdapterInterruptError({

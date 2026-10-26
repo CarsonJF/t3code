@@ -5410,7 +5410,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
     };
   };
 
-  it.effect.each(["completed", "failed"] as const)(
+  it.effect.each(["completed", "failed", "interrupted"] as const)(
     "handles a late native child after the capacity retry %s",
     (parentStatus) =>
       Effect.scoped(
@@ -5519,11 +5519,17 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           );
           yield* Deferred.await(retrying);
           yield* TestClock.adjust("2 seconds");
-          yield* harness.awaitTerminal(1);
+          if (parentStatus === "interrupted") assert.isEmpty(harness.terminalEvents());
+          else {
+            yield* harness.awaitTerminal(1);
+            const terminal = harness.terminalEvents()[0];
+            if (terminal?.status === "failed") assert.isTrue(terminal.childTurnsContinue);
+          }
           yield* TestClock.adjust("60 seconds");
           yield* harness.until(
             () => harness.subagentUpdates().at(-1)?.subagent.status === "completed",
           );
+          yield* harness.awaitTerminal(1);
           assert.lengthOf(harness.continuationRequests, parentStatus === "completed" ? 1 : 0);
           if (parentStatus === "completed")
             assert.include(harness.continuationRequests[0]?.detail, "CAPACITY_CHILD_DONE");
@@ -6954,6 +6960,96 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           harness.terminalEvents().map((event) => event.status),
           ["completed"],
         );
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    );
+
+    it.effect("Stop prevents a capacity retry while pausing its goal", () =>
+      Effect.gen(function* () {
+        const nativeTurnId = "goal-capacity-stop";
+        const prompt = "Keep going";
+        const retrying = yield* Deferred.make<void>();
+        const pausing = yield* Deferred.make<void>();
+        const requests: Array<string> = [];
+        const harness = yield* makeCodexReplayHarness(
+          makeCodexReplayTranscript({
+            scenario: "goal-capacity-stop",
+            entries: [
+              ...codexReplayPreamble({ nativeThreadId, nativeTurnId, prompt }),
+              notification("goal active", "thread/goal/updated", {
+                threadId: nativeThreadId,
+                turnId: nativeTurnId,
+                goal: codexGoal("active", 10),
+              }),
+              notification("capacity failure", "turn/completed", {
+                threadId: nativeThreadId,
+                turn: {
+                  ...makeCodexReplayTurn({ id: nativeTurnId, status: "failed" }),
+                  error: {
+                    message: "Selected model is at capacity.",
+                    codexErrorInfo: "serverOverloaded",
+                  },
+                },
+              }),
+              {
+                type: "expect_outbound",
+                frame: {
+                  id: 4,
+                  method: "thread/goal/set",
+                  params: { threadId: nativeThreadId, status: "paused" },
+                },
+              },
+              {
+                type: "emit_inbound",
+                afterMs: 3_000,
+                frame: { id: 4, result: { goal: codexGoal("paused", 10) } },
+              },
+            ],
+          }),
+          (event) =>
+            event.type === "turn_item.updated" &&
+            event.turnItem.type === "error" &&
+            event.turnItem.status === "running"
+              ? Deferred.succeed(retrying, undefined)
+              : Effect.void,
+          (method) =>
+            Effect.gen(function* () {
+              requests.push(method);
+              if (method === "thread/goal/set") yield* Deferred.succeed(pausing, undefined);
+            }),
+        );
+        yield* harness.runtime.startTurn(
+          makeCodexTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: harness.providerThread,
+            now: yield* DateTime.now,
+            attemptId: RunAttemptId.make("goal-capacity-stop"),
+            text: prompt,
+          }),
+        );
+        yield* Deferred.await(retrying);
+        const stopping = yield* harness.runtime
+          .interruptTurn({
+            providerThread: harness.providerThread,
+            providerTurnId: (yield* IdAllocator.IdAllocatorV2).derive.providerTurn({
+              driver: CodexAdapterV2.CODEX_DRIVER_KIND,
+              nativeTurnId,
+            }),
+          })
+          .pipe(Effect.forkScoped);
+        yield* Deferred.await(pausing);
+        yield* TestClock.adjust("3 seconds");
+        assert.lengthOf(
+          requests.filter((method) => method === "turn/start"),
+          1,
+        );
+        yield* Fiber.join(stopping);
+        yield* harness.awaitTerminal(1);
+        assert.equal(harness.terminalEvents()[0]?.status, "interrupted");
       }).pipe(
         Effect.scoped,
         Effect.provide(
