@@ -1078,7 +1078,9 @@ export const layer: Layer.Layer<
           );
           if (!fitsFresh) return resumed.success;
           const hasPendingWork = yield* (
-            session.hasPendingBackgroundWorkForThread?.(resumed.success) ??
+            session.hasPendingBackgroundWorkForThread?.(resumed.success, {
+              includeSubagents: true,
+            }) ??
               session.hasPendingBackgroundWork ??
               Effect.succeed(false)
           );

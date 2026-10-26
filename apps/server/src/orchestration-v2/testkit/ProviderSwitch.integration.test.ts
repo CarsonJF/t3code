@@ -115,6 +115,7 @@ function makeTestAdapter(input: {
   readonly interruptedRunOrdinals?: ReadonlySet<number>;
   readonly holdRunOrdinal?: number;
   readonly pendingBackgroundWork?: Ref.Ref<boolean>;
+  readonly subagentOnlyBackgroundWork?: boolean;
   readonly holdFirstTurn?: Deferred.Deferred<void>;
   readonly releaseFirstTurn?: Deferred.Deferred<void>;
 }): ProviderAdapter.ProviderAdapterV2["Service"] {
@@ -149,7 +150,10 @@ function makeTestAdapter(input: {
           ...(input.pendingBackgroundWork === undefined
             ? {}
             : {
-                hasPendingBackgroundWorkForThread: () => Ref.get(input.pendingBackgroundWork!),
+                hasPendingBackgroundWorkForThread: (_thread, options) =>
+                  input.subagentOnlyBackgroundWork && options?.includeSubagents !== true
+                    ? Effect.succeed(false)
+                    : Ref.get(input.pendingBackgroundWork!),
               }),
           ...(input.getModelContextWindow === undefined
             ? {}
@@ -424,6 +428,7 @@ describe("orchestration v2 provider switching", () => {
     "screenshot-exhausted-target-oversized-native",
     "screenshot-exhausted-target-tight-native",
     "screenshot-exhausted-target-background-native",
+    "screenshot-exhausted-target-subagent-native",
     "prior-images-reasoning-change-replacement-small-native",
     "imported-prior-images-fallback",
     "prior-images-telemetry-native",
@@ -484,7 +489,12 @@ describe("orchestration v2 provider switching", () => {
             ...(scenario.includes("retry") || scenario.includes("unsent") ? { failStartOnce } : {}),
             ...(replaceNative ? { failResumeOnce, nativeThreadGeneration: generation } : {}),
             ...(exhaustedTarget ? { nativeThreadGeneration: generation } : {}),
-            ...(scenario.includes("target-background") ? { pendingBackgroundWork } : {}),
+            ...(scenario.includes("target-background") || scenario.includes("target-subagent")
+              ? {
+                  pendingBackgroundWork,
+                  subagentOnlyBackgroundWork: scenario.includes("target-subagent"),
+                }
+              : {}),
             ...(scenario.includes("reported-capacity")
               ? { initialContextUsage: { usedTokens: 999_999, maxTokens: 1_000_000 } }
               : {}),
@@ -744,7 +754,8 @@ describe("orchestration v2 provider switching", () => {
             yield* Ref.set(failResumeOnce, true);
           }
           if (scenario.includes("retry")) yield* Ref.set(failStartOnce, true);
-          if (scenario.includes("target-background")) yield* Ref.set(pendingBackgroundWork, true);
+          if (scenario.includes("target-background") || scenario.includes("target-subagent"))
+            yield* Ref.set(pendingBackgroundWork, true);
           yield* dispatch(targetOrdinal, current, targetSelection);
           yield* wait(targetOrdinal);
           if (scenario.includes("retry")) {
@@ -833,13 +844,14 @@ describe("orchestration v2 provider switching", () => {
           if (
             scenario.includes("target-oversized") ||
             scenario.includes("target-tight") ||
-            scenario.includes("target-background")
+            scenario.includes("target-background") ||
+            scenario.includes("target-subagent")
           ) {
             assert.equal(projection.runs.at(-1)?.status, "failed");
             assert.equal(yield* Ref.get(generation), 1);
             assert.equal(projection.messages.at(-1)!.text, current);
             assert.deepEqual(projection.messages.at(-1)!.attachments, screenshots);
-            if (scenario.includes("target-background")) {
+            if (scenario.includes("target-background") || scenario.includes("target-subagent")) {
               assert.isTrue(yield* Ref.get(pendingBackgroundWork));
               const failure = projection.turnItems.findLast((item) => item.type === "error");
               assert.equal(
