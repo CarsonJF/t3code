@@ -2220,6 +2220,9 @@ describe("CodexAdapterV2 post-settle continuation", () => {
     "exhaust",
     "stop",
     "stop-continued",
+    "stop-starting",
+    "started-first",
+    "completed-first",
     "steer",
     "start-fails",
   ] as const)("handles terminal Codex capacity failures when retries %s", (outcome) =>
@@ -2277,6 +2280,13 @@ describe("CodexAdapterV2 post-settle continuation", () => {
             nativeTurnId: nativeTurnId(attempt),
             prompt,
           }).slice(-3);
+          if (
+            outcome === "started-first" ||
+            outcome === "stop-starting" ||
+            outcome === "completed-first"
+          ) {
+            start.splice(1, 0, ...start.splice(2, 1));
+          }
           for (const entry of start) {
             if (entry.type === "expect_outbound") {
               entries.push({
@@ -2298,6 +2308,17 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                 },
               });
             } else if (entry.type === "emit_inbound" && entry.label === "turn/start") {
+              if (outcome === "completed-first")
+                entries.push({
+                  type: "emit_inbound",
+                  frame: {
+                    method: "turn/completed",
+                    params: {
+                      threadId: nativeThreadId,
+                      turn: makeCodexReplayTurn({ id: nativeTurnId(attempt), status: "completed" }),
+                    },
+                  },
+                });
               entries.push(
                 outcome === "start-fails"
                   ? {
@@ -2310,18 +2331,43 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                   : withReplayRequestId(entry, 3 + attempt),
               );
             } else if (outcome !== "start-fails") {
-              entries.push(entry);
+              entries.push(
+                outcome === "stop-starting" && entry.type === "emit_inbound"
+                  ? { ...entry, afterMs: 1_000 }
+                  : entry,
+              );
+              if (outcome === "stop-starting") {
+                entries.push(
+                  {
+                    type: "expect_outbound",
+                    frame: {
+                      id: 5,
+                      method: "turn/interrupt",
+                      params: { threadId: nativeThreadId, turnId: nativeTurnId(attempt) },
+                    },
+                  },
+                  { type: "emit_inbound", frame: { id: 5, result: {} } },
+                );
+              }
             }
           }
           if (outcome === "exhaust") entries.push(...failureEntries(attempt));
-          if (outcome === "recover" || outcome === "completion-only") {
+          if (
+            outcome === "recover" ||
+            outcome === "completion-only" ||
+            outcome === "started-first" ||
+            outcome === "stop-starting"
+          ) {
             entries.push({
               type: "emit_inbound",
               frame: {
                 method: "turn/completed",
                 params: {
                   threadId: nativeThreadId,
-                  turn: makeCodexReplayTurn({ id: nativeTurnId(attempt), status: "completed" }),
+                  turn: makeCodexReplayTurn({
+                    id: nativeTurnId(attempt),
+                    status: outcome === "stop-starting" ? "interrupted" : "completed",
+                  }),
                 },
               },
             });
@@ -2365,6 +2411,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         }
         const milestones = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2Event>();
         const starts: Array<unknown> = [];
+        const retryStarted = yield* Deferred.make<void>();
         const harness = yield* makeCodexReplayHarness(
           makeCodexReplayTranscript({ scenario, entries }),
           (event) =>
@@ -2375,8 +2422,11 @@ describe("CodexAdapterV2 post-settle continuation", () => {
               ? Queue.offer(milestones, event)
               : Effect.void,
           (method, params) =>
-            Effect.sync(() => {
-              if (method === "turn/start") starts.push(params);
+            Effect.gen(function* () {
+              if (method === "turn/start") {
+                starts.push(params);
+                if (starts.length === 2) yield* Deferred.succeed(retryStarted, undefined);
+              }
             }),
         );
         const turnInput = makeCodexTestTurnInput({
@@ -2417,6 +2467,14 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                   .pipe(Effect.forkScoped)
               : undefined;
           yield* TestClock.adjust(Math.min(2_000 * 2 ** (attempt - 1), 30_000));
+          if (outcome === "stop-starting") {
+            yield* Deferred.await(retryStarted);
+            const stopping = yield* harness.runtime
+              .interruptTurn({ providerThread: harness.providerThread, providerTurnId })
+              .pipe(Effect.forkScoped);
+            yield* TestClock.adjust("1 second");
+            yield* Fiber.join(stopping);
+          }
           if (steering !== undefined) yield* Fiber.join(steering);
           if (outcome === "stop-continued") {
             yield* harness.until(() =>
@@ -2436,14 +2494,25 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         const terminal = harness.terminalEvents()[0];
         assert.equal(
           terminal?.status,
-          outcome === "recover" || outcome === "completion-only" || outcome === "steer"
+          outcome === "recover" ||
+            outcome === "completion-only" ||
+            outcome === "steer" ||
+            outcome === "started-first" ||
+            outcome === "completed-first"
             ? "completed"
-            : outcome === "stop" || outcome === "stop-continued"
+            : outcome === "stop" || outcome === "stop-continued" || outcome === "stop-starting"
               ? "interrupted"
               : "failed",
         );
         assert.lengthOf(starts, 1 + retries);
         assert.lengthOf(harness.terminalEvents(), 1);
+        assert.lengthOf(
+          harness.events.filter(
+            (event) =>
+              event.type === "provider_turn.updated" && event.providerTurn.status === "running",
+          ),
+          outcome === "start-fails" ? 1 : 1 + retries,
+        );
         const retryItems = harness.events.flatMap((event) =>
           event.type === "turn_item.updated" && event.turnItem.type === "error"
             ? [event.turnItem]
@@ -5340,6 +5409,131 @@ describe("CodexAdapterV2 post-settle continuation", () => {
       rootFinished: entries.slice(rootCompleted - 1, rootCompleted + 1),
     };
   };
+
+  it.effect.each(["completed", "failed"] as const)(
+    "handles a late native child after the capacity retry %s",
+    (parentStatus) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const retriedTurnId = "native-capacity-recovered-parent";
+          const retrying = yield* Deferred.make<void>();
+          const harness = yield* makeCodexReplayHarness(
+            makeCodexReplayTranscript({
+              scenario: "capacity-late-child",
+              entries: [
+                ...lateChildPrefix().spawned,
+                {
+                  type: "emit_inbound",
+                  frame: {
+                    method: "turn/completed",
+                    params: {
+                      threadId: RESUME_NATIVE_THREAD,
+                      turn: {
+                        ...makeCodexReplayTurn({ id: RESUME_NATIVE_TURN, status: "failed" }),
+                        error: {
+                          message: "Selected model is at capacity.",
+                          codexErrorInfo: "serverOverloaded",
+                        },
+                      },
+                    },
+                  },
+                },
+                {
+                  type: "expect_outbound",
+                  frame: {
+                    id: 4,
+                    method: "turn/start",
+                    params: {
+                      threadId: RESUME_NATIVE_THREAD,
+                      input: [],
+                      cwd: "/workspace",
+                      model: "gpt-5.4",
+                      approvalPolicy: "never",
+                      approvalsReviewer: "user",
+                      sandboxPolicy: { type: "dangerFullAccess" },
+                      summary: "detailed",
+                      collaborationMode: { mode: "default", settings: { model: "gpt-5.4" } },
+                    },
+                  },
+                },
+                {
+                  type: "emit_inbound",
+                  frame: {
+                    id: 4,
+                    result: {
+                      turn: makeCodexReplayTurn({ id: retriedTurnId, status: "inProgress" }),
+                    },
+                  },
+                },
+                {
+                  type: "emit_inbound",
+                  frame: {
+                    method: "turn/started",
+                    params: {
+                      threadId: RESUME_NATIVE_THREAD,
+                      turn: makeCodexReplayTurn({ id: retriedTurnId, status: "inProgress" }),
+                    },
+                  },
+                },
+                {
+                  type: "emit_inbound",
+                  frame: {
+                    method: "turn/completed",
+                    params: {
+                      threadId: RESUME_NATIVE_THREAD,
+                      turn: {
+                        ...makeCodexReplayTurn({ id: retriedTurnId, status: parentStatus }),
+                        error:
+                          parentStatus === "failed"
+                            ? { message: "Recovery failed.", codexErrorInfo: "internalServerError" }
+                            : null,
+                      },
+                    },
+                  },
+                },
+                childAgentMessage({
+                  id: "child-after-capacity",
+                  text: "CAPACITY_CHILD_DONE",
+                  turnId: RESUME_CHILD_TURN_1,
+                  completedAtMs: 1782622480000,
+                  afterMs: 60_000,
+                }),
+                childTurnCompleted(RESUME_CHILD_TURN_1),
+              ],
+            }),
+            (event) =>
+              event.type === "turn_item.updated" &&
+              event.turnItem.type === "error" &&
+              event.turnItem.status === "running"
+                ? Deferred.succeed(retrying, undefined)
+                : Effect.void,
+          );
+          yield* harness.runtime.startTurn(
+            makeCodexTestTurnInput({
+              threadId: harness.threadId,
+              providerThread: harness.providerThread,
+              now: yield* DateTime.now,
+              attemptId: RunAttemptId.make("capacity-late-child"),
+              text: RESUME_PROMPT,
+            }),
+          );
+          yield* Deferred.await(retrying);
+          yield* TestClock.adjust("2 seconds");
+          yield* harness.awaitTerminal(1);
+          yield* TestClock.adjust("60 seconds");
+          yield* harness.until(
+            () => harness.subagentUpdates().at(-1)?.subagent.status === "completed",
+          );
+          assert.lengthOf(harness.continuationRequests, parentStatus === "completed" ? 1 : 0);
+          if (parentStatus === "completed")
+            assert.include(harness.continuationRequests[0]?.detail, "CAPACITY_CHILD_DONE");
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+          ),
+        ),
+      ),
+  );
 
   it.effect("names a late child spawned without a prompt in its wake", () =>
     Effect.scoped(
