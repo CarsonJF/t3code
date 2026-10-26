@@ -12268,6 +12268,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         acceptedAt,
         events: plan.events,
         effects: plan.effects,
+        // Accept only advances delivery bookkeeping; checkpoint capture may end the run meanwhile.
+        ...(command.type === "notification.delivery.accept"
+          ? { updateDelegatedCompletionOnly: true }
+          : {}),
         ...(plan.cancelUnsettledEffects === undefined
           ? {}
           : { cancelUnsettledEffects: plan.cancelUnsettledEffects }),
