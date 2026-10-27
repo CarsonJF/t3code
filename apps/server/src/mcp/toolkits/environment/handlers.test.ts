@@ -1,11 +1,16 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
 import {
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
+  ProjectId,
   ProviderInstanceId,
   ThreadId,
   type OrchestrationV2ThreadShell,
+  type Project,
+  type ServerSettings,
 } from "@t3tools/contracts";
+import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -16,10 +21,11 @@ import * as Stream from "effect/Stream";
 import * as Environment from "../../../environment/ServerEnvironment.ts";
 import * as ThreadCommandExecutor from "../../../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../../../project/ProjectService.ts";
 import * as Settings from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
-import { liveThreadShell } from "../../McpToolAccess.testkit.ts";
+import { liveThreadShell, liveThreadsLayer } from "../../McpToolAccess.testkit.ts";
 import * as EnvironmentHandlers from "./handlers.ts";
 import { EnvironmentToolkit } from "./tools.ts";
 
@@ -93,5 +99,109 @@ it.effect("refuses a preferences update when the caller's turn ends while it wai
         ),
       ),
     );
+  }),
+);
+
+const projectId = ProjectId.make("project:groups");
+const groupsLayer = (settings: Ref.Ref<ServerSettings>, updates: Ref.Ref<number>) =>
+  McpToolAccess.HandlersLayer.layer(EnvironmentHandlers.layer).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        ThreadCommandExecutor.layer,
+        NodeCrypto.layer,
+        liveThreadsLayer,
+        Layer.succeed(McpInvocationContext.McpInvocationContext, {
+          environmentId,
+          requestNamespace: "provider:groups",
+          thread: {
+            threadId,
+            providerSessionId: "provider:groups",
+            providerInstanceId: ProviderInstanceId.make("codex"),
+          },
+          client: undefined,
+          capabilities: new Set(["orchestration" as const]),
+          issuedAt: 0,
+        }),
+        Layer.mock(Environment.ServerEnvironment)({
+          getDescriptor: Effect.succeed({
+            environmentId,
+            label: "Test",
+            platform: { os: "linux", arch: "x64" },
+            serverVersion: "0.0.0",
+            capabilities: { repositoryIdentity: false },
+          }),
+        }),
+        Layer.mock(ProjectService.ProjectService)({
+          snapshot: Effect.succeed({
+            projects: [{ id: projectId, deletedAt: null } as Project],
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          }),
+        }),
+        Layer.mock(Settings.ServerSettingsService)({
+          getSettings: Ref.get(settings),
+          updateSettings: (patch) =>
+            Ref.update(updates, (count) => count + 1).pipe(
+              Effect.andThen(
+                Ref.updateAndGet(settings, (current) => applyServerSettingsPatch(current, patch)),
+              ),
+            ),
+        }),
+      ),
+    ),
+  );
+const callGroupsTool = <Name extends "t3_thread_groups_read" | "t3_thread_groups_update">(
+  name: Name,
+  params: Parameters<Effect.Success<typeof EnvironmentToolkit>["handle"]>[1],
+) =>
+  Effect.gen(function* () {
+    const toolkit = yield* EnvironmentToolkit;
+    const results = yield* toolkit
+      .handle(name, params as never)
+      .pipe(Stream.unwrap, Stream.runCollect);
+    return results.at(-1)?.result;
+  });
+
+it.effect("creates a group, then puts a project's new threads in it", () =>
+  Effect.gen(function* () {
+    const settings = yield* Ref.make(DEFAULT_SERVER_SETTINGS);
+    const updates = yield* Ref.make(0);
+    yield* Effect.gen(function* () {
+      const created = yield* callGroupsTool("t3_thread_groups_update", {
+        ops: [{ type: "createGroup", name: "Work", color: "blue" }],
+      });
+      expect(created).toMatchObject({ groups: [{ name: "Work", color: "blue" }], projects: [] });
+      const groupId = (yield* Ref.get(settings)).threadGroups.groups[0]!.id;
+      yield* callGroupsTool("t3_thread_groups_update", {
+        ops: [
+          { type: "setProjectGroup", projectIds: [projectId], groupId },
+          { type: "updateGroup", groupId, name: "Client work" },
+        ],
+      });
+      expect(yield* callGroupsTool("t3_thread_groups_read", {})).toEqual({
+        groups: [{ id: groupId, name: "Client work", color: "blue" }],
+        projects: [{ projectId, groupId }],
+      });
+    }).pipe(Effect.provide(groupsLayer(settings, updates)));
+  }),
+);
+
+it.effect("rejects the whole update when an op names a missing group or project", () =>
+  Effect.gen(function* () {
+    const settings = yield* Ref.make(DEFAULT_SERVER_SETTINGS);
+    const updates = yield* Ref.make(0);
+    yield* Effect.gen(function* () {
+      const missingGroup = yield* callGroupsTool("t3_thread_groups_update", {
+        ops: [
+          { type: "createGroup", name: "Work" },
+          { type: "setProjectGroup", projectIds: [projectId], groupId: "nope" },
+        ],
+      });
+      expect(missingGroup).toMatchObject({ code: "invalid_request" });
+      const missingProject = yield* callGroupsTool("t3_thread_groups_update", {
+        ops: [{ type: "setProjectGroup", projectIds: [ProjectId.make("gone")], groupId: null }],
+      });
+      expect(missingProject).toMatchObject({ code: "invalid_request" });
+      expect(yield* Ref.get(updates)).toBe(0);
+    }).pipe(Effect.provide(groupsLayer(settings, updates)));
   }),
 );
