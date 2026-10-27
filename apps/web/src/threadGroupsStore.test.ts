@@ -103,4 +103,20 @@ describe("threadGroupActions", () => {
     expect(reloaded.collapsed[groupId]).toBe(true);
     expect(reloaded.groups).toEqual([{ id: groupId, name: "xnproductions" }]);
   });
+
+  it("persists a group's color and icon, and clears them on edit", () => {
+    useThreadGroupsStore.setState(EMPTY_THREAD_GROUPS_STATE, true);
+    const icon = { kind: "lucide", name: "rocket", color: "violet" } as const;
+    const groupId = threadGroupActions.create({ name: "xn", color: "violet", icon });
+
+    expect(readPersistedThreadGroups().groups).toEqual([
+      { id: groupId, name: "xn", color: "violet", icon },
+    ]);
+
+    threadGroupActions.update(groupId, { name: "XN", color: null, icon: null });
+
+    expect(readPersistedThreadGroups().groups).toEqual([
+      { id: groupId, name: "XN", color: null, icon: null },
+    ]);
+  });
 });
