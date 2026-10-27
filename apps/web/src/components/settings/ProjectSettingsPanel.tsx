@@ -606,6 +606,8 @@ function ProjectDetail({
                   ? `${projectIcon.text} · ${projectIcon.color}`
                   : projectIcon?.kind === "emoji"
                     ? projectIcon.emoji
+                    : projectIcon?.kind === "image"
+                      ? gt("Custom image")
                     : (faviconPath ?? gt("Automatic"))
             }
             resetAction={
