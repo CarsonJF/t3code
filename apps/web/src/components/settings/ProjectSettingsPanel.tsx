@@ -45,6 +45,7 @@ import {
   ProjectFaviconPickerDialog,
 } from "./ProjectFaviconPickerDialog";
 import { ProjectActionsSettings } from "./ProjectActionsSettings";
+import { ProjectDefaultGroupRow } from "./ProjectDefaultGroupRow";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { projectGroupTitleNeedsUpdate } from "./ProjectSettingsPanel.logic";
 import { useSettingsProjectGroups } from "./useSettingsProjectGroups";
@@ -559,6 +560,7 @@ function ProjectDetail({
               </div>
             }
           />
+          <ProjectDefaultGroupRow memberProjectRefs={group.memberProjectRefs} />
         </SettingsSection>
         <ProjectDefaultsSettings category="project" />
         <ProjectActionsSettings />
