@@ -16,6 +16,7 @@ import {
   projectIconColorClassName,
 } from "../../projectIconOptions";
 import { cn } from "~/lib/utils";
+import { readIconImage } from "../../lib/iconImage";
 import { lucideIconByName } from "../../lib/lucideIconByName";
 import { Button } from "../ui/button";
 import {
@@ -93,8 +94,14 @@ function ProjectIconPickerBody({
     current?.kind === "lucide" ? current.name : DEFAULT_ICON,
   );
   const [color, setColor] = useState<ProjectIconColor>(
-    current && current.kind !== "emoji" ? current.color : automatic.color,
+    current && (current.kind === "lucide" || current.kind === "monogram")
+      ? current.color
+      : automatic.color,
   );
+  const [imageDataUrl, setImageDataUrl] = useState(
+    current?.kind === "image" ? current.dataUrl : null,
+  );
+  const [imageError, setImageError] = useState<string | null>(null);
   const [letters, setLetters] = useState(
     current?.kind === "monogram" ? current.text : automatic.monogram,
   );
@@ -107,15 +114,28 @@ function ProjectIconPickerBody({
   const monogram = letters.normalize("NFKC").trim().toUpperCase();
   const validMonogram = isMonogramText(monogram);
   const save = () => {
-    if (mode === "monogram" && !validMonogram) return;
+    if (!canSave) return;
     onSelect(
       mode === "monogram"
         ? { kind: "monogram", text: monogram, color }
         : mode === "lucide"
           ? { kind: "lucide", name: iconName, color }
-          : { kind: "emoji", emoji },
+          : mode === "image" && imageDataUrl
+            ? { kind: "image", dataUrl: imageDataUrl }
+            : { kind: "emoji", emoji },
     );
     onClose();
+  };
+  const canSave =
+    mode === "monogram" ? validMonogram : mode === "image" ? imageDataUrl !== null : true;
+  const chooseImage = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      setImageDataUrl(await readIconImage(file));
+      setImageError(null);
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : "That image could not be used.");
+    }
   };
 
   return (
@@ -125,7 +145,7 @@ function ProjectIconPickerBody({
           <T>Choose project icon</T>
         </DialogTitle>
         <DialogDescription>
-          <T>Choose an icon, emoji, or monogram.</T>
+          <T>Choose an icon, emoji, monogram, or your own image.</T>
         </DialogDescription>
       </DialogHeader>
       <DialogPanel className="flex min-h-0 flex-col">
@@ -135,7 +155,14 @@ function ProjectIconPickerBody({
           value={[mode]}
           onValueChange={(next) => {
             const value = next[0];
-            if (value === "lucide" || value === "emoji" || value === "monogram") setMode(value);
+            if (
+              value === "lucide" ||
+              value === "emoji" ||
+              value === "monogram" ||
+              value === "image"
+            ) {
+              setMode(value);
+            }
           }}
         >
           <Toggle value="lucide">
@@ -147,9 +174,12 @@ function ProjectIconPickerBody({
           <Toggle value="monogram">
             <T>Monogram</T>
           </Toggle>
+          <Toggle value="image">
+            <T>Image</T>
+          </Toggle>
         </ToggleGroup>
 
-        {mode !== "emoji" ? (
+        {mode === "lucide" || mode === "monogram" ? (
           <div>
             <div className="mb-2 text-xs font-medium text-muted-foreground">
               <T>Color</T>
@@ -233,6 +263,30 @@ function ProjectIconPickerBody({
               </p>
             </div>
           </div>
+        ) : mode === "image" ? (
+          <div className="flex items-center gap-4 py-2">
+            <div className="flex size-12 items-center justify-center rounded-lg border bg-muted/40">
+              {imageDataUrl ? (
+                <img src={imageDataUrl} alt="" className="size-10 object-contain" />
+              ) : null}
+            </div>
+            <div className="flex-1 space-y-2">
+              <label htmlFor="project-icon-image" className="text-sm font-medium">
+                Image file
+              </label>
+              <Input
+                id="project-icon-image"
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif"
+                aria-describedby="project-icon-image-hint"
+                aria-invalid={imageError !== null}
+                onChange={(event) => void chooseImage(event.currentTarget.files?.[0])}
+              />
+              <p id="project-icon-image-hint" className="text-xs text-muted-foreground">
+                {imageError ?? "PNG, JPEG, WebP, or SVG. It is shrunk to a small square."}
+              </p>
+            </div>
+          </div>
         ) : (
           <>
             <ScrollArea scrollFade className="max-h-64">
@@ -277,7 +331,7 @@ function ProjectIconPickerBody({
         <Button variant="outline" onClick={onClose}>
           <T>Cancel</T>
         </Button>
-        <Button onClick={save} disabled={mode === "monogram" && !validMonogram}>
+        <Button onClick={save} disabled={!canSave}>
           <T>Save icon</T>
         </Button>
       </DialogFooter>
