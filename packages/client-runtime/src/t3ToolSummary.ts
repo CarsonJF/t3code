@@ -336,6 +336,12 @@ export function summarizeT3ToolCalls(
     case "environment-update":
       label = phrase("Updated", "update", `environment preferences ${times}`);
       break;
+    case "thread-groups-read":
+      label = phrase("Checked", "check", `thread groups ${times}`);
+      break;
+    case "thread-groups-update":
+      label = phrase("Updated", "update", `thread groups ${times}`);
+      break;
     case "attachment-prepare":
       label = phrase(
         "Prepared",
