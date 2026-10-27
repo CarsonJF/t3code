@@ -24,6 +24,10 @@ export type ThreadActionMenuId =
   | "regenerate-title"
   | "mark-unread"
   | "share-guest"
+  | "group"
+  | "group:none"
+  | "group:new"
+  | `group:set:${string}`
   | "copy"
   | "copy-path"
   | "copy-branch"
@@ -127,22 +131,29 @@ export interface ThreadActionMenuState {
   readonly canShareWithGuest?: boolean;
   /** A No project thread with its own folder, on a server that can promote it. */
   readonly canTurnIntoProject?: boolean;
+  readonly threadGroups?: {
+    readonly groups: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+    readonly currentGroupId: string | null;
+  };
 }
 
-/** Local navigation, read markers, and copying remain available to read-only clients. */
+/** Local navigation, read markers, grouping, and copying remain available to read-only clients. */
 export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean {
-  return ![
-    "find",
-    "new-thread-on-branch",
-    "project-settings",
-    "mark-unread",
-    "share-guest",
-    "copy",
-    "copy-path",
-    "copy-branch",
-    "copy-thread",
-    "copy-thread-id",
-  ].includes(action);
+  return (
+    !action.startsWith("group") &&
+    ![
+      "find",
+      "new-thread-on-branch",
+      "project-settings",
+      "mark-unread",
+      "share-guest",
+      "copy",
+      "copy-path",
+      "copy-branch",
+      "copy-thread",
+      "copy-thread-id",
+    ].includes(action)
+  );
 }
 
 export function isThreadTriageAction(action: string): boolean {
@@ -159,6 +170,7 @@ export function buildThreadActionMenuItems(
   state: ThreadActionMenuState,
   resolve: MessageResolver = m,
 ): ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> {
+  const { threadGroups } = state;
   const items: ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> = [
     ...(state.canFind
       ? [{ id: "find" as const, label: resolve(msg("Find in thread")), icon: "text-search" }]
@@ -257,6 +269,28 @@ export function buildThreadActionMenuItems(
             label: resolve(msg("Turn into project")),
             icon: "folder-plus",
             disabled: state.isRunning,
+          },
+        ]
+      : []),
+    ...(threadGroups
+      ? [
+          {
+            id: "group" as const,
+            label: "Move to group",
+            icon: "folder",
+            children: [
+              {
+                id: "group:none" as const,
+                label: "No group",
+                checked: threadGroups.currentGroupId === null,
+              },
+              ...threadGroups.groups.map((group) => ({
+                id: `group:set:${group.id}` as const,
+                label: group.name,
+                checked: group.id === threadGroups.currentGroupId,
+              })),
+              { id: "group:new" as const, label: "New group…", separatorBefore: true },
+            ],
           },
         ]
       : []),

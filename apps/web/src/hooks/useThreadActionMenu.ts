@@ -20,6 +20,10 @@ import { msg } from "gt-react";
 
 import { pickSnoozePreset, resolveSnoozePresets } from "../components/Sidebar.snooze";
 import {
+  handleThreadGroupMenuAction,
+  readThreadGroupMenuState,
+} from "../components/threadGroupMenu";
+import {
   buildThreadActionMenuItems,
   isThreadTriageAction,
   threadActionRequiresOperate,
@@ -152,10 +156,12 @@ export function useThreadActionMenu(input: {
       snoozePresets,
       canShareWithGuest,
       canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+      threadGroups: readThreadGroupMenuState(thread),
     });
     const run = async (action: ThreadActionMenuId) => {
       const api = readLocalApi();
       if (!api) return;
+      if (await handleThreadGroupMenuAction(action, thread)) return;
       if (
         threadActionRequiresOperate(action) &&
         !(isThreadTriageAction(action)
