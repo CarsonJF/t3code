@@ -4,7 +4,13 @@ import {
   scopeProjectRef,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
-import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
+import {
+  ProjectIconColor,
+  ProjectIconOverride,
+  type EnvironmentId,
+  type ProjectId,
+  type ThreadId,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { create } from "zustand";
 
@@ -13,8 +19,19 @@ import { randomUUID } from "./lib/utils";
 
 const THREAD_GROUPS_STORAGE_KEY = "t3code:thread-groups:v1";
 
-const ThreadGroup = Schema.Struct({ id: Schema.String, name: Schema.String });
+const ThreadGroup = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  color: Schema.optional(Schema.NullOr(ProjectIconColor)),
+  icon: Schema.optional(Schema.NullOr(ProjectIconOverride)),
+});
 export type ThreadGroup = typeof ThreadGroup.Type;
+
+export interface ThreadGroupDetails {
+  readonly name: string;
+  readonly color: ProjectIconColor | null;
+  readonly icon: ProjectIconOverride | null;
+}
 
 const ProjectDefaultEntry = Schema.Struct({
   groupId: Schema.NullOr(Schema.String),
@@ -88,14 +105,14 @@ export function createThreadGroup(state: ThreadGroupsState, group: ThreadGroup):
   return { ...state, groups: [...state.groups, group] };
 }
 
-function renameThreadGroup(
+function updateThreadGroup(
   state: ThreadGroupsState,
   groupId: string,
-  name: string,
+  details: ThreadGroupDetails,
 ): ThreadGroupsState {
   return {
     ...state,
-    groups: state.groups.map((group) => (group.id === groupId ? { ...group, name } : group)),
+    groups: state.groups.map((group) => (group.id === groupId ? { ...group, ...details } : group)),
   };
 }
 
@@ -167,13 +184,14 @@ const update = (apply: (state: ThreadGroupsState) => ThreadGroupsState) =>
   useThreadGroupsStore.setState((state) => apply(state), true);
 
 export const threadGroupActions = {
-  create: (name: string): string => {
+  create: (details: ThreadGroupDetails | string): string => {
     const id = randomUUID();
-    update((state) => createThreadGroup(state, { id, name }));
+    const group = typeof details === "string" ? { name: details } : details;
+    update((state) => createThreadGroup(state, { id, ...group }));
     return id;
   },
-  rename: (groupId: string, name: string) =>
-    update((state) => renameThreadGroup(state, groupId, name)),
+  update: (groupId: string, details: ThreadGroupDetails) =>
+    update((state) => updateThreadGroup(state, groupId, details)),
   delete: (groupId: string) => update((state) => deleteThreadGroup(state, groupId)),
   setProjectDefault: (projectKeys: ReadonlyArray<string>, groupId: string | null) =>
     update((state) =>
