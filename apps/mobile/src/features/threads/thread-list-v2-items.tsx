@@ -86,6 +86,7 @@ import {
   type ThreadListV2Status,
 } from "./threadListV2";
 import { QueuedMessageIcon } from "./queued-message-icon";
+import { useThreadGroupMenu } from "./thread-group-menu";
 import { shouldRecedeThreadRow } from "./thread-row-emphasis";
 import { ThreadSearchMatchExcerpt } from "./thread-search-match";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
@@ -805,6 +806,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const handleDelete = useCallback(() => onDeleteThread(thread), [onDeleteThread, thread]);
   const handleRename = useCallback(() => onRenameThread(thread), [onRenameThread, thread]);
   const canOperateThread = useEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope);
+  const threadGroupMenu = useThreadGroupMenu(thread);
   const handleRegenerateTitle = useCallback(
     () => onRegenerateThreadTitle(thread),
     [onRegenerateThreadTitle, thread],
@@ -959,6 +961,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         : []),
       { id: "copy-thread", title: "Copy thread", image: "text.bubble" },
       { id: "copy-thread-id", title: "Copy thread ID", image: "doc.on.doc" },
+      ...threadGroupMenu.actions,
     ];
     if (snoozedRow) {
       return layoutThreadListV2RowMenuActions({
@@ -1027,10 +1030,12 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     snoozedRow,
     swipeActions.secondary,
     thread.branch,
+    threadGroupMenu.actions,
     titleMenuItems,
   ]);
   const handleMenuAction = useCallback(
     ({ nativeEvent }: { readonly nativeEvent: { readonly event: string } }) => {
+      threadGroupMenu.onAction(nativeEvent.event);
       if (nativeEvent.event === "new-thread-on-branch") onNewThreadOnBranch(thread);
       if (nativeEvent.event === "settle") handleSettle();
       if (nativeEvent.event === "unsettle") handleUnsettle();
@@ -1080,6 +1085,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     },
     [
       onNewThreadOnBranch,
+      threadGroupMenu,
       thread,
       handleArchive,
       handleDelete,
