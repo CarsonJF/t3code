@@ -137,13 +137,17 @@ function ThreadGroupNameDialog({ request }: { request: Request }) {
           </DialogFooter>
         </form>
         <ProjectIconPickerDialog
-          current={icon && color && icon.kind !== "emoji" ? { ...icon, color } : icon}
+          current={
+            icon && color && (icon.kind === "lucide" || icon.kind === "monogram")
+              ? { ...icon, color }
+              : icon
+          }
           projectName={trimmed || "Group"}
           open={pickingIcon}
           onOpenChange={setPickingIcon}
           onSelect={(next) => {
             setIcon(next);
-            if (next.kind !== "emoji") setColor(next.color);
+            if (next.kind === "lucide" || next.kind === "monogram") setColor(next.color);
           }}
         />
       </DialogPopup>
