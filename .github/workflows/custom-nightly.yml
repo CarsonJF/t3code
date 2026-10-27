@@ -1,6 +1,7 @@
 # Fork-only pipeline: rebase `custom` onto the newest upstream nightly and ship
-# a Windows x64 build of it. See CUSTOM.md. Upstream's release workflows are
-# disabled on this fork; this file must stay the only active workflow.
+# Windows x64, macOS (arm64 + x64) and Android builds of it. See CUSTOM.md.
+# Upstream's release workflows are disabled on this fork; this file must stay
+# the only active workflow.
 name: Custom nightly
 
 on:
@@ -30,6 +31,10 @@ env:
   BRANCH: custom
 
 jobs:
+  # mode: full   = rebase, check, push, build every platform, (re)create the release.
+  #       repair = the release exists but lacks some platform's assets: build only
+  #                those at the release tag's commit and attach them.
+  #       skip   = the release has every platform's assets.
   prepare:
     name: Rebase and check
     if: github.repository != 'pingdotgg/t3code'
@@ -39,11 +44,15 @@ jobs:
       contents: read
       actions: write
     outputs:
-      skip: ${{ steps.resolve.outputs.skip }}
+      mode: ${{ steps.resolve.outputs.mode }}
+      skip: ${{ steps.resolve.outputs.mode == 'skip' }}
+      need_win: ${{ steps.resolve.outputs.need_win }}
+      need_mac: ${{ steps.resolve.outputs.need_mac }}
+      need_android: ${{ steps.resolve.outputs.need_android }}
       upstream_tag: ${{ steps.resolve.outputs.upstream_tag }}
       version: ${{ steps.resolve.outputs.version }}
       release_tag: ${{ steps.resolve.outputs.release_tag }}
-      sha: ${{ steps.rebase.outputs.sha }}
+      sha: ${{ steps.rebase.outputs.sha || steps.resolve.outputs.repair_sha }}
       failure: ${{ steps.rebase.outputs.failure || steps.checks.outputs.failure }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -63,22 +72,36 @@ jobs:
           fi
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]{8}\.[0-9]+$ ]] || { echo "Bad upstream tag: '$tag'" >&2; exit 1; }
           release_tag="${tag}-custom"
-          skip=false
-          if gh release view "$release_tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && [[ "$FORCE" != "true" ]]; then
-            skip=true
-            echo "Release $release_tag already exists; nothing to do."
+          mode=full need_win=true need_mac=true need_android=true repair_sha=
+          if [[ "$FORCE" != "true" ]] && assets="$(gh release view "$release_tag" -R "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' 2>/dev/null)"; then
+            # Each platform counts as published once its feed manifest (desktop) or APK is attached.
+            grep -qx 'nightly.yml' <<<"$assets" && need_win=false
+            grep -qx 'nightly-mac.yml' <<<"$assets" && need_mac=false
+            grep -q '\.apk$' <<<"$assets" && need_android=false
+            if [[ "$need_win$need_mac$need_android" == falsefalsefalse ]]; then
+              mode=skip
+              echo "Release $release_tag has every platform; nothing to do."
+            else
+              mode=repair
+              repair_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$release_tag" -q .sha)"
+              echo "Release $release_tag is missing: win=$need_win mac=$need_mac android=$need_android; rebuilding those at $repair_sha."
+            fi
           fi
           {
             echo "upstream_tag=$tag"
             echo "version=${tag#v}"
             echo "release_tag=$release_tag"
-            echo "skip=$skip"
+            echo "mode=$mode"
+            echo "need_win=$need_win"
+            echo "need_mac=$need_mac"
+            echo "need_android=$need_android"
+            echo "repair_sha=$repair_sha"
           } >> "$GITHUB_OUTPUT"
 
       # Inherited upstream workflows would run (or queue forever on upstream's
       # runners) when this job pushes. Re-disable any that upstream adds.
       - name: Keep inherited workflows disabled
-        if: steps.resolve.outputs.skip != 'true'
+        if: steps.resolve.outputs.mode == 'full'
         run: |
           set -euo pipefail
           gh workflow list -R "$GITHUB_REPOSITORY" --all --json path,state \
@@ -89,7 +112,7 @@ jobs:
               done
 
       - name: Checkout
-        if: steps.resolve.outputs.skip != 'true'
+        if: steps.resolve.outputs.mode == 'full'
         uses: actions/checkout@v6
         with:
           ref: ${{ env.BRANCH }}
@@ -104,7 +127,7 @@ jobs:
       # custom has that upstream main does not; nothing is pushed on conflict.
       - id: rebase
         name: Rebase onto the upstream nightly
-        if: steps.resolve.outputs.skip != 'true'
+        if: steps.resolve.outputs.mode == 'full'
         env:
           TAG: ${{ steps.resolve.outputs.upstream_tag }}
         run: |
@@ -134,7 +157,7 @@ jobs:
           echo "tag_sha=$tag_sha" >> "$GITHUB_OUTPUT"
 
       - name: Setup Vite+
-        if: steps.resolve.outputs.skip != 'true'
+        if: steps.resolve.outputs.mode == 'full'
         uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
         with:
           node-version-file: package.json
@@ -145,7 +168,7 @@ jobs:
       # our changed files, measured against the upstream nightly commit.
       - id: checks
         name: Focused checks for our commits
-        if: steps.resolve.outputs.skip != 'true'
+        if: steps.resolve.outputs.mode == 'full'
         env:
           TAG_SHA: ${{ steps.rebase.outputs.tag_sha }}
         run: |
@@ -159,7 +182,7 @@ jobs:
           fi
 
       - name: Push custom and mirror main
-        if: steps.resolve.outputs.skip != 'true'
+        if: steps.resolve.outputs.mode == 'full'
         env:
           OLD_TIP: ${{ steps.rebase.outputs.old_tip }}
         run: |
@@ -170,7 +193,7 @@ jobs:
   build:
     name: Build Windows x64
     needs: [prepare]
-    if: needs.prepare.outputs.skip == 'false'
+    if: needs.prepare.outputs.mode != 'skip' && needs.prepare.outputs.need_win == 'true'
     runs-on: windows-latest
     timeout-minutes: 90
     env:
@@ -246,16 +269,264 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Signed with a stable self-signed identity (secret CUSTOM_MAC_SIGNING_P12),
+  # not ad hoc: Squirrel.Mac only installs an update whose signature satisfies
+  # the running app's designated requirement, and an ad-hoc requirement is a
+  # per-build hash. No Apple account, so Gatekeeper still needs one manual open.
+  build_mac:
+    name: Build macOS arm64 + x64
+    needs: [prepare]
+    if: needs.prepare.outputs.mode != 'skip' && needs.prepare.outputs.need_mac == 'true'
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
+      T3CODE_TELEMETRY_CHANNEL: dev
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+      T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+      # The unsigned build path keeps CSC_NAME/CSC_KEYCHAIN; electron-builder signs with them.
+      CSC_NAME: T3 Code Custom Build (CarsonJF)
+    steps:
+      - name: Checkout
+        env:
+          SHA: ${{ needs.prepare.outputs.sha }}
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "$SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git checkout --detach FETCH_HEAD
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: false
+          run-install: false
+
+      - name: Install
+        run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
+
+      - name: Rust targets for the resource monitor
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Build JS bundle
+        run: |
+          set -euo pipefail
+          node scripts/update-release-package-versions.ts "$VERSION"
+          vp run build:desktop
+
+      - name: Import signing identity
+        timeout-minutes: 5
+        env:
+          P12: ${{ secrets.CUSTOM_MAC_SIGNING_P12 }}
+          P12_PASSWORD: ${{ secrets.CUSTOM_MAC_SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/custom-signing.keychain-db"
+          kc_pass="$(openssl rand -hex 16)"
+          printf '%s' "$P12" | base64 -D > "$RUNNER_TEMP/signing.p12"
+          security create-keychain -p "$kc_pass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$kc_pass" "$keychain"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$P12_PASSWORD" -f pkcs12 -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/signing.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kc_pass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          # A self-signed identity is listed as valid only once its cert is trusted for code signing.
+          security find-certificate -c "$CSC_NAME" -p "$keychain" > "$RUNNER_TEMP/signing.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/signing.pem"
+          security find-identity -v -p codesigning "$keychain"
+          security find-identity -v -p codesigning "$keychain" | grep -qF "\"$CSC_NAME\""
+          sha1="$(openssl x509 -in "$RUNNER_TEMP/signing.pem" -noout -fingerprint -sha1 | cut -d= -f2 | tr -d : | tr 'A-F' 'a-f')"
+          echo "CSC_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          echo "SIGNING_SHA1=$sha1" >> "$GITHUB_ENV"
+
+      # electron-builder's default entitlements plus the camera/microphone ones
+      # upstream's signed build claims (scripts/build-desktop-artifact.ts).
+      - name: Entitlements
+        run: |
+          cat > apps/desktop/resources/entitlements.mac.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+            <dict>
+              <key>com.apple.security.cs.allow-jit</key>
+              <true/>
+              <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+              <true/>
+              <key>com.apple.security.cs.disable-library-validation</key>
+              <true/>
+              <key>com.apple.security.device.camera</key>
+              <true/>
+              <key>com.apple.security.device.audio-input</key>
+              <true/>
+            </dict>
+          </plist>
+          EOF
+          plutil -lint apps/desktop/resources/entitlements.mac.plist
+
+      - name: Build dmg and zip
+        run: |
+          set -euo pipefail
+          tmp="$(node -p 'require("os").tmpdir()')"
+          for arch in arm64 x64; do
+            vp run dist:desktop:artifact --platform mac --target dmg --arch "$arch" \
+              --build-version "$VERSION" --skip-build --keep-stage --verbose \
+              --output-dir "$PWD/release-$arch"
+            stage="$(ls -dt "$tmp"/t3code-desktop-mac-stage-* | head -n 1)"
+            app="$(ls -d "$stage"/app/dist/mac*/*.app | head -n 1)"
+            feed="$app/Contents/Resources/app-update.yml"
+            cat "$feed"
+            grep -qx "owner: ${GITHUB_REPOSITORY%/*}" "$feed"
+            if grep -q publisherName "$feed"; then echo "Unexpected publisherName" >&2; exit 1; fi
+            codesign --verify --deep --strict --verbose=2 "$app"
+            requirement="$(codesign -d -r- "$app" 2>&1)"
+            echo "$requirement"
+            # Updates install only if every build has this same certificate-based requirement.
+            grep -q "H\"$SIGNING_SHA1\"" <<<"$requirement" || { echo "Designated requirement is not pinned to the signing cert" >&2; exit 1; }
+            codesign -d --entitlements - "$app"
+            lipo -archs "$app/Contents/MacOS/"*
+            ls -la "release-$arch"
+          done
+
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+          node scripts/merge-update-manifests.ts --platform mac release-arm64/nightly-mac.yml release-x64/nightly-mac.yml
+          mkdir release-mac
+          cp release-arm64/*.dmg release-arm64/*.zip release-arm64/*.blockmap release-arm64/nightly-mac.yml release-mac/
+          cp release-x64/*.dmg release-x64/*.zip release-x64/*.blockmap release-mac/
+          cat release-mac/nightly-mac.yml
+          ls -la release-mac
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-mac
+          path: release-mac/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # APP_VARIANT=preview: package com.t3tools.t3code.preview and scheme
+  # t3code-preview, so it installs beside the store app (com.t3tools.t3code,
+  # signed by upstream). OTA updates are off; they would pull upstream's JS.
+  build_android:
+    name: Build Android APK
+    needs: [prepare]
+    if: needs.prepare.outputs.mode != 'skip' && needs.prepare.outputs.need_android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      APP_VARIANT: preview
+      MOBILE_VERSION_POLICY: appVersion
+      T3CODE_MOBILE_UPDATES_ENABLED: "0"
+      EXPO_NO_GIT_STATUS: "1"
+      EXPO_NO_TELEMETRY: "1"
+      NODE_OPTIONS: --max-old-space-size=8192
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+      T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+
+      - name: Checkout
+        env:
+          SHA: ${{ needs.prepare.outputs.sha }}
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "$SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git checkout --detach FETCH_HEAD
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: false
+          run-install: false
+
+      - name: Install
+        run: vp install --filter=@t3tools/mobile... --filter=@t3tools/scripts...
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Prebuild native project
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          vp exec expo prebuild --clean --platform android --no-install
+          # Monotonic per nightly (vX.Y.Z-nightly.YYYYMMDD.N) so each APK installs over the last.
+          [[ "$VERSION" =~ -nightly\.[0-9]{2}([0-9]{6})\.([0-9]+)$ ]]
+          code=$(( 10#${BASH_REMATCH[1]} * 100 + 10#${BASH_REMATCH[2]} ))
+          sed -i -E "s/versionCode [0-9]+/versionCode ${code}/" android/app/build.gradle
+          grep -nE 'applicationId|versionCode|versionName' android/app/build.gradle
+
+      - name: Build release APK
+        working-directory: apps/mobile/android
+        run: ./gradlew app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+
+      # The template signs release builds with the debug key; re-sign with the
+      # fork's keystore so every nightly installs over the previous one.
+      - name: Sign APK
+        env:
+          KEYSTORE: ${{ secrets.CUSTOM_ANDROID_KEYSTORE }}
+          KEYSTORE_PASSWORD: ${{ secrets.CUSTOM_ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
+          printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.p12"
+          mkdir release-android
+          apk="release-android/T3-Code-Custom-${VERSION}-android-arm64.apk"
+          "$tools/apksigner" sign --ks "$RUNNER_TEMP/release.p12" --ks-type PKCS12 --ks-key-alias t3code-custom \
+            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD \
+            --out "$apk" apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          rm "$RUNNER_TEMP/release.p12"
+          certs="$("$tools/apksigner" verify --print-certs "$apk")"
+          echo "$certs"
+          grep -q "SHA-256 digest: 773d0f1d9d99d4e8afd1da8abd0637a3eac49083aebd2b717e92040ac29855e8" <<<"$certs"
+          "$tools/aapt2" dump badging "$apk" | head -n 3
+          ls -la release-android
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mobile-android
+          path: release-android/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  # Attaches whatever platforms built. A platform that failed is retried by the
+  # next scheduled run (repair mode) until a newer upstream nightly supersedes it.
   publish:
     name: Publish release
-    needs: [prepare, build]
+    needs: [prepare, build, build_mac, build_android]
+    if: >-
+      always() && needs.prepare.result == 'success' && needs.prepare.outputs.mode != 'skip' &&
+      (needs.build.result == 'success' || needs.build_mac.result == 'success' || needs.build_android.result == 'success')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: write
       issues: write
     env:
       GH_TOKEN: ${{ github.token }}
+      MODE: ${{ needs.prepare.outputs.mode }}
       RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
       UPSTREAM_TAG: ${{ needs.prepare.outputs.upstream_tag }}
       VERSION: ${{ needs.prepare.outputs.version }}
@@ -263,21 +534,24 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: desktop-win-x64
           path: dist
+          merge-multiple: true
 
-      - name: Verify feed manifest
+      - name: Verify feed manifests
         run: |
           set -euo pipefail
-          cat dist/nightly.yml
-          grep -qx "version: '\?${VERSION}'\?" dist/nightly.yml
-          url="$(sed -n 's/^ *- url: //p' dist/nightly.yml)"
-          test -f "dist/$url"
+          shopt -s nullglob
+          for feed in dist/*.yml; do
+            cat "$feed"
+            grep -qx "version: '\?${VERSION}'\?" "$feed"
+            for url in $(sed -n 's/^ *- url: //p' "$feed"); do test -f "dist/$url"; done
+          done
           (cd dist && sha256sum ./*)
 
       # The tag is pushed with the deploy key: GITHUB_TOKEN may not create refs
       # to commits that change workflow files.
       - name: Checkout
+        if: env.MODE == 'full'
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.prepare.outputs.sha }}
@@ -286,19 +560,33 @@ jobs:
           sparse-checkout: /CUSTOM.md
           sparse-checkout-cone-mode: false
 
-      - name: Create release
+      - name: Create or update release
         run: |
           set -euo pipefail
-          if gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          if [[ "$MODE" == "full" ]]; then
+            if gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh release delete "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --cleanup-tag --yes
+            fi
+            git -C repo tag -f "$RELEASE_TAG" "$SHA"
+            git -C repo push -f origin "refs/tags/$RELEASE_TAG"
+            gh release create "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --verify-tag --prerelease --latest=false \
+              --title "T3 Code Nightly ${VERSION} + custom (${SHA:0:12})" --notes "Publishing..." dist/*
+          else
+            # Binaries before manifests, so no updater sees a feed whose files are missing.
+            find dist -maxdepth 1 -type f ! -name '*.yml' -print0 | xargs -0 gh release upload "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --clobber
+            find dist -maxdepth 1 -type f -name '*.yml' -print0 | xargs -0 -r gh release upload "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --clobber
           fi
-          git -C repo tag -f "$RELEASE_TAG" "$SHA"
-          git -C repo push -f origin "refs/tags/$RELEASE_TAG"
-          notes="Upstream nightly [${UPSTREAM_TAG}](https://github.com/${UPSTREAM_REPO}/releases/tag/${UPSTREAM_TAG}) plus the commits on \`custom\` (${SHA:0:12}). Windows x64 only, unsigned."
-          gh release create "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --verify-tag --prerelease --latest=false \
-            --title "T3 Code Nightly ${VERSION} + custom (${SHA:0:12})" --notes "$notes" dist/*
+          assets="$(gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --json assets -q '.assets[].name')"
+          platforms=()
+          grep -qx 'nightly.yml' <<<"$assets" && platforms+=("Windows x64")
+          grep -qx 'nightly-mac.yml' <<<"$assets" && platforms+=("macOS arm64 + x64")
+          grep -q '\.apk$' <<<"$assets" && platforms+=("Android arm64")
+          list="$(IFS=,; echo "${platforms[*]}" | sed 's/,/, /g')"
+          notes="Upstream nightly [${UPSTREAM_TAG}](https://github.com/${UPSTREAM_REPO}/releases/tag/${UPSTREAM_TAG}) plus the commits on \`custom\` (${SHA:0:12}). Platforms: ${list}. Not notarized or store-signed; see CUSTOM.md to install."
+          gh release edit "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --notes "$notes"
 
       - name: Close failure issue
+        if: needs.build.result != 'failure' && needs.build_mac.result != 'failure' && needs.build_android.result != 'failure'
         run: |
           set -euo pipefail
           for n in $(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "custom-nightly failed"' --json number -q '.[].number'); do
@@ -307,7 +595,7 @@ jobs:
 
   report_failure:
     name: Report failure
-    needs: [prepare, build, publish]
+    needs: [prepare, build, build_mac, build_android, publish]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -317,7 +605,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       DETAIL: ${{ needs.prepare.outputs.failure }}
       UPSTREAM_TAG: ${{ needs.prepare.outputs.upstream_tag }}
-      RESULTS: "prepare=${{ needs.prepare.result }} build=${{ needs.build.result }} publish=${{ needs.publish.result }}"
+      RESULTS: "prepare=${{ needs.prepare.result }} windows=${{ needs.build.result }} mac=${{ needs.build_mac.result }} android=${{ needs.build_android.result }} publish=${{ needs.publish.result }}"
     steps:
       - name: Open or update the failure issue
         run: |
@@ -327,7 +615,7 @@ jobs:
             "Custom nightly for upstream \`${UPSTREAM_TAG:-unknown}\` failed: ${run_url}" \
             "Jobs: ${RESULTS}" \
             "${DETAIL:-See the run log for details.}" \
-            "Nothing was published and \`custom\` was not pushed unless the build or publish step failed afterwards. See CUSTOM.md for how to resolve.")"
+            "If prepare failed, nothing was published and \`custom\` was not pushed. If only some builds failed, the others were published and the next scheduled run retries the missing platforms. See CUSTOM.md for how to resolve.")"
           n="$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "custom-nightly failed"' --json number -q '.[0].number')"
           if [[ -n "$n" ]]; then
             gh issue comment "$n" -R "$GITHUB_REPOSITORY" --body "$body"
