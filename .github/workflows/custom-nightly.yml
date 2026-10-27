@@ -1,0 +1,336 @@
+# Fork-only pipeline: rebase `custom` onto the newest upstream nightly and ship
+# a Windows x64 build of it. See CUSTOM.md. Upstream's release workflows are
+# disabled on this fork; this file must stay the only active workflow.
+name: Custom nightly
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: "Upstream nightly tag to build (default: newest published)"
+        required: false
+        type: string
+      force:
+        description: "Rebuild and replace the release even if one exists for this tag"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: custom-nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM_REPO: pingdotgg/t3code
+  BRANCH: custom
+
+jobs:
+  prepare:
+    name: Rebase and check
+    if: github.repository != 'pingdotgg/t3code'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: write
+    outputs:
+      skip: ${{ steps.resolve.outputs.skip }}
+      upstream_tag: ${{ steps.resolve.outputs.upstream_tag }}
+      version: ${{ steps.resolve.outputs.version }}
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      sha: ${{ steps.rebase.outputs.sha }}
+      failure: ${{ steps.rebase.outputs.failure || steps.checks.outputs.failure }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - id: resolve
+        name: Resolve newest upstream nightly
+        env:
+          INPUT_TAG: ${{ inputs.upstream_tag }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-}"
+          if [[ -z "$tag" ]]; then
+            # Published releases only, so the Linux CLI archive embedded below exists.
+            tag="$(gh release list -R "$UPSTREAM_REPO" --exclude-drafts --limit 40 --json tagName -q '.[].tagName' \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]{8}\.[0-9]+$' | head -n 1)"
+          fi
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]{8}\.[0-9]+$ ]] || { echo "Bad upstream tag: '$tag'" >&2; exit 1; }
+          release_tag="${tag}-custom"
+          skip=false
+          if gh release view "$release_tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && [[ "$FORCE" != "true" ]]; then
+            skip=true
+            echo "Release $release_tag already exists; nothing to do."
+          fi
+          {
+            echo "upstream_tag=$tag"
+            echo "version=${tag#v}"
+            echo "release_tag=$release_tag"
+            echo "skip=$skip"
+          } >> "$GITHUB_OUTPUT"
+
+      # Inherited upstream workflows would run (or queue forever on upstream's
+      # runners) when this job pushes. Re-disable any that upstream adds.
+      - name: Keep inherited workflows disabled
+        if: steps.resolve.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          gh workflow list -R "$GITHUB_REPOSITORY" --all --json path,state \
+            -q '.[] | select(.state == "active" and .path != ".github/workflows/custom-nightly.yml") | .path' \
+            | while read -r path; do
+                echo "Disabling $path"
+                gh workflow disable "$(basename "$path")" -R "$GITHUB_REPOSITORY"
+              done
+
+      - name: Checkout
+        if: steps.resolve.outputs.skip != 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.BRANCH }}
+          fetch-depth: 0
+          ssh-key: ${{ secrets.CUSTOM_NIGHTLY_DEPLOY_KEY }}
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      # custom = <upstream nightly tag> + our commits. Our commits are whatever
+      # custom has that upstream main does not; nothing is pushed on conflict.
+      - id: rebase
+        name: Rebase onto the upstream nightly
+        if: steps.resolve.outputs.skip != 'true'
+        env:
+          TAG: ${{ steps.resolve.outputs.upstream_tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config rerere.enabled true
+          git config rerere.autoupdate true
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch --no-tags upstream main "+refs/tags/${TAG}:refs/tags/${TAG}"
+          tag_sha="$(git rev-parse "${TAG}^{commit}")"
+          old_tip="$(git rev-parse HEAD)"
+          old_base="$(git merge-base HEAD upstream/main)"
+          echo "old_tip=$old_tip" >> "$GITHUB_OUTPUT"
+          echo "Our commits:"; git log --oneline "$old_base..HEAD"
+          if ! git rebase --onto "$tag_sha" "$old_base" HEAD; then
+            {
+              echo "failure<<EOF"
+              echo "Rebase of \`$BRANCH\` onto \`$TAG\` (${tag_sha}) conflicted. Conflicting files:"
+              git diff --name-only --diff-filter=U | sed 's/^/- /'
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            git rebase --abort
+            exit 1
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "tag_sha=$tag_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Vite+
+        if: steps.resolve.outputs.skip != 'true'
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: false
+
+      # Format, lint, knip, typecheck of affected packages, and tests beside
+      # our changed files, measured against the upstream nightly commit.
+      - id: checks
+        name: Focused checks for our commits
+        if: steps.resolve.outputs.skip != 'true'
+        env:
+          TAG_SHA: ${{ steps.rebase.outputs.tag_sha }}
+        run: |
+          set -euo pipefail
+          vp install
+          # Web tests beside our changes run in headless Chromium.
+          node apps/web/node_modules/playwright/cli.js install --with-deps --only-shell chromium
+          if ! vp run check:changed "$TAG_SHA"; then
+            echo "failure=Focused checks (vp run check:changed) failed after rebasing onto ${TAG_SHA}." >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Push custom and mirror main
+        if: steps.resolve.outputs.skip != 'true'
+        env:
+          OLD_TIP: ${{ steps.rebase.outputs.old_tip }}
+        run: |
+          set -euo pipefail
+          git push --force-with-lease="refs/heads/${BRANCH}:${OLD_TIP}" origin "HEAD:refs/heads/${BRANCH}"
+          git push --force origin "refs/remotes/upstream/main:refs/heads/main"
+
+  build:
+    name: Build Windows x64
+    needs: [prepare]
+    if: needs.prepare.outputs.skip == 'false'
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      # Feed baked into app-update.yml: this fork's releases, nightly channel.
+      T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
+      T3CODE_TELEMETRY_CHANNEL: dev
+      # Optional T3 Connect public config (repo variables); unset disables it.
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+      T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # actions/checkout's cleanup trips over the .repos gitlinks on Windows.
+      - name: Checkout
+        env:
+          SHA: ${{ needs.prepare.outputs.sha }}
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "$SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git -c checkout.workers=0 checkout --detach FETCH_HEAD
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: false
+          run-install: false
+
+      - name: Install
+        run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
+
+      - name: Build JS bundle
+        run: |
+          set -euo pipefail
+          node scripts/update-release-package-versions.ts "$VERSION"
+          vp run build:desktop
+
+      # The WSL backend runs the Linux CLI inside the distro; reuse upstream's
+      # archive for the same nightly (our commits are client-only).
+      - name: Download upstream Linux CLI archive for WSL
+        run: gh release download "${{ needs.prepare.outputs.upstream_tag }}" -R "$UPSTREAM_REPO" -p "t3-*-linux-x64.tar.gz" -D wsl-runtime
+
+      - name: Build installer
+        run: |
+          set -euo pipefail
+          vp run dist:desktop:artifact --platform win --target nsis --arch x64 \
+            --build-version "$VERSION" --skip-build --keep-stage --verbose \
+            --wsl-runtime "$(cygpath -w "$(ls "$PWD"/wsl-runtime/t3-*-linux-x64.tar.gz)")"
+          tmp="$(cygpath -u "$(node -p 'require("os").tmpdir()')")"
+          feed="$(ls "$tmp"/t3code-desktop-win-stage-*/app/dist/win-unpacked/resources/app-update.yml | head -n 1)"
+          cat "$feed"
+          grep -qx "owner: ${GITHUB_REPOSITORY%/*}" "$feed"
+          # electron-updater verifies update signatures only when publisherName is set.
+          if grep -q publisherName "$feed"; then echo "Unsigned build must not set publisherName" >&2; exit 1; fi
+          ls -la release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-win-x64
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/nightly.yml
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+      UPSTREAM_TAG: ${{ needs.prepare.outputs.upstream_tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      SHA: ${{ needs.prepare.outputs.sha }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: desktop-win-x64
+          path: dist
+
+      - name: Verify feed manifest
+        run: |
+          set -euo pipefail
+          cat dist/nightly.yml
+          grep -qx "version: '\?${VERSION}'\?" dist/nightly.yml
+          url="$(sed -n 's/^ *- url: //p' dist/nightly.yml)"
+          test -f "dist/$url"
+          (cd dist && sha256sum ./*)
+
+      # The tag is pushed with the deploy key: GITHUB_TOKEN may not create refs
+      # to commits that change workflow files.
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          path: repo
+          ssh-key: ${{ secrets.CUSTOM_NIGHTLY_DEPLOY_KEY }}
+          sparse-checkout: /CUSTOM.md
+          sparse-checkout-cone-mode: false
+
+      - name: Create release
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          fi
+          git -C repo tag -f "$RELEASE_TAG" "$SHA"
+          git -C repo push -f origin "refs/tags/$RELEASE_TAG"
+          notes="Upstream nightly [${UPSTREAM_TAG}](https://github.com/${UPSTREAM_REPO}/releases/tag/${UPSTREAM_TAG}) plus the commits on \`custom\` (${SHA:0:12}). Windows x64 only, unsigned."
+          gh release create "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --verify-tag --prerelease --latest=false \
+            --title "T3 Code Nightly ${VERSION} + custom (${SHA:0:12})" --notes "$notes" dist/*
+
+      - name: Close failure issue
+        run: |
+          set -euo pipefail
+          for n in $(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "custom-nightly failed"' --json number -q '.[].number'); do
+            gh issue close "$n" -R "$GITHUB_REPOSITORY" --comment "Fixed: published ${RELEASE_TAG} in ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}."
+          done
+
+  report_failure:
+    name: Report failure
+    needs: [prepare, build, publish]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DETAIL: ${{ needs.prepare.outputs.failure }}
+      UPSTREAM_TAG: ${{ needs.prepare.outputs.upstream_tag }}
+      RESULTS: "prepare=${{ needs.prepare.result }} build=${{ needs.build.result }} publish=${{ needs.publish.result }}"
+    steps:
+      - name: Open or update the failure issue
+        run: |
+          set -euo pipefail
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          body="$(printf '%s\n\n%s\n\n%s\n\n%s\n' \
+            "Custom nightly for upstream \`${UPSTREAM_TAG:-unknown}\` failed: ${run_url}" \
+            "Jobs: ${RESULTS}" \
+            "${DETAIL:-See the run log for details.}" \
+            "Nothing was published and \`custom\` was not pushed unless the build or publish step failed afterwards. See CUSTOM.md for how to resolve.")"
+          n="$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "custom-nightly failed"' --json number -q '.[0].number')"
+          if [[ -n "$n" ]]; then
+            gh issue comment "$n" -R "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "custom-nightly failed" --body "$body"
+          fi
