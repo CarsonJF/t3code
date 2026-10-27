@@ -62,6 +62,7 @@ import {
   ThreadListV2SnoozedShelfHeader,
   ThreadListV2WorkingShelfHeader,
 } from "./thread-list-v2-items";
+import { ThreadGroupHeader } from "./thread-group-header";
 import { useThreadRowProviderInstanceResolver } from "./thread-provider-instance";
 import type { ThreadPrPresentation } from "../../state/thread-pr-presentation";
 import { ThreadPrDemandProvider } from "../../state/thread-pr-demand";
@@ -484,6 +485,8 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
           />
         );
       }
+      case "v2-thread-group":
+        return <ThreadGroupHeader item={item} pane="sidebar" />;
       case "v2-working-shelf":
         return (
           <ThreadListV2WorkingShelfHeader
