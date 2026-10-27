@@ -4,7 +4,9 @@ import type { MouseEvent } from "react";
 import { useClientSettings } from "../../hooks/useSettings";
 import { readLocalApi } from "../../localApi";
 import { threadGroupActions, type ThreadGroup } from "../../threadGroupsStore";
-import { requestThreadGroupName } from "../ThreadGroupNameDialog";
+import { cn } from "../../lib/utils";
+import { ThreadGroupIcon, threadGroupColorClassName } from "../ThreadGroupIcon";
+import { requestThreadGroupDetails } from "../ThreadGroupNameDialog";
 import { CollapsibleSectionHeader } from "../ui/collapsible-section-header";
 
 async function openThreadGroupMenu(group: ThreadGroup, position: { x: number; y: number }) {
@@ -13,20 +15,20 @@ async function openThreadGroupMenu(group: ThreadGroup, position: { x: number; y:
   const clicked = await settlePromise(() =>
     api.contextMenu.show(
       [
-        { id: "rename" as const, label: "Rename group", icon: "pencil" },
+        { id: "edit" as const, label: "Edit group", icon: "pencil" },
         { id: "delete" as const, label: "Delete group", icon: "trash", destructive: true },
       ],
       position,
     ),
   );
   if (clicked._tag === "Failure") return;
-  if (clicked.value === "rename") {
-    const name = await requestThreadGroupName({
-      title: "Rename group",
-      submitLabel: "Rename",
-      initialName: group.name,
+  if (clicked.value === "edit") {
+    const details = await requestThreadGroupDetails({
+      title: "Edit group",
+      submitLabel: "Save",
+      initial: { name: group.name, color: group.color ?? null, icon: group.icon ?? null },
     });
-    if (name !== null) threadGroupActions.rename(group.id, name);
+    if (details !== null) threadGroupActions.update(group.id, details);
   } else if (clicked.value === "delete") {
     const confirmed = await settlePromise(() =>
       api.dialogs.confirm(
@@ -48,18 +50,25 @@ export function SidebarThreadGroupHeader(props: {
   expanded: boolean;
 }) {
   const redesign = useClientSettings((s) => s.redesignEnabled);
+  const colorClassName = threadGroupColorClassName(props.group);
   const collapsedCount = props.expanded ? null : props.count;
   const count = redesign ? props.count : collapsedCount;
   return (
     <li
       data-thread-selection-safe
       data-testid="sidebar-thread-group-header"
-      className="relative mx-0.5 h-8 list-none"
+      className={cn("relative mx-0.5 h-8 list-none", colorClassName)}
       onContextMenu={(event: MouseEvent) => {
         event.preventDefault();
         void openThreadGroupMenu(props.group, { x: event.clientX, y: event.clientY });
       }}
     >
+      {colorClassName ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-md bg-current/10"
+        />
+      ) : null}
       <CollapsibleSectionHeader
         onClick={() => threadGroupActions.toggleCollapsed(props.group.id)}
         expanded={props.expanded}
@@ -70,7 +79,10 @@ export function SidebarThreadGroupHeader(props: {
           ) : null
         }
       >
-        {props.group.name}
+        <span className={cn("flex items-center gap-1.5", colorClassName)}>
+          <ThreadGroupIcon group={props.group} />
+          {props.group.name}
+        </span>
         {!redesign && collapsedCount !== null ? ` (${collapsedCount})` : null}
       </CollapsibleSectionHeader>
     </li>
