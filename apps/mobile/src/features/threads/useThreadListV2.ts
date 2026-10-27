@@ -4,6 +4,7 @@ import { useMemo, useSyncExternalStore } from "react";
 
 import { scopedProjectKey } from "../../lib/scopedEntities";
 import { useOlderSettledShelf, useOlderSettledShelfGrowth } from "../../state/olderSettledShelf";
+import { useCollapsedThreadGroups, useThreadGroupsView } from "../../state/thread-groups";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import {
   buildThreadListV2Items,
@@ -12,6 +13,7 @@ import {
   threadListInboxReturns,
 } from "./threadListV2";
 import { computeThreadMoveAvailability } from "./threadOrder";
+import { withThreadGroupSections } from "./thread-group-sections";
 
 /**
  * Screens' select handlers read the content-only key set; a fresh one per list rebuild gave
@@ -146,7 +148,9 @@ export function useThreadListV2(input: {
         )) &&
       (searchQuery.length === 0 || pendingTask.title.toLocaleLowerCase().includes(searchQuery)),
   );
-  const items = buildThreadListV2ListItems({
+  const threadGroups = useThreadGroupsView();
+  const collapsedThreadGroups = useCollapsedThreadGroups().collapsed;
+  const listItems = buildThreadListV2ListItems({
     items: layout.items,
     pendingTasks,
     workingCount: layout.workingCount,
@@ -163,6 +167,14 @@ export function useThreadListV2(input: {
     queuedThreadKeys: input.queuedThreadKeys,
     moveAvailability,
     shelfPreferencesLoading: !input.shelfPreferencesLoaded,
+  });
+  const items = withThreadGroupSections({
+    items: listItems,
+    ...threadGroups,
+    collapsedGroupIds: collapsedThreadGroups,
+    selectedThreadKey: input.selectedThreadKey,
+    includeEmptyGroups: input.environmentId === null && input.projectRefs == null,
+    searching: searchQuery.length > 0,
   });
   return { layout, items, contentOnlyThreadKeys, olderSettledShelf };
 }
