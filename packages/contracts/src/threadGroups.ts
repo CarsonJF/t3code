@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { IsoDateTime, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
-import { ProjectIconColor, ProjectIconOverride } from "./project.ts";
+import { ProjectIconColor, ProjectIconOverride, ReceivedProjectIcon } from "./project.ts";
 
 export const ThreadGroupId = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
 export type ThreadGroupId = typeof ThreadGroupId.Type;
@@ -11,7 +11,8 @@ export const ThreadGroup = Schema.Struct({
   id: ThreadGroupId,
   name: TrimmedNonEmptyString.check(Schema.isMaxLength(200)),
   color: Schema.optional(Schema.NullOr(ProjectIconColor)),
-  icon: Schema.optional(Schema.NullOr(ProjectIconOverride)),
+  // Forward-compatible so a future icon kind drops the icon instead of failing the whole state.
+  icon: Schema.optional(Schema.NullOr(ReceivedProjectIcon)),
 });
 export type ThreadGroup = typeof ThreadGroup.Type;
 
