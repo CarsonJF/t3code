@@ -6,6 +6,7 @@ import {
   type ThreadGroup,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import { Image } from "expo-image";
 import { memo } from "react";
 import { Pressable, View } from "react-native";
 
@@ -81,6 +82,16 @@ export function ThreadGroupIcon(props: { readonly group: Pick<ThreadGroup, "colo
   if (icon?.kind === "emoji") {
     return <Text className="text-xs leading-none">{icon.emoji}</Text>;
   }
+  if (icon?.kind === "image") {
+    return (
+      <Image
+        source={{ uri: icon.dataUrl }}
+        cachePolicy="memory"
+        style={{ width: 14, height: 14 }}
+        contentFit="contain"
+      />
+    );
+  }
   if (icon?.kind === "monogram") {
     const classNames = projectIconColorClassNames(icon.color);
     return (
@@ -107,7 +118,7 @@ export function ThreadGroupIcon(props: { readonly group: Pick<ThreadGroup, "colo
       />
     );
   }
-  const dotColor = icon?.color ?? color;
+  const dotColor = (icon?.kind === "lucide" ? icon.color : null) ?? color;
   return dotColor ? (
     <View className={cn("size-2 rounded-full", DOT_CLASS_NAMES[dotColor])} />
   ) : null;
@@ -161,7 +172,9 @@ function groupMenuActions(group: ThreadGroup): MenuAction[] {
 function setGroupColor(group: ThreadGroup, color: ProjectIconColor | null) {
   // Like desktop, a lettered or symbol icon takes the group's color.
   const icon =
-    group.icon && group.icon.kind !== "emoji" && color ? { ...group.icon, color } : undefined;
+    group.icon && (group.icon.kind === "lucide" || group.icon.kind === "monogram") && color
+      ? { ...group.icon, color }
+      : undefined;
   threadGroupActions.update(group.id, { color, ...(icon ? { icon } : {}) });
 }
 
