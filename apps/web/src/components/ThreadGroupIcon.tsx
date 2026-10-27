@@ -34,6 +34,9 @@ export function ThreadGroupIcon({ group }: { group: Pick<ThreadGroup, "color" | 
       </span>
     );
   }
+  if (icon?.kind === "image") {
+    return <img src={icon.dataUrl} alt="" className="size-3.5 shrink-0 object-contain" />;
+  }
   if (icon?.kind === "monogram") {
     return (
       <ProjectMonogram text={icon.text} color={group.color ?? icon.color} className="size-3.5" />
