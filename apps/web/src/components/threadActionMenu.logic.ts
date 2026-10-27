@@ -99,13 +99,16 @@ export interface ThreadActionMenuState {
   readonly canShareWithGuest?: boolean;
   /** A No project thread with its own folder, on a server that can promote it. */
   readonly canTurnIntoProject?: boolean;
-  readonly threadGroups?: {
-    readonly groups: ReadonlyArray<{ readonly id: string; readonly name: string }>;
-    readonly currentGroupId: string | null;
-  };
+  /** Groups are saved in server settings, so the caller omits this without `settings:write`. */
+  readonly threadGroups?:
+    | {
+        readonly groups: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+        readonly currentGroupId: string | null;
+      }
+    | undefined;
 }
 
-/** Local navigation, read markers, grouping, and copying remain available to read-only clients. */
+/** Local navigation, read markers, and copying remain available to read-only clients; grouping checks its own grant. */
 export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean {
   return (
     !action.startsWith("group") &&
