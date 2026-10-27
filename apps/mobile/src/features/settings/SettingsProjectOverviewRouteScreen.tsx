@@ -41,6 +41,7 @@ import { SettingsSection } from "./components/SettingsSection";
 import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { ProjectRepositoriesSection } from "./ProjectRepositoriesSection";
+import { ProjectDefaultGroupSection } from "./ProjectDefaultGroupSection";
 import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
 import { useSettingsEnvironmentFilter, type SettingsTarget } from "./settings-environment-filter";
 import { leaveSettingsPage } from "./settings-navigation";
@@ -373,6 +374,7 @@ function ProjectOverviewContent(props: {
           </View>
         </View>
       </SettingsSection>
+      <ProjectDefaultGroupSection members={props.members} />
 
       {canOrganize ? (
         <SettingsSection title={gt("Organize")}>
