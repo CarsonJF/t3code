@@ -74,6 +74,7 @@ import {
   type ThreadListV2Status,
 } from "./threadListV2";
 import { QueuedMessageIcon } from "./queued-message-icon";
+import { useThreadGroupMenu } from "./thread-group-menu";
 import { shouldRecedeThreadRow } from "./thread-row-emphasis";
 import { ThreadSearchMatchExcerpt } from "./thread-search-match";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
@@ -715,6 +716,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const handleDelete = useCallback(() => onDeleteThread(thread), [onDeleteThread, thread]);
   const handleRename = useCallback(() => onRenameThread(thread), [onRenameThread, thread]);
   const canOperateThread = useEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope);
+  const threadGroupMenu = useThreadGroupMenu(thread);
   const handleRegenerateTitle = useCallback(
     () => onRegenerateThreadTitle(thread),
     [onRegenerateThreadTitle, thread],
@@ -1425,6 +1427,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
                 : []),
               { id: "copy-thread", title: "Copy thread", image: "text.bubble" },
               { id: "copy-thread-id", title: "Copy thread ID", image: "doc.on.doc" },
+              ...threadGroupMenu.actions,
               ...(snoozedRow
                 ? snoozedMenuActions
                 : !props.settlementSupported
@@ -1435,7 +1438,10 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
                       ? snoozableCardMenuActions
                       : cardMenuActions),
             ]}
-            onPressAction={handleMenuAction}
+            onPressAction={(event) => {
+              threadGroupMenu.onAction(event.nativeEvent.event);
+              handleMenuAction(event);
+            }}
             shouldOpenOnLongPress
           >
             {rowContent(close)}
