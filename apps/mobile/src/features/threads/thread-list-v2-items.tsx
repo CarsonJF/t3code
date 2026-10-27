@@ -91,6 +91,7 @@ import {
   type ThreadListV2Status,
 } from "./threadListV2";
 import { QueuedMessageIcon } from "./queued-message-icon";
+import { useThreadGroupMenu } from "./thread-group-menu";
 import { shouldRecedeThreadRow } from "./thread-row-emphasis";
 import { ThreadSearchMatchExcerpt } from "./thread-search-match";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
@@ -933,6 +934,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const canOperateThread = useEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope);
   const canShareWithGuest = useCanShareWithGuest(thread.environmentId);
   const navigation = useNavigation();
+  const threadGroupMenu = useThreadGroupMenu(thread);
   const handleRegenerateTitle = useCallback(
     () => onRegenerateThreadTitle(thread),
     [onRegenerateThreadTitle, thread],
@@ -1116,6 +1118,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       ...(canShareWithGuest
         ? [{ id: "share-guest", title: gt("Share with guest"), image: "person.badge.plus" }]
         : []),
+      ...threadGroupMenu.actions,
     ];
     if (snoozedRow) {
       return layoutThreadListV2RowMenuActions(
@@ -1206,10 +1209,12 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     m,
     swipeActions.secondary,
     thread.branch,
+    threadGroupMenu.actions,
     titleMenuItems,
   ]);
   const handleMenuAction = useCallback(
     ({ nativeEvent }: { readonly nativeEvent: { readonly event: string } }) => {
+      threadGroupMenu.onAction(nativeEvent.event);
       if (nativeEvent.event === "new-thread-on-branch") onNewThreadOnBranch(thread);
       if (nativeEvent.event === "settle") handleSettle();
       if (nativeEvent.event === "unsettle") handleUnsettle();
@@ -1275,6 +1280,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       gt,
       m,
       onNewThreadOnBranch,
+      threadGroupMenu,
       thread,
       navigation,
       handleArchive,
