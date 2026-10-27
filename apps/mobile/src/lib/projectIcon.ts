@@ -59,6 +59,8 @@ export function resolveProjectIconGlyph(
       return { kind: "monogram", text: projectIcon.text, color: projectIcon.color };
     case "lucide":
       return { kind: "monogram", text: projectMonogram(projectTitle), color: projectIcon.color };
+    // Image icons are drawn directly by the views that support them, not as a glyph.
+    case "image":
     case undefined:
       return null;
   }
