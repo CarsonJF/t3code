@@ -1,10 +1,17 @@
+import {
+  scopedProjectKey,
+  scopedThreadKey,
+  scopeProjectRef,
+  scopeThreadRef,
+} from "@t3tools/client-runtime/environment";
+import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { create } from "zustand";
 
 import { getLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorage";
 import { randomUUID } from "./lib/utils";
 
-export const THREAD_GROUPS_STORAGE_KEY = "t3code:thread-groups:v1";
+const THREAD_GROUPS_STORAGE_KEY = "t3code:thread-groups:v1";
 
 const ThreadGroup = Schema.Struct({ id: Schema.String, name: Schema.String });
 export type ThreadGroup = typeof ThreadGroup.Type;
@@ -53,11 +60,35 @@ export function resolveThreadGroupId(
   return existingGroupId(state, entry?.groupId);
 }
 
+export function splitThreadsByGroup<
+  T extends {
+    readonly environmentId: EnvironmentId;
+    readonly id: ThreadId;
+    readonly projectId: ProjectId;
+    readonly createdAt: string;
+  },
+>(threads: readonly T[], state: ThreadGroupsState) {
+  const byGroupId = new Map(state.groups.map((group) => [group.id, [] as T[]]));
+  const ungrouped: T[] = [];
+  for (const thread of threads) {
+    const groupId = resolveThreadGroupId(state, {
+      threadKey: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+      projectKey: scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+      createdAt: thread.createdAt,
+    });
+    (groupId === null ? ungrouped : byGroupId.get(groupId)!).push(thread);
+  }
+  return {
+    ungrouped,
+    groups: state.groups.map((group) => ({ group, threads: byGroupId.get(group.id)! })),
+  };
+}
+
 export function createThreadGroup(state: ThreadGroupsState, group: ThreadGroup): ThreadGroupsState {
   return { ...state, groups: [...state.groups, group] };
 }
 
-export function renameThreadGroup(
+function renameThreadGroup(
   state: ThreadGroupsState,
   groupId: string,
   name: string,
