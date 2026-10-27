@@ -18,6 +18,11 @@ on:
         required: false
         default: false
         type: boolean
+      mac_runner:
+        description: "macOS runner label; macos-15-intel when macos-26 (arm64) has no capacity"
+        required: false
+        default: macos-26
+        type: string
 
 concurrency:
   group: custom-nightly
@@ -277,7 +282,8 @@ jobs:
     name: Build macOS arm64 + x64
     needs: [prepare]
     if: needs.prepare.outputs.mode != 'skip' && needs.prepare.outputs.need_mac == 'true'
-    runs-on: macos-26
+    # Builds both arches on one machine, so an Intel runner works when arm64 runners are scarce.
+    runs-on: ${{ inputs.mac_runner || 'macos-26' }}
     timeout-minutes: 120
     env:
       GH_TOKEN: ${{ github.token }}
