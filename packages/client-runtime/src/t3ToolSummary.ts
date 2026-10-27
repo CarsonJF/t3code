@@ -579,6 +579,40 @@ export function summarizeT3ToolCalls(
           );
       break;
     }
+    case "thread-groups-read": {
+      const count = selected.length;
+      label = done
+        ? resolve(
+            msg(
+              "{count, plural, one {Checked thread groups {count} time} other {Checked thread groups {count} times}}",
+              { count },
+            ),
+          )
+        : resolve(
+            msg(
+              "{count, plural, one {Tried to check thread groups {count} time} other {Tried to check thread groups {count} times}}",
+              { count },
+            ),
+          );
+      break;
+    }
+    case "thread-groups-update": {
+      const count = selected.length;
+      label = done
+        ? resolve(
+            msg(
+              "{count, plural, one {Updated thread groups {count} time} other {Updated thread groups {count} times}}",
+              { count },
+            ),
+          )
+        : resolve(
+            msg(
+              "{count, plural, one {Tried to update thread groups {count} time} other {Tried to update thread groups {count} times}}",
+              { count },
+            ),
+          );
+      break;
+    }
     case "attachment-prepare": {
       const count = countEntities(entityIds("attachmentId"));
       label = done
