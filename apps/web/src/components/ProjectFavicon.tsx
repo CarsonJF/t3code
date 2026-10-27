@@ -45,6 +45,15 @@ export function ProjectFavicon(input: {
       faviconPath: project.faviconPath,
     }),
   );
+  if (project.projectIcon?.kind === "image") {
+    return (
+      <img
+        src={project.projectIcon.dataUrl}
+        alt=""
+        className={cn("size-3.5 shrink-0 object-contain", input.className)}
+      />
+    );
+  }
   if (project.projectIcon?.kind === "monogram") {
     return (
       <ProjectMonogram
