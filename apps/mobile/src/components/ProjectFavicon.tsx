@@ -61,6 +61,18 @@ export const ProjectFavicon = memo(function ProjectFavicon(props: {
         : getProjectFaviconCacheKey(props.environmentId, props.workspaceRoot, renderableFaviconUrl)
       : null;
 
+  if (props.projectIcon?.kind === "image") {
+    return (
+      <Image
+        source={{ uri: props.projectIcon.dataUrl }}
+        cachePolicy="memory"
+        accessibilityLabel={`${props.projectTitle} icon`}
+        style={{ width: size, height: size, borderRadius: size * 0.16 }}
+        contentFit="contain"
+      />
+    );
+  }
+
   if (symbol !== null) {
     return (
       <SymbolView
