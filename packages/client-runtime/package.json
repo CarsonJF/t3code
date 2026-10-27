@@ -419,6 +419,10 @@
       "types": "./src/pullRequestProjectFilter.ts",
       "default": "./src/pullRequestProjectFilter.ts"
     },
+    "./thread-groups": {
+      "types": "./src/threadGroups.ts",
+      "default": "./src/threadGroups.ts"
+    },
     "./thread-pull-request-compatibility": {
       "types": "./src/threadPullRequestCompatibility.ts",
       "default": "./src/threadPullRequestCompatibility.ts"
