@@ -1,15 +1,10 @@
-import {
-  scopedProjectKey,
-  scopedThreadKey,
-  scopeProjectRef,
-  scopeThreadRef,
-} from "@t3tools/client-runtime/environment";
+import { resolveThreadGroupId } from "@t3tools/client-runtime/thread-groups";
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 
 import {
-  resolveThreadGroupId,
+  canEditThreadGroups,
+  readThreadGroupsView,
   threadGroupActions,
-  useThreadGroupsStore,
 } from "../threadGroupsStore";
 import { createThreadGroupFromPrompt } from "./ThreadGroupNameDialog";
 import type { ThreadActionMenuId, ThreadActionMenuState } from "./threadActionMenu.logic";
@@ -21,20 +16,15 @@ interface GroupableThread {
   readonly createdAt: string;
 }
 
-const threadKeyOf = (thread: GroupableThread) =>
-  scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
-
 export function readThreadGroupMenuState(
   thread: GroupableThread,
-): NonNullable<ThreadActionMenuState["threadGroups"]> {
-  const state = useThreadGroupsStore.getState();
+): ThreadActionMenuState["threadGroups"] {
+  if (!canEditThreadGroups(thread.environmentId)) return undefined;
+  const view = readThreadGroupsView();
+  const state = view.byEnvironment.get(thread.environmentId);
   return {
-    groups: state.groups,
-    currentGroupId: resolveThreadGroupId(state, {
-      threadKey: threadKeyOf(thread),
-      projectKey: scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-      createdAt: thread.createdAt,
-    }),
+    groups: view.groups,
+    currentGroupId: state ? resolveThreadGroupId(state, thread) : null,
   };
 }
 
@@ -44,12 +34,14 @@ export async function handleThreadGroupMenuAction(
   thread: GroupableThread,
 ): Promise<boolean> {
   if (action === "group:none") {
-    threadGroupActions.setThreadGroup(threadKeyOf(thread), null);
+    threadGroupActions.setThreadGroup(thread, null);
   } else if (action === "group:new") {
-    const groupId = await createThreadGroupFromPrompt();
-    if (groupId !== null) threadGroupActions.setThreadGroup(threadKeyOf(thread), groupId);
+    const group = await createThreadGroupFromPrompt();
+    if (group !== null) threadGroupActions.setThreadGroup(thread, group);
   } else if (action.startsWith("group:set:")) {
-    threadGroupActions.setThreadGroup(threadKeyOf(thread), action.slice("group:set:".length));
+    const groupId = action.slice("group:set:".length);
+    const group = readThreadGroupsView().groups.find((candidate) => candidate.id === groupId);
+    if (group) threadGroupActions.setThreadGroup(thread, group);
   } else {
     return false;
   }
