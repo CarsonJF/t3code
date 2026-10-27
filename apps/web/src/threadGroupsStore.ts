@@ -1,31 +1,38 @@
+import { useAtomValue } from "@effect/atom-react";
+import { parseScopedProjectKey, parseScopedThreadKey } from "@t3tools/client-runtime/environment";
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import {
-  scopedProjectKey,
-  scopedThreadKey,
-  scopeProjectRef,
-  scopeThreadRef,
-} from "@t3tools/client-runtime/environment";
+  environmentsWithThreadGroup,
+  mergeThreadGroups,
+  splitThreadsByGroup as splitThreadsByEnvironmentGroup,
+  withThreadGroup,
+  type ThreadGroupsByEnvironment,
+} from "@t3tools/client-runtime/thread-groups";
 import {
+  AuthSettingsWriteScope,
   ProjectIconColor,
   ProjectIconOverride,
   type EnvironmentId,
   type ProjectId,
+  type ScopedProjectRef,
+  type ThreadGroup,
+  type ThreadGroupOp,
+  type ThreadGroupsState,
   type ThreadId,
 } from "@t3tools/contracts";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { AsyncResult, Atom } from "effect/reactivity";
 import { create } from "zustand";
 
+import { environmentCatalog } from "./connection/catalog";
 import { getLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorage";
 import { randomUUID } from "./lib/utils";
+import { appAtomRegistry } from "./rpc/atomRegistry";
+import { serverEnvironment } from "./state/server";
+import { readEnvironmentScope } from "./state/session";
 
-const THREAD_GROUPS_STORAGE_KEY = "t3code:thread-groups:v1";
-
-const ThreadGroup = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  color: Schema.optional(Schema.NullOr(ProjectIconColor)),
-  icon: Schema.optional(Schema.NullOr(ProjectIconOverride)),
-});
-export type ThreadGroup = typeof ThreadGroup.Type;
+export type { ThreadGroup };
 
 export interface ThreadGroupDetails {
   readonly name: string;
@@ -33,48 +40,81 @@ export interface ThreadGroupDetails {
   readonly icon: ProjectIconOverride | null;
 }
 
-const ProjectDefaultEntry = Schema.Struct({
-  groupId: Schema.NullOr(Schema.String),
-  since: Schema.String,
-});
-
-export const ThreadGroupsStateSchema = Schema.Struct({
-  groups: Schema.Array(ThreadGroup),
-  // Append-only per project so a new default never moves threads created before it.
-  projectDefaults: Schema.Record(Schema.String, Schema.Array(ProjectDefaultEntry)),
-  // `null` pins a thread outside every group, overriding its project default.
+// Groups used to live only in this browser, keyed by environment-scoped thread and project keys.
+const LEGACY_STORAGE_KEY = "t3code:thread-groups:v1";
+const LegacyThreadGroupsState = Schema.Struct({
+  groups: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      name: Schema.String,
+      color: Schema.optional(Schema.NullOr(ProjectIconColor)),
+      icon: Schema.optional(Schema.NullOr(ProjectIconOverride)),
+    }),
+  ),
+  projectDefaults: Schema.Record(
+    Schema.String,
+    Schema.Array(Schema.Struct({ groupId: Schema.NullOr(Schema.String), since: Schema.String })),
+  ),
   threadOverrides: Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
   collapsed: Schema.Record(Schema.String, Schema.Boolean),
 });
-export type ThreadGroupsState = typeof ThreadGroupsStateSchema.Type;
+export type LegacyThreadGroupsState = typeof LegacyThreadGroupsState.Type;
 
-export const EMPTY_THREAD_GROUPS_STATE: ThreadGroupsState = {
-  groups: [],
-  projectDefaults: {},
-  threadOverrides: {},
-  collapsed: {},
-};
+// Collapsing is a per-device view choice: folding a group on a phone must not fold it on the desktop.
+const LOCAL_STORAGE_KEY = "t3code:thread-groups-local:v1";
+const LocalThreadGroupsState = Schema.Struct({
+  collapsed: Schema.Record(Schema.String, Schema.Boolean),
+  migratedEnvironmentIds: Schema.Array(Schema.String),
+});
+type LocalThreadGroupsState = typeof LocalThreadGroupsState.Type;
 
-function existingGroupId(state: ThreadGroupsState, groupId: string | null | undefined) {
-  return groupId != null && state.groups.some((group) => group.id === groupId) ? groupId : null;
-}
-
-export function projectDefaultGroupId(state: ThreadGroupsState, projectKey: string): string | null {
-  return existingGroupId(state, state.projectDefaults[projectKey]?.at(-1)?.groupId);
-}
-
-export function resolveThreadGroupId(
-  state: ThreadGroupsState,
-  thread: { readonly threadKey: string; readonly projectKey: string; readonly createdAt: string },
-): string | null {
-  if (Object.hasOwn(state.threadOverrides, thread.threadKey)) {
-    return existingGroupId(state, state.threadOverrides[thread.threadKey]);
+function readStored<T, E>(key: string, schema: Schema.Codec<T, E>): T | null {
+  try {
+    return getLocalStorageItem(key, schema);
+  } catch (error) {
+    console.error("[THREAD_GROUPS] Could not read stored groups.", error);
+    return null;
   }
-  const createdAtMs = Date.parse(thread.createdAt);
-  const entry = state.projectDefaults[thread.projectKey]?.findLast(
-    (candidate) => Date.parse(candidate.since) <= createdAtMs,
-  );
-  return existingGroupId(state, entry?.groupId);
+}
+
+export const readLegacyThreadGroups = () => readStored(LEGACY_STORAGE_KEY, LegacyThreadGroupsState);
+
+export const useLocalThreadGroupsStore = create<LocalThreadGroupsState>(
+  () =>
+    readStored(LOCAL_STORAGE_KEY, LocalThreadGroupsState) ?? {
+      collapsed: readLegacyThreadGroups()?.collapsed ?? {},
+      migratedEnvironmentIds: [],
+    },
+);
+
+useLocalThreadGroupsStore.subscribe((state) => {
+  try {
+    setLocalStorageItem(LOCAL_STORAGE_KEY, state, LocalThreadGroupsState);
+  } catch (error) {
+    console.error("[THREAD_GROUPS] Could not persist groups.", error);
+  }
+});
+
+export interface ThreadGroupsView {
+  readonly byEnvironment: ThreadGroupsByEnvironment;
+  readonly groups: ReadonlyArray<ThreadGroup>;
+}
+
+const threadGroupsViewAtom = Atom.make((get): ThreadGroupsView => {
+  const byEnvironment = new Map<EnvironmentId, ThreadGroupsState>();
+  for (const environmentId of get(environmentCatalog.catalogValueAtom).entries.keys()) {
+    const settings = get(serverEnvironment.settingsValueAtom(environmentId));
+    if (settings) byEnvironment.set(environmentId, settings.threadGroups);
+  }
+  return { byEnvironment, groups: mergeThreadGroups(byEnvironment) };
+}).pipe(Atom.withLabel("web-thread-groups"));
+
+export const readThreadGroupsView = () => appAtomRegistry.get(threadGroupsViewAtom);
+
+export function useThreadGroupsStore() {
+  const view = useAtomValue(threadGroupsViewAtom);
+  const collapsed = useLocalThreadGroupsStore((state) => state.collapsed);
+  return { ...view, collapsed };
 }
 
 export function splitThreadsByGroup<
@@ -84,124 +124,159 @@ export function splitThreadsByGroup<
     readonly projectId: ProjectId;
     readonly createdAt: string;
   },
->(threads: readonly T[], state: ThreadGroupsState) {
-  const byGroupId = new Map(state.groups.map((group) => [group.id, [] as T[]]));
-  const ungrouped: T[] = [];
-  for (const thread of threads) {
-    const groupId = resolveThreadGroupId(state, {
-      threadKey: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-      projectKey: scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-      createdAt: thread.createdAt,
-    });
-    (groupId === null ? ungrouped : byGroupId.get(groupId)!).push(thread);
-  }
-  return {
-    ungrouped,
-    groups: state.groups.map((group) => ({ group, threads: byGroupId.get(group.id)! })),
-  };
+>(threads: readonly T[], view: ThreadGroupsView) {
+  return splitThreadsByEnvironmentGroup(threads, view.byEnvironment, view.groups);
 }
 
-export function createThreadGroup(state: ThreadGroupsState, group: ThreadGroup): ThreadGroupsState {
-  return { ...state, groups: [...state.groups, group] };
-}
+export const canEditThreadGroups = (environmentId: EnvironmentId) =>
+  readEnvironmentScope(environmentId, AuthSettingsWriteScope);
 
-function updateThreadGroup(
-  state: ThreadGroupsState,
-  groupId: string,
-  details: ThreadGroupDetails,
-): ThreadGroupsState {
-  return {
-    ...state,
-    groups: state.groups.map((group) => (group.id === groupId ? { ...group, ...details } : group)),
-  };
-}
+const sendThreadGroupOps = (environmentId: EnvironmentId, threadGroupOps: ThreadGroupOp[]) =>
+  runAtomCommand(
+    appAtomRegistry,
+    serverEnvironment.updateSettings,
+    { environmentId, input: { patch: { threadGroupOps } } },
+    { label: "Thread group update" },
+  );
 
-export function deleteThreadGroup(state: ThreadGroupsState, groupId: string): ThreadGroupsState {
-  const { [groupId]: _removed, ...collapsed } = state.collapsed;
-  return {
-    groups: state.groups.filter((group) => group.id !== groupId),
-    projectDefaults: Object.fromEntries(
-      Object.entries(state.projectDefaults).map(([projectKey, entries]) => [
-        projectKey,
-        entries.map((entry) => (entry.groupId === groupId ? { ...entry, groupId: null } : entry)),
-      ]),
-    ),
-    threadOverrides: Object.fromEntries(
-      Object.entries(state.threadOverrides).map(([threadKey, override]) => [
-        threadKey,
-        override === groupId ? null : override,
-      ]),
-    ),
-    collapsed,
-  };
-}
-
-export function setProjectDefaultGroup(
-  state: ThreadGroupsState,
-  projectKeys: ReadonlyArray<string>,
-  groupId: string | null,
-  since: string,
-): ThreadGroupsState {
-  const projectDefaults = { ...state.projectDefaults };
-  for (const projectKey of projectKeys) {
-    if (projectDefaultGroupId(state, projectKey) === groupId) continue;
-    projectDefaults[projectKey] = [...(projectDefaults[projectKey] ?? []), { groupId, since }];
-  }
-  return { ...state, projectDefaults };
-}
-
-export function setThreadGroup(
-  state: ThreadGroupsState,
-  threadKey: string,
-  groupId: string | null,
-): ThreadGroupsState {
-  return { ...state, threadOverrides: { ...state.threadOverrides, [threadKey]: groupId } };
-}
-
-export function readPersistedThreadGroups(): ThreadGroupsState {
-  try {
-    return (
-      getLocalStorageItem(THREAD_GROUPS_STORAGE_KEY, ThreadGroupsStateSchema) ??
-      EMPTY_THREAD_GROUPS_STATE
-    );
-  } catch (error) {
-    console.error("[THREAD_GROUPS] Could not read stored groups.", error);
-    return EMPTY_THREAD_GROUPS_STATE;
-  }
-}
-
-export const useThreadGroupsStore = create<ThreadGroupsState>(() => readPersistedThreadGroups());
-
-useThreadGroupsStore.subscribe((state) => {
-  try {
-    setLocalStorageItem(THREAD_GROUPS_STORAGE_KEY, state, ThreadGroupsStateSchema);
-  } catch (error) {
-    console.error("[THREAD_GROUPS] Could not persist groups.", error);
-  }
+export const newThreadGroup = (details: ThreadGroupDetails): ThreadGroup => ({
+  id: randomUUID(),
+  ...details,
 });
 
-const update = (apply: (state: ThreadGroupsState) => ThreadGroupsState) =>
-  useThreadGroupsStore.setState((state) => apply(state), true);
-
 export const threadGroupActions = {
-  create: (details: ThreadGroupDetails | string): string => {
-    const id = randomUUID();
-    const group = typeof details === "string" ? { name: details } : details;
-    update((state) => createThreadGroup(state, { id, ...group }));
-    return id;
+  update: (groupId: string, details: ThreadGroupDetails) => {
+    const { byEnvironment } = readThreadGroupsView();
+    for (const environmentId of environmentsWithThreadGroup(byEnvironment, groupId)) {
+      void sendThreadGroupOps(environmentId, [{ type: "updateGroup", groupId, ...details }]);
+    }
   },
-  update: (groupId: string, details: ThreadGroupDetails) =>
-    update((state) => updateThreadGroup(state, groupId, details)),
-  delete: (groupId: string) => update((state) => deleteThreadGroup(state, groupId)),
-  setProjectDefault: (projectKeys: ReadonlyArray<string>, groupId: string | null) =>
-    update((state) =>
-      setProjectDefaultGroup(state, projectKeys, groupId, new Date().toISOString()),
-    ),
-  setThreadGroup: (threadKey: string, groupId: string | null) =>
-    update((state) => setThreadGroup(state, threadKey, groupId)),
+  delete: (groupId: string) => {
+    const { byEnvironment } = readThreadGroupsView();
+    for (const environmentId of environmentsWithThreadGroup(byEnvironment, groupId)) {
+      void sendThreadGroupOps(environmentId, [{ type: "deleteGroup", groupId }]);
+    }
+  },
+  setProjectDefault: (projectRefs: ReadonlyArray<ScopedProjectRef>, group: ThreadGroup | null) => {
+    const { byEnvironment } = readThreadGroupsView();
+    const since = new Date().toISOString();
+    const projectIdsByEnvironment = new Map<EnvironmentId, ProjectId[]>();
+    for (const ref of projectRefs) {
+      projectIdsByEnvironment.set(ref.environmentId, [
+        ...(projectIdsByEnvironment.get(ref.environmentId) ?? []),
+        ref.projectId,
+      ]);
+    }
+    for (const [environmentId, projectIds] of projectIdsByEnvironment) {
+      void sendThreadGroupOps(
+        environmentId,
+        withThreadGroup(byEnvironment.get(environmentId), group, {
+          type: "setProjectDefault",
+          projectIds,
+          groupId: group?.id ?? null,
+          since,
+        }),
+      );
+    }
+  },
+  setThreadGroup: (
+    thread: { readonly environmentId: EnvironmentId; readonly id: ThreadId },
+    group: ThreadGroup | null,
+  ) => {
+    const state = readThreadGroupsView().byEnvironment.get(thread.environmentId);
+    void sendThreadGroupOps(
+      thread.environmentId,
+      withThreadGroup(state, group, {
+        type: "setThreadGroup",
+        threadId: thread.id,
+        groupId: group?.id ?? null,
+      }),
+    );
+  },
   toggleCollapsed: (groupId: string) =>
-    update((state) => ({
-      ...state,
+    useLocalThreadGroupsStore.setState((state) => ({
       collapsed: { ...state.collapsed, [groupId]: !state.collapsed[groupId] },
     })),
 };
+
+/** Every legacy group goes to each environment, with only the threads and projects it owns. */
+export function legacyThreadGroupsImport(
+  legacy: LegacyThreadGroupsState,
+  environmentId: EnvironmentId,
+): ThreadGroupsState {
+  const projectDefaults: Record<string, ThreadGroupsState["projectDefaults"][ProjectId]> = {};
+  for (const [key, entries] of Object.entries(legacy.projectDefaults)) {
+    const ref = parseScopedProjectKey(key);
+    if (ref?.environmentId === environmentId) projectDefaults[ref.projectId] = entries;
+  }
+  const threadOverrides: Record<string, string | null> = {};
+  for (const [key, groupId] of Object.entries(legacy.threadOverrides)) {
+    const ref = parseScopedThreadKey(key);
+    if (ref?.environmentId === environmentId) threadOverrides[ref.threadId] = groupId;
+  }
+  return {
+    groups: legacy.groups.flatMap((group) => {
+      const name = group.name.trim().slice(0, 200);
+      return name.length > 0 && group.id.trim().length > 0 ? [{ ...group, name }] : [];
+    }),
+    projectDefaults,
+    threadOverrides,
+  };
+}
+
+const attemptedMigrationGenerations = new Map<EnvironmentId, number>();
+
+const migrationTargetsAtom = Atom.make((get) =>
+  [...get(environmentCatalog.catalogValueAtom).entries.keys()].flatMap((environmentId) => {
+    const generation = Option.match(
+      AsyncResult.value(get(environmentCatalog.stateAtom(environmentId))),
+      {
+        onNone: () => null,
+        onSome: (connection) => (connection.phase === "connected" ? connection.generation : null),
+      },
+    );
+    return generation === null || get(serverEnvironment.settingsValueAtom(environmentId)) === null
+      ? []
+      : [{ environmentId, generation }];
+  }),
+).pipe(Atom.withLabel("web-thread-groups-migration-targets"));
+
+function migrateLegacyThreadGroups(): void {
+  const legacy = readLegacyThreadGroups();
+  if (!legacy || legacy.groups.length === 0) return;
+  for (const { environmentId, generation } of appAtomRegistry.get(migrationTargetsAtom)) {
+    const { migratedEnvironmentIds } = useLocalThreadGroupsStore.getState();
+    if (migratedEnvironmentIds.includes(environmentId)) continue;
+    if (attemptedMigrationGenerations.get(environmentId) === generation) continue;
+    if (!canEditThreadGroups(environmentId)) continue;
+    attemptedMigrationGenerations.set(environmentId, generation);
+    void runAtomCommand(
+      appAtomRegistry,
+      serverEnvironment.updateSettings,
+      {
+        environmentId,
+        input: {
+          patch: {
+            threadGroupOps: [
+              { type: "import", state: legacyThreadGroupsImport(legacy, environmentId) },
+            ],
+          },
+        },
+      },
+      { reportFailure: false },
+    ).then((result) => {
+      // Servers without thread groups drop the op and report none, so retry on the next connection.
+      if (result._tag !== "Success" || result.value.threadGroups.groups.length === 0) return;
+      useLocalThreadGroupsStore.setState((state) => ({
+        migratedEnvironmentIds: [...state.migratedEnvironmentIds, environmentId],
+      }));
+    });
+  }
+}
+
+/** Uploads this browser's pre-sync groups to each environment once; the legacy key stays for rollback. */
+export function startThreadGroupsMigration(): () => void {
+  const unsubscribe = appAtomRegistry.subscribe(migrationTargetsAtom, migrateLegacyThreadGroups);
+  migrateLegacyThreadGroups();
+  return unsubscribe;
+}
