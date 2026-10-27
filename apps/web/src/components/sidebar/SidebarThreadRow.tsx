@@ -476,6 +476,20 @@ export function SortableThreadRow(
   // Keyed by variant so a card/slim switch remounts the row.
   return <SidebarThreadRow key={rowProps.variant} {...rowProps} thread={thread} sortable={bag} />;
 }
+
+// Thread-group rows sit outside the sortable list, whose drop targets are sections, not groups.
+export function StaticThreadRow(props: Parameters<typeof SortableThreadRow>[0]) {
+  const {
+    sortableId: _sortableId,
+    sortableDisabled: _disabled,
+    contextDrag: _drag,
+    ...rowProps
+  } = props;
+  const thread =
+    useThreadShell(scopeThreadRef(rowProps.thread.environmentId, rowProps.thread.id)) ??
+    rowProps.thread;
+  return <SidebarThreadRow key={rowProps.variant} {...rowProps} thread={thread} />;
+}
 export type SidebarSweepAction = "settle" | "unsettle" | "unsnooze";
 const dropVerbBadge: Record<SidebarDropVerb, ReactNode> = {
   pin: (
