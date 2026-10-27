@@ -38,6 +38,7 @@ import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
 import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
+import { ProjectDefaultGroupSection } from "./ProjectDefaultGroupSection";
 import {
   useSettingsEnvironmentMenu,
   SettingsEnvironmentFilterHeader,
@@ -349,6 +350,7 @@ function ProjectOverviewContent(props: {
           </View>
         </View>
       </SettingsSection>
+      <ProjectDefaultGroupSection members={props.members} />
 
       {canOrganize ? (
         <SettingsSection title="Organize">
