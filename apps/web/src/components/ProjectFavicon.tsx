@@ -38,6 +38,15 @@ export function ProjectFavicon(input: {
   fallbackIcon?: ComponentType<{ className?: string }>;
 }) {
   const { project } = input;
+  if (project.projectIcon?.kind === "image") {
+    return (
+      <img
+        src={project.projectIcon.dataUrl}
+        alt=""
+        className={cn("size-3.5 shrink-0 object-contain", input.className)}
+      />
+    );
+  }
   if (project.projectIcon?.kind === "monogram") {
     return (
       <ProjectMonogram
