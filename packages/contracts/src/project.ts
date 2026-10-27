@@ -92,6 +92,15 @@ const ProjectMonogramIcon = Schema.Struct({
   text: ProjectMonogramText,
   color: ProjectIconColor,
 });
+// Uploaded icons are downscaled by the client, so the cap keeps them inline in events and settings.
+export const PROJECT_IMAGE_ICON_MAX_LENGTH = 24_000;
+const ProjectImageIcon = Schema.Struct({
+  kind: Schema.Literal("image"),
+  dataUrl: Schema.String.check(
+    Schema.isMaxLength(PROJECT_IMAGE_ICON_MAX_LENGTH),
+    Schema.isPattern(/^data:image\/(?:png|webp|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/),
+  ),
+});
 export const ProjectFaviconPath = TrimmedNonEmptyString.check(
   Schema.isMaxLength(1024),
   Schema.isPattern(/\.(?:avif|gif|icns|ico|jpe?g|png|svg|webp)$/i),
@@ -102,6 +111,7 @@ export const ProjectIconOverride = Schema.Union([
   ProjectLucideIcon,
   ProjectEmojiIcon,
   ProjectMonogramIcon,
+  ProjectImageIcon,
 ]);
 export type ProjectIconOverride = typeof ProjectIconOverride.Type;
 
@@ -114,6 +124,7 @@ const projectIconMembers = [
   ProjectLucideIconWithLegacyMonogram,
   ProjectEmojiIcon,
   ProjectMonogramIcon,
+  ProjectImageIcon,
 ] as const;
 type ProjectIconMember = (typeof projectIconMembers)[number]["Type"];
 
