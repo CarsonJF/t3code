@@ -48,7 +48,8 @@ workflows never run here.
     gh workflow enable custom-nightly.yml -R CarsonJF/t3code
 
 Run now: `gh workflow run custom-nightly.yml -R CarsonJF/t3code` (add `-f force=true` to
-rebuild an existing release, `-f upstream_tag=v...` to pick a tag).
+rebuild an existing release, `-f upstream_tag=v...` to pick a tag). If the macOS job fails with
+"not acquired by Runner", arm64 runners are out of capacity: rerun with `-f mac_runner=macos-15-intel`.
 
 ## Resolving a rebase conflict
 
