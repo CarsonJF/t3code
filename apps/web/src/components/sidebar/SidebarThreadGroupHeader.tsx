@@ -1,7 +1,6 @@
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import type { MouseEvent } from "react";
 
-import { useClientSettings } from "../../hooks/useSettings";
 import { readLocalApi } from "../../localApi";
 import { threadGroupActions, type ThreadGroup } from "../../threadGroupsStore";
 import { cn } from "../../lib/utils";
@@ -49,10 +48,7 @@ export function SidebarThreadGroupHeader(props: {
   count: number;
   expanded: boolean;
 }) {
-  const redesign = useClientSettings((s) => s.redesignEnabled);
   const colorClassName = threadGroupColorClassName(props.group);
-  const collapsedCount = props.expanded ? null : props.count;
-  const count = redesign ? props.count : collapsedCount;
   return (
     <li
       data-thread-selection-safe
@@ -73,17 +69,12 @@ export function SidebarThreadGroupHeader(props: {
         onClick={() => threadGroupActions.toggleCollapsed(props.group.id)}
         expanded={props.expanded}
         tone="muted"
-        accessory={
-          redesign && count !== null ? (
-            <span className="font-normal tabular-nums">{count}</span>
-          ) : null
-        }
+        accessory={<span className="font-normal tabular-nums">{props.count}</span>}
       >
         <span className={cn("flex items-center gap-1.5", colorClassName)}>
           <ThreadGroupIcon group={props.group} />
           {props.group.name}
         </span>
-        {!redesign && collapsedCount !== null ? ` (${collapsedCount})` : null}
       </CollapsibleSectionHeader>
     </li>
   );
