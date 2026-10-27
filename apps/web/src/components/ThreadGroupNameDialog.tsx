@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 
 import { PROJECT_ICON_COLORS } from "../projectIconOptions";
-import { threadGroupActions, type ThreadGroupDetails } from "../threadGroupsStore";
+import { newThreadGroup, type ThreadGroup, type ThreadGroupDetails } from "../threadGroupsStore";
 import { cn } from "~/lib/utils";
 import { ProjectIconPickerDialog } from "./settings/ProjectIconPickerDialog";
 import { ThreadGroupIcon, threadGroupColorClassName } from "./ThreadGroupIcon";
@@ -32,13 +32,14 @@ export function requestThreadGroupDetails(
   return new Promise((resolve) => useRequest.setState({ request: { ...options, resolve } }));
 }
 
-export async function createThreadGroupFromPrompt(): Promise<string | null> {
+/** The group is saved by the first action that uses it, so cancelling leaves nothing behind. */
+export async function createThreadGroupFromPrompt(): Promise<ThreadGroup | null> {
   const details = await requestThreadGroupDetails({
     title: "New group",
     submitLabel: "Create",
     initial: { name: "", color: null, icon: null },
   });
-  return details === null ? null : threadGroupActions.create(details);
+  return details === null ? null : newThreadGroup(details);
 }
 
 function finish(details: ThreadGroupDetails | null) {
