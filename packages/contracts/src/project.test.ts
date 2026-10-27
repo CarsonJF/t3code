@@ -5,7 +5,9 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { OrchestrationProjectShell } from "./orchestrationProject.ts";
 
+import { ThreadGroup } from "./threadGroups.ts";
 import {
+  PROJECT_IMAGE_ICON_MAX_LENGTH,
   ProjectFaviconPath,
   ReceivedProjectIcon,
   StoredProjectIcon,
@@ -143,6 +145,7 @@ effectIt.effect("project favicon paths accept only supported image files", () =>
 
 const decodeStoredIcon = Schema.decodeUnknownEffect(StoredProjectIcon);
 const decodeReceivedIcon = Schema.decodeUnknownEffect(ReceivedProjectIcon);
+const decodeThreadGroup = Schema.decodeUnknownEffect(ThreadGroup);
 const decodeProjectShell = Schema.decodeUnknownEffect(OrchestrationProjectShell);
 
 effectIt.effect("reads monograms stored in the pre-v2 fallback shape", () =>
@@ -159,16 +162,43 @@ effectIt.effect("reads monograms stored in the pre-v2 fallback shape", () =>
   }),
 );
 
+effectIt.effect("image icons accept only small raster data URLs", () =>
+  Effect.gen(function* () {
+    const image = { kind: "image", dataUrl: "data:image/webp;base64,UklGRg==" } as const;
+    assert.deepEqual(yield* decodeStoredIcon(image), image);
+    assert.deepEqual(yield* decodeReceivedIcon(image), image);
+    for (const dataUrl of [
+      "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+      "https://example.com/a.png",
+      `data:image/png;base64,${"A".repeat(PROJECT_IMAGE_ICON_MAX_LENGTH)}`,
+    ]) {
+      const exit = yield* Effect.exit(decodeStoredIcon({ kind: "image", dataUrl }));
+      assert.strictEqual(exit._tag, "Failure");
+    }
+  }),
+);
+
+effectIt.effect("a group keeps loading when its icon kind is unknown", () =>
+  Effect.gen(function* () {
+    const group = yield* decodeThreadGroup({
+      id: "group-1",
+      name: "Videos",
+      icon: { kind: "sticker", id: "a" },
+    });
+    assert.isNull(group.icon);
+  }),
+);
+
 effectIt.effect("an icon kind from a newer server shows the default icon", () =>
   Effect.gen(function* () {
-    assert.isNull(yield* decodeReceivedIcon({ kind: "image", url: "https://example.com/a.png" }));
+    assert.isNull(yield* decodeReceivedIcon({ kind: "sticker", url: "https://example.com/a.png" }));
     const shell = yield* decodeProjectShell({
       id: "project-1",
       title: "Project",
       workspaceRoot: "/tmp/project",
       defaultModelSelection: null,
       scripts: [],
-      projectIcon: { kind: "image", url: "https://example.com/a.png" },
+      projectIcon: { kind: "sticker", url: "https://example.com/a.png" },
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
