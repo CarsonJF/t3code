@@ -64,6 +64,7 @@ import {
   ThreadListV2SnoozedShelfHeader,
   ThreadListV2WorkingShelfHeader,
 } from "../threads/thread-list-v2-items";
+import { ThreadGroupHeader } from "../threads/thread-group-header";
 import { useThreadRowProviderInstanceResolver } from "../threads/thread-provider-instance";
 import { useOpenThreadPullRequests } from "../threads/use-open-thread-pull-requests";
 import type { ThreadPrPresentation } from "../../state/thread-pr-presentation";
@@ -521,6 +522,9 @@ export function HomeScreen(props: HomeScreenProps) {
           activationKey={item.key}
         />
       );
+    }
+    if (item.type === "v2-thread-group") {
+      return <ThreadGroupHeader item={item} pane={primaryColumn ? "sidebar" : "screen"} />;
     }
     if (item.type === "v2-working-shelf") {
       return (
