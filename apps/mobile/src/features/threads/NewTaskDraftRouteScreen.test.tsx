@@ -34,6 +34,7 @@ const harness = vi.hoisted(() => {
     route: { key: "thread-route", name: "Thread", params: {} as object },
     reset: () => undefined,
     checkout: vi.fn(),
+    draftProjectRefs: [] as unknown[],
     // Hook results stay stable across renders, as the real hooks' are. Only
     // main's screen reads these (see the main-comparison mocks below).
     layout: { deferThreadSelectionUntil: () => undefined },
@@ -58,9 +59,10 @@ vi.mock("./ThreadScreenHost", () => ({
   ThreadScreenFallback: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("./NewTaskDraftScreen", () => ({
-  NewTaskDraftScreen: (props: { initialProjectRef: { branch?: string | null } }) => (
-    <p>draft on {props.initialProjectRef.branch}</p>
-  ),
+  NewTaskDraftScreen: (props: { initialProjectRef: { branch?: string | null } }) => {
+    harness.draftProjectRefs.push(props.initialProjectRef);
+    return <p>draft on {props.initialProjectRef.branch}</p>;
+  },
 }));
 vi.mock("./new-task-context-presentation", () => ({
   resolveNewTaskBranchWorktreePath: () => null,
@@ -141,4 +143,35 @@ it("checks the branch out once when a reconnect drops and restores the project",
   );
   expect(harness.checkout).toHaveBeenCalledTimes(1);
   expect(container.textContent).toBe("draft on feature");
+});
+
+it("hands the draft screen the same project ref across re-renders", async () => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  harness.checkout.mockReset();
+  harness.draftProjectRefs.length = 0;
+  harness.checkout.mockResolvedValue(
+    AsyncResult.success({ name: "other", current: true, isDefault: false, worktreePath: null }),
+  );
+  harness.set({ projects: [project], catalog: connected });
+  const draft = { environmentId: "env-1", projectId: "project-1", branch: "other" };
+  harness.route = { key: "stable-route", name: "Thread", params: { draft } };
+
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  using _root = { [Symbol.dispose]: () => act(() => root.unmount()) };
+  act(() =>
+    root.render(
+      <NewTaskDraftRouteScreen
+        route={{ key: "stable-route", name: "Thread", params: draft } as never}
+      />,
+    ),
+  );
+  await vi.waitFor(() => expect(container.textContent).toBe("draft on other"));
+
+  // The draft screen re-applies its route project when this identity changes,
+  // and that write re-renders the route; an unstable ref loops forever.
+  act(() => harness.set({ projects: [{ ...project }], catalog: { ...connected } }));
+  const refs = new Set(harness.draftProjectRefs);
+  expect(harness.draftProjectRefs.length).toBeGreaterThan(1);
+  expect(refs.size).toBe(1);
 });
