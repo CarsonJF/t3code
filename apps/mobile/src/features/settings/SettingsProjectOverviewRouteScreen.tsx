@@ -34,6 +34,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsActionRow } from "./components/SettingsActionRow";
+import { ProjectDefaultGroupSection } from "./ProjectDefaultGroupSection";
 import {
   AndroidSettingsEnvironmentFilter,
   SettingsEnvironmentFilterHeader,
@@ -294,6 +295,7 @@ function ProjectOverviewContent(props: {
           </View>
         </View>
       </SettingsSection>
+      <ProjectDefaultGroupSection members={props.members} />
 
       <SettingsSection title="Checkouts">
         {props.members.map((member, index) => {
