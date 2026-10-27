@@ -2,7 +2,7 @@ import { FolderCodeIcon } from "lucide-react";
 import { createElement, lazy, Suspense } from "react";
 
 import { projectIconColorClassName } from "../projectIconColors";
-import type { ThreadGroup } from "../threadGroupsStore";
+import type { ThreadGroup } from "@t3tools/contracts";
 import { cn } from "~/lib/utils";
 import { ProjectMonogram } from "./ProjectMonogram";
 

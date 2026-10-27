@@ -93,13 +93,16 @@ export interface ThreadActionMenuState {
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
   /** Guest links need their own grant, so the caller checks it instead of `canOperate`. */
   readonly canShareWithGuest?: boolean;
-  readonly threadGroups?: {
-    readonly groups: ReadonlyArray<{ readonly id: string; readonly name: string }>;
-    readonly currentGroupId: string | null;
-  };
+  /** Groups are saved in server settings, so the caller omits this without `settings:write`. */
+  readonly threadGroups?:
+    | {
+        readonly groups: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+        readonly currentGroupId: string | null;
+      }
+    | undefined;
 }
 
-/** Local navigation, read markers, grouping, and copying remain available to read-only clients. */
+/** Local navigation, read markers, and copying remain available to read-only clients; grouping checks its own grant. */
 export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean {
   return (
     !action.startsWith("group") &&
