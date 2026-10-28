@@ -1,5 +1,9 @@
 import type { MenuAction } from "@react-native-menu/menu";
-import { THREAD_GROUP_COLOR_HEX } from "@t3tools/client-runtime/thread-groups";
+import {
+  isNamedProjectColor,
+  projectColorStop,
+  THREAD_GROUP_COLOR_HEX,
+} from "@t3tools/client-runtime/thread-groups";
 import {
   ProjectIconColor,
   ProjectMonogramText,
@@ -20,6 +24,7 @@ import { Menu } from "../../components/ui/Menu";
 import { cn } from "../../lib/cn";
 import {
   countGlyphs,
+  customProjectColorValues,
   projectAutoMonogram,
   projectIconColorClassNames,
   resolveProjectIconSymbol,
@@ -34,24 +39,18 @@ import {
 import type { ThreadListV2GroupListItem } from "./thread-group-header-item";
 
 /** Native menus take color values, not class names. */
-export const THREAD_GROUP_SWATCH_HEX = THREAD_GROUP_COLOR_HEX;
+const THREAD_GROUP_SWATCH_HEX = THREAD_GROUP_COLOR_HEX;
 
 function GradientBackground(props: { readonly gradient: ThreadGroupGradient }) {
   const id = useId();
+  const from = projectColorStop(props.gradient.from);
+  const to = projectColorStop(props.gradient.to);
   return (
     <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
       <Defs>
         <LinearGradient id={id} x1="0%" x2="100%" y1="0%" y2="0%">
-          <Stop
-            offset="0"
-            stopColor={THREAD_GROUP_COLOR_HEX[props.gradient.from]}
-            stopOpacity={0.18}
-          />
-          <Stop
-            offset="1"
-            stopColor={THREAD_GROUP_COLOR_HEX[props.gradient.to]}
-            stopOpacity={0.18}
-          />
+          <Stop offset="0" stopColor={from.hex} stopOpacity={from.alpha} />
+          <Stop offset="1" stopColor={to.hex} stopOpacity={to.alpha} />
         </LinearGradient>
       </Defs>
       <Rect width="100%" height="100%" fill={`url(#${id})`} />
@@ -104,14 +103,19 @@ export function ThreadGroupIcon(props: {
   }
   if (icon?.kind === "monogram") {
     const classNames = projectIconColorClassNames(icon.color);
+    const custom = customProjectColorValues(icon.color);
     return (
       <View
         className={cn(
           "h-4 min-w-4 items-center justify-center rounded px-0.5",
           classNames.background,
         )}
+        style={custom?.background}
       >
-        <Text className={cn("font-mono text-[9px] font-t3-bold leading-none", classNames.text)}>
+        <Text
+          className={cn("font-mono text-[9px] font-t3-bold leading-none", classNames.text)}
+          style={custom?.text}
+        >
           {icon.text}
         </Text>
       </View>
@@ -124,6 +128,7 @@ export function ThreadGroupIcon(props: {
         name={symbol.name}
         size={12}
         tintColorClassName={projectIconColorClassNames(symbol.color).tint}
+        tintColor={customProjectColorValues(symbol.color)?.tint}
         type="monochrome"
       />
     );
@@ -132,14 +137,19 @@ export function ThreadGroupIcon(props: {
     const monogram = projectAutoMonogram(name);
     if (monogram?.kind === "monogram") {
       const classNames = projectIconColorClassNames(color ?? icon.color);
+      const custom = customProjectColorValues(color ?? icon.color);
       return (
         <View
           className={cn(
             "h-4 min-w-4 items-center justify-center rounded px-0.5",
             classNames.background,
           )}
+          style={custom?.background}
         >
-          <Text className={cn("font-mono text-[9px] font-t3-bold leading-none", classNames.text)}>
+          <Text
+            className={cn("font-mono text-[9px] font-t3-bold leading-none", classNames.text)}
+            style={custom?.text}
+          >
             {monogram.text}
           </Text>
         </View>
@@ -147,9 +157,12 @@ export function ThreadGroupIcon(props: {
     }
   }
   const dotColor = (icon?.kind === "lucide" ? icon.color : null) ?? color;
-  return dotColor ? (
+  if (!dotColor) return null;
+  return isNamedProjectColor(dotColor) ? (
     <View className={cn("size-2 rounded-full", DOT_CLASS_NAMES[dotColor])} />
-  ) : null;
+  ) : (
+    <View className="size-2 rounded-full" style={{ backgroundColor: dotColor }} />
+  );
 }
 
 function groupMenuActions(group: ThreadGroup): MenuAction[] {
@@ -298,6 +311,7 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
   const { toggle } = useCollapsedThreadGroups();
   const sidebarPane = props.pane === "sidebar";
   const tint = group.color ? projectIconColorClassNames(group.color) : null;
+  const customTint = customProjectColorValues(group.color);
   const header = (
     <Pressable
       accessibilityRole="button"
@@ -312,12 +326,16 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
           : (tint?.background ?? (sidebarPane ? "bg-drawer-border/40" : "bg-subtle")),
       )}
       onPress={() => toggle(group.id)}
-      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+      style={({ pressed }) => ({
+        ...(group.gradient ? null : customTint?.background),
+        opacity: pressed ? 0.6 : 1,
+      })}
     >
       {group.gradient ? <GradientBackground gradient={group.gradient} /> : null}
       <ThreadGroupIcon group={group} />
       <Text
         numberOfLines={1}
+        style={customTint?.text}
         className={cn(
           "min-w-0 shrink text-xs font-t3-medium",
           tint?.text ??

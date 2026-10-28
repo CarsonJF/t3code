@@ -11,7 +11,7 @@ import {
 } from "@t3tools/client-runtime/thread-groups";
 import {
   AuthSettingsWriteScope,
-  ProjectIconColor,
+  ProjectColor,
   ProjectIconOverride,
   type EnvironmentId,
   type ProjectId,
@@ -38,7 +38,7 @@ export type { ThreadGroup };
 
 export interface ThreadGroupDetails {
   readonly name: string;
-  readonly color: ProjectIconColor | null;
+  readonly color: ProjectColor | null;
   readonly gradient: ThreadGroupGradient | null;
   readonly icon: ProjectIconOverride | null;
 }
@@ -50,7 +50,7 @@ const LegacyThreadGroupsState = Schema.Struct({
     Schema.Struct({
       id: Schema.String,
       name: Schema.String,
-      color: Schema.optional(Schema.NullOr(ProjectIconColor)),
+      color: Schema.optional(Schema.NullOr(ProjectColor)),
       icon: Schema.optional(Schema.NullOr(ProjectIconOverride)),
     }),
   ),
