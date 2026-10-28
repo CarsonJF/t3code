@@ -1,11 +1,12 @@
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
-import { ProjectIconColor, type ProjectIconOverride } from "@t3tools/contracts";
+import { isNamedProjectColor, projectColorStop } from "@t3tools/client-runtime/thread-groups";
+import { ProjectIconColor, type ProjectColor, type ProjectIconOverride } from "@t3tools/contracts";
 import { isProjectFaviconFallbackUrl } from "@t3tools/shared/projectFavicon";
 import type { AppSymbolName } from "../components/ui/AppSymbol";
 
 export type ProjectIconGlyph =
   | { readonly kind: "emoji"; readonly emoji: string }
-  | { readonly kind: "monogram"; readonly text: string; readonly color: ProjectIconColor };
+  | { readonly kind: "monogram"; readonly text: string; readonly color: ProjectColor };
 
 /** Hermes lacks Intl.Segmenter; fold combining marks into base characters instead. */
 export function countGlyphs(text: string): number {
@@ -72,7 +73,7 @@ const SYMBOL_BY_LUCIDE_NAME: Partial<Record<string, AppSymbolName>> = {
 
 export function resolveProjectIconSymbol(
   projectIcon: ProjectIconOverride | null | undefined,
-): { readonly name: AppSymbolName; readonly color: ProjectIconColor } | null {
+): { readonly name: AppSymbolName; readonly color: ProjectColor } | null {
   if (projectIcon?.kind !== "lucide") return null;
   const name = SYMBOL_BY_LUCIDE_NAME[projectIcon.name];
   return name ? { name, color: projectIcon.color } : null;
@@ -129,6 +130,22 @@ const PROJECT_ICON_COLOR_CLASSES: Record<
   rose: { text: "text-rose-500", tint: "accent-rose-500", background: "bg-rose-500/15" },
 };
 
-export function projectIconColorClassNames(color: ProjectIconColor) {
-  return PROJECT_ICON_COLOR_CLASSES[color];
+const NO_CLASS_NAMES = { text: "", tint: "", background: "" };
+
+export function projectIconColorClassNames(color: ProjectColor) {
+  return isNamedProjectColor(color) ? PROJECT_ICON_COLOR_CLASSES[color] : NO_CLASS_NAMES;
+}
+
+/** Inline values for a custom color, which has no class names; undefined for a named one. */
+export function customProjectColorValues(color: ProjectColor | null | undefined) {
+  if (!color || isNamedProjectColor(color)) return undefined;
+  const { hex, alpha } = projectColorStop(color);
+  const channel = (start: number) => parseInt(hex.slice(start, start + 2), 16);
+  return {
+    text: { color },
+    tint: color,
+    background: {
+      backgroundColor: `rgba(${channel(1)}, ${channel(3)}, ${channel(5)}, ${(alpha * 0.15).toFixed(3)})`,
+    },
+  };
 }
