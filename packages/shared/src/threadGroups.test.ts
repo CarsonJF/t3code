@@ -40,6 +40,27 @@ describe("applyThreadGroupOps", () => {
     expect(state.groups).toEqual([{ id: "xn", name: "XN", color: "violet" }]);
   });
 
+  it("reorders listed groups first and keeps the rest in place after them", () => {
+    const state = applyThreadGroupOps(withGroups("a", "b", "c", "d"), [
+      { type: "reorderGroups", groupIds: ["c", "missing", "a"] },
+    ]);
+
+    expect(state.groups.map((group) => group.id)).toEqual(["c", "a", "b", "d"]);
+  });
+
+  it("stores a gradient and clears it with null", () => {
+    const gradient = { from: "red", to: "blue" } as const;
+    const set = applyThreadGroupOps(withGroups("xn"), [
+      { type: "updateGroup", groupId: "xn", color: "red", gradient },
+    ]);
+    expect(set.groups).toEqual([{ id: "xn", name: "xn", color: "red", gradient }]);
+
+    const cleared = applyThreadGroupOps(set, [
+      { type: "updateGroup", groupId: "xn", gradient: null },
+    ]);
+    expect(cleared.groups[0]?.gradient).toBeNull();
+  });
+
   it("drops assignments to a group another client deleted", () => {
     const state = applyThreadGroupOps(withGroups("xn"), [
       { type: "deleteGroup", groupId: "xn" },
