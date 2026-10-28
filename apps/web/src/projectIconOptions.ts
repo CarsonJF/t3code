@@ -2,7 +2,11 @@ import { ProjectMonogramText } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { msg } from "gt-react";
 import { lucideIconNames } from "./lib/lucideIconByName";
-export { PROJECT_ICON_COLORS, projectIconColorClassName } from "./projectIconColors";
+export {
+  PROJECT_ICON_COLORS,
+  projectIconColorClassName,
+  projectIconColorStyle,
+} from "./projectIconColors";
 
 const isProjectMonogramText = Schema.is(ProjectMonogramText);
 
