@@ -1,8 +1,8 @@
-import type { ProjectIconColor } from "@t3tools/contracts";
+import type { ProjectColor } from "@t3tools/contracts";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 
-import { PROJECT_ICON_COLORS } from "../projectIconOptions";
+import { projectIconColorStyle } from "../projectIconColors";
 import { newThreadGroup, type ThreadGroup, type ThreadGroupDetails } from "../threadGroupsStore";
 import { cn } from "~/lib/utils";
 import { ProjectIconPickerDialog } from "./settings/ProjectIconPickerDialog";
@@ -12,6 +12,7 @@ import {
   threadGroupGradientStyle,
 } from "./ThreadGroupIcon";
 import { Button } from "./ui/button";
+import { ColorPicker } from "./ColorPicker";
 import {
   Dialog,
   DialogFooter,
@@ -23,33 +24,7 @@ import {
 import { Input } from "./ui/input";
 import { Toggle, ToggleGroup } from "./ui/toggle-group";
 
-const DEFAULT_GRADIENT_END: ProjectIconColor = "purple";
-
-function ColorSwatches(props: {
-  readonly label: string;
-  readonly value: ProjectIconColor | null;
-  readonly onChange: (color: ProjectIconColor) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label={props.label}>
-      {PROJECT_ICON_COLORS.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          aria-label={option.label}
-          aria-pressed={props.value === option.value}
-          className={cn(
-            "flex size-6 items-center justify-center rounded-full border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-            props.value === option.value && "border-foreground/64",
-          )}
-          onClick={() => props.onChange(option.value)}
-        >
-          <span className={cn("size-4 rounded-full", option.swatchClassName)} />
-        </button>
-      ))}
-    </div>
-  );
-}
+const DEFAULT_GRADIENT_END: ProjectColor = "purple";
 
 type Request = {
   readonly title: string;
@@ -150,14 +125,14 @@ function ThreadGroupNameDialog({ request }: { request: Request }) {
                   <Toggle value="gradient">Gradient</Toggle>
                 </ToggleGroup>
               </div>
-              <ColorSwatches
+              <ColorPicker
                 label={gradientTo ? "Gradient start color" : "Group color"}
                 value={color}
                 onChange={(next) => setColor(next === color && !gradientTo ? null : next)}
               />
               {gradientTo ? (
                 <>
-                  <ColorSwatches
+                  <ColorPicker
                     label="Gradient end color"
                     value={gradientTo}
                     onChange={setGradientTo}
@@ -179,7 +154,10 @@ function ThreadGroupNameDialog({ request }: { request: Request }) {
                 size="sm"
                 onClick={() => setPickingIcon(true)}
               >
-                <span className={cn("flex items-center", threadGroupColorClassName({ color }))}>
+                <span
+                  className={cn("flex items-center", threadGroupColorClassName({ color }))}
+                  style={projectIconColorStyle(color)}
+                >
                   <ThreadGroupIcon group={{ color, icon }} />
                 </span>
                 {icon ? "Change icon" : "Add icon"}
