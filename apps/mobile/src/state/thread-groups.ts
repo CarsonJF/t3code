@@ -17,6 +17,7 @@ import {
   type ProjectIconOverride,
   type ProjectId,
   type ThreadGroup,
+  type ThreadGroupGradient,
   type ThreadGroupOp,
   type ThreadGroupsState,
   type ThreadId,
@@ -100,6 +101,7 @@ async function sendThreadGroupOps(environmentId: EnvironmentId, threadGroupOps: 
 export interface ThreadGroupDetails {
   readonly name: string;
   readonly color: ProjectIconColor | null;
+  readonly gradient: ThreadGroupGradient | null;
   readonly icon: ProjectIconOverride | null;
 }
 
