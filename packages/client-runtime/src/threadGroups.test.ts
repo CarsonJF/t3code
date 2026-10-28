@@ -2,6 +2,7 @@ import { EnvironmentId, ProjectId, ThreadId, type ThreadGroupsState } from "@t3t
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  projectColorStop,
   environmentsWithThreadGroup,
   mergeThreadGroups,
   moveThreadGroup,
@@ -107,5 +108,13 @@ describe("moveThreadGroup", () => {
     expect(moveThreadGroup(ids, "d", "a", "before")).toEqual(["d", "a", "b", "c"]);
     expect(moveThreadGroup(ids, "b", "b", "after")).toEqual(ids);
     expect(moveThreadGroup(ids, "x", "a", "after")).toEqual(ids);
+  });
+});
+
+describe("projectColorStop", () => {
+  it("splits a custom color's alpha from its hex and shades a named one", () => {
+    expect(projectColorStop("#22c55e")).toEqual({ hex: "#22c55e", alpha: 1 });
+    expect(projectColorStop("#22c55e80").alpha).toBeCloseTo(0.5, 2);
+    expect(projectColorStop("green")).toEqual({ hex: "#22c55e", alpha: 0.8 });
   });
 });

@@ -1,5 +1,9 @@
 import { lucideIconNames } from "./lib/lucideIconByName";
-export { PROJECT_ICON_COLORS, projectIconColorClassName } from "./projectIconColors";
+export {
+  PROJECT_ICON_COLORS,
+  projectIconColorClassName,
+  projectIconColorStyle,
+} from "./projectIconColors";
 
 const POPULAR_PROJECT_ICONS: ReadonlyArray<string> = [
   "folder-code",

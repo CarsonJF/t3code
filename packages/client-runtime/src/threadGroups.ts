@@ -1,5 +1,6 @@
 import type {
   EnvironmentId,
+  ProjectColor,
   ProjectIconColor,
   ProjectId,
   ThreadGroup,
@@ -126,3 +127,27 @@ export const THREAD_GROUP_COLOR_HEX: Record<ProjectIconColor, string> = {
   pink: "#ec4899",
   rose: "#f43f5e",
 };
+
+const NAMED_GRADIENT_ALPHA = 0.8;
+
+export const isNamedProjectColor = (color: ProjectColor): color is ProjectIconColor =>
+  color in THREAD_GROUP_COLOR_HEX;
+
+/** The color as `#rrggbb` plus its opacity, for gradients and anything else that cannot take class names. */
+export function projectColorStop(color: ProjectColor): {
+  readonly hex: string;
+  readonly alpha: number;
+} {
+  if (isNamedProjectColor(color)) {
+    return { hex: THREAD_GROUP_COLOR_HEX[color], alpha: NAMED_GRADIENT_ALPHA };
+  }
+  return {
+    hex: color.slice(0, 7),
+    alpha: color.length === 9 ? parseInt(color.slice(7), 16) / 255 : 1,
+  };
+}
+
+/** The color as one CSS-ready hex, where a named color is its palette shade. */
+export function projectColorHex(color: ProjectColor): string {
+  return isNamedProjectColor(color) ? THREAD_GROUP_COLOR_HEX[color] : color;
+}
