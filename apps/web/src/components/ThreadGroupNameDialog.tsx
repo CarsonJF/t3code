@@ -1,3 +1,4 @@
+import type { ProjectIconColor } from "@t3tools/contracts";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 
@@ -5,7 +6,11 @@ import { PROJECT_ICON_COLORS } from "../projectIconOptions";
 import { newThreadGroup, type ThreadGroup, type ThreadGroupDetails } from "../threadGroupsStore";
 import { cn } from "~/lib/utils";
 import { ProjectIconPickerDialog } from "./settings/ProjectIconPickerDialog";
-import { ThreadGroupIcon, threadGroupColorClassName } from "./ThreadGroupIcon";
+import {
+  ThreadGroupIcon,
+  threadGroupColorClassName,
+  threadGroupGradientStyle,
+} from "./ThreadGroupIcon";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -16,6 +21,35 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Input } from "./ui/input";
+import { Toggle, ToggleGroup } from "./ui/toggle-group";
+
+const DEFAULT_GRADIENT_END: ProjectIconColor = "purple";
+
+function ColorSwatches(props: {
+  readonly label: string;
+  readonly value: ProjectIconColor | null;
+  readonly onChange: (color: ProjectIconColor) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label={props.label}>
+      {PROJECT_ICON_COLORS.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-label={option.label}
+          aria-pressed={props.value === option.value}
+          className={cn(
+            "flex size-6 items-center justify-center rounded-full border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+            props.value === option.value && "border-foreground/64",
+          )}
+          onClick={() => props.onChange(option.value)}
+        >
+          <span className={cn("size-4 rounded-full", option.swatchClassName)} />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 type Request = {
   readonly title: string;
@@ -37,7 +71,7 @@ export async function createThreadGroupFromPrompt(): Promise<ThreadGroup | null>
   const details = await requestThreadGroupDetails({
     title: "New group",
     submitLabel: "Create",
-    initial: { name: "", color: null, icon: null },
+    initial: { name: "", color: null, gradient: null, icon: null },
   });
   return details === null ? null : newThreadGroup(details);
 }
@@ -58,6 +92,7 @@ export function ThreadGroupNameDialogHost() {
 function ThreadGroupNameDialog({ request }: { request: Request }) {
   const [name, setName] = useState(request.initial.name);
   const [color, setColor] = useState(request.initial.color);
+  const [gradientTo, setGradientTo] = useState(request.initial.gradient?.to ?? null);
   const [icon, setIcon] = useState(request.initial.icon);
   const [pickingIcon, setPickingIcon] = useState(false);
   const trimmed = name.trim();
@@ -73,7 +108,14 @@ function ThreadGroupNameDialog({ request }: { request: Request }) {
           className="flex min-h-0 flex-col"
           onSubmit={(event) => {
             event.preventDefault();
-            if (trimmed.length > 0) finish({ name: trimmed, color, icon });
+            if (trimmed.length > 0) {
+              finish({
+                name: trimmed,
+                color,
+                gradient: color && gradientTo ? { from: color, to: gradientTo } : null,
+                icon,
+              });
+            }
           }}
         >
           <DialogHeader>
@@ -88,25 +130,47 @@ function ThreadGroupNameDialog({ request }: { request: Request }) {
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
-            <div>
-              <div className="mb-2 text-xs font-medium text-muted-foreground">Color</div>
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Group color">
-                {PROJECT_ICON_COLORS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-label={option.label}
-                    aria-pressed={color === option.value}
-                    className={cn(
-                      "flex size-6 items-center justify-center rounded-full border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                      color === option.value && "border-foreground/64",
-                    )}
-                    onClick={() => setColor(color === option.value ? null : option.value)}
-                  >
-                    <span className={cn("size-4 rounded-full", option.swatchClassName)} />
-                  </button>
-                ))}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-muted-foreground">Color</div>
+                <ToggleGroup
+                  aria-label="Color style"
+                  variant="segmented"
+                  value={[gradientTo ? "gradient" : "solid"]}
+                  onValueChange={(next) => {
+                    if (next[0] === "gradient") {
+                      setColor(color ?? "blue");
+                      setGradientTo(gradientTo ?? DEFAULT_GRADIENT_END);
+                    } else if (next[0] === "solid") {
+                      setGradientTo(null);
+                    }
+                  }}
+                >
+                  <Toggle value="solid">Solid</Toggle>
+                  <Toggle value="gradient">Gradient</Toggle>
+                </ToggleGroup>
               </div>
+              <ColorSwatches
+                label={gradientTo ? "Gradient start color" : "Group color"}
+                value={color}
+                onChange={(next) => setColor(next === color && !gradientTo ? null : next)}
+              />
+              {gradientTo ? (
+                <>
+                  <ColorSwatches
+                    label="Gradient end color"
+                    value={gradientTo}
+                    onChange={setGradientTo}
+                  />
+                  <div
+                    aria-hidden="true"
+                    className="h-2 rounded-full"
+                    style={threadGroupGradientStyle({
+                      gradient: { from: color ?? "blue", to: gradientTo },
+                    })}
+                  />
+                </>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <Button
