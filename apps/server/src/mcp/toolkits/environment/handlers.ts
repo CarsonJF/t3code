@@ -128,6 +128,12 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
             threadGroupOps.push({ type: "createGroup", group: { id, ...details } });
             continue;
           }
+          if (op.type === "reorderGroups") {
+            const unknown = op.groupIds.find((groupId) => !groups.has(groupId));
+            if (unknown !== undefined) return yield* invalid(`No thread group has id ${unknown}.`);
+            threadGroupOps.push(op);
+            continue;
+          }
           if (op.groupId !== null && !groups.has(op.groupId))
             return yield* invalid(`No thread group has id ${op.groupId}.`);
           if (op.type === "deleteGroup") groups.delete(op.groupId);

@@ -4,6 +4,7 @@ import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import {
   environmentsWithThreadGroup,
   mergeThreadGroups,
+  moveThreadGroup,
   splitThreadsByGroup as splitThreadsByEnvironmentGroup,
   withThreadGroup,
   type ThreadGroupsByEnvironment,
@@ -16,6 +17,7 @@ import {
   type ProjectId,
   type ScopedProjectRef,
   type ThreadGroup,
+  type ThreadGroupGradient,
   type ThreadGroupOp,
   type ThreadGroupsState,
   type ThreadId,
@@ -37,6 +39,7 @@ export type { ThreadGroup };
 export interface ThreadGroupDetails {
   readonly name: string;
   readonly color: ProjectIconColor | null;
+  readonly gradient: ThreadGroupGradient | null;
   readonly icon: ProjectIconOverride | null;
 }
 
@@ -149,6 +152,19 @@ export const threadGroupActions = {
     const { byEnvironment } = readThreadGroupsView();
     for (const environmentId of environmentsWithThreadGroup(byEnvironment, groupId)) {
       void sendThreadGroupOps(environmentId, [{ type: "updateGroup", groupId, ...details }]);
+    }
+  },
+  /** Drops the group on one edge of another; every environment gets the same full order. */
+  move: (groupId: string, targetId: string, edge: "before" | "after") => {
+    const { byEnvironment, groups } = readThreadGroupsView();
+    const groupIds = moveThreadGroup(
+      groups.map((group) => group.id),
+      groupId,
+      targetId,
+      edge,
+    );
+    for (const environmentId of byEnvironment.keys()) {
+      void sendThreadGroupOps(environmentId, [{ type: "reorderGroups", groupIds }]);
     }
   },
   delete: (groupId: string) => {
