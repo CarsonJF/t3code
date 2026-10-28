@@ -1,4 +1,4 @@
-import type { ProjectIconColor } from "@t3tools/contracts";
+import type { ProjectColor } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import { Atom } from "effect/reactivity";
 import { useRef, useSyncExternalStore } from "react";
@@ -6,7 +6,12 @@ import { Platform, View } from "react-native";
 import Svg, { Rect, Text } from "react-native-svg";
 import { useResolveClassNames } from "uniwind";
 
-import { countGlyphs, projectIconColorClassNames, type ProjectIconGlyph } from "../lib/projectIcon";
+import {
+  countGlyphs,
+  customProjectColorValues,
+  projectIconColorClassNames,
+  type ProjectIconGlyph,
+} from "../lib/projectIcon";
 
 const TILE_SIZE = 48;
 
@@ -29,7 +34,7 @@ export function projectGlyphKey(glyph: ProjectIconGlyph): string {
 }
 
 function decodeGlyphKey(key: string): ProjectIconGlyph {
-  const [kind, text, color] = JSON.parse(key) as [string, string, ProjectIconColor];
+  const [kind, text, color] = JSON.parse(key) as [string, string, ProjectColor];
   return kind === "emoji" ? { kind: "emoji", emoji: text } : { kind: "monogram", text, color };
 }
 
@@ -121,10 +126,11 @@ function GlyphCapture(props: { readonly tile: PendingTile }) {
   );
 }
 
-function MonogramTile(props: { readonly text: string; readonly color: ProjectIconColor }) {
+function MonogramTile(props: { readonly text: string; readonly color: ProjectColor }) {
   const classNames = projectIconColorClassNames(props.color);
   const background = useResolveClassNames(classNames.background);
   const foreground = useResolveClassNames(`font-mono ${classNames.text}`);
+  const custom = customProjectColorValues(props.color);
   const fontSize = TILE_SIZE * (countGlyphs(props.text) === 1 ? 0.6 : 0.515625);
   return (
     <>
@@ -132,13 +138,13 @@ function MonogramTile(props: { readonly text: string; readonly color: ProjectIco
         width={TILE_SIZE}
         height={TILE_SIZE}
         rx={TILE_SIZE * 0.25}
-        fill={String(background.backgroundColor)}
+        fill={String(custom?.background.backgroundColor ?? background.backgroundColor)}
       />
       <Text
         x={TILE_SIZE / 2}
         y={TILE_SIZE / 2 + fontSize * 0.36}
         textAnchor="middle"
-        fill={String(foreground.color)}
+        fill={String(custom?.text.color ?? foreground.color)}
         fontFamily={typeof foreground.fontFamily === "string" ? foreground.fontFamily : undefined}
         fontWeight="700"
         fontSize={fontSize}
