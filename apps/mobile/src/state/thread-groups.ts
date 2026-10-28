@@ -13,7 +13,7 @@ import {
 import {
   AuthSettingsWriteScope,
   type EnvironmentId,
-  type ProjectIconColor,
+  type ProjectColor,
   type ProjectIconOverride,
   type ProjectId,
   type ThreadGroup,
@@ -100,7 +100,7 @@ async function sendThreadGroupOps(environmentId: EnvironmentId, threadGroupOps: 
 
 export interface ThreadGroupDetails {
   readonly name: string;
-  readonly color: ProjectIconColor | null;
+  readonly color: ProjectColor | null;
   readonly gradient: ThreadGroupGradient | null;
   readonly icon: ProjectIconOverride | null;
 }
