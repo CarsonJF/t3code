@@ -3,7 +3,7 @@ import { deriveProjectIdentity } from "../../projectIdentity";
 import { ProjectMonogram } from "../ProjectMonogram";
 import {
   ProjectMonogramText,
-  type ProjectIconColor,
+  type ProjectColor,
   type ProjectIconOverride,
 } from "@t3tools/contracts";
 import { createElement, useState } from "react";
@@ -11,12 +11,13 @@ import {
   filterProjectIconNames,
   firstEmoji,
   PROJECT_EMOJIS,
-  PROJECT_ICON_COLORS,
   projectIconColorClassName,
+  projectIconColorStyle,
 } from "../../projectIconOptions";
 import { cn } from "~/lib/utils";
 import { readIconImage } from "../../lib/iconImage";
 import { lucideIconByName } from "../../lib/lucideIconByName";
+import { ColorPicker } from "../ColorPicker";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -90,7 +91,7 @@ function ProjectIconPickerBody({
   const [iconName, setIconName] = useState<string>(
     current?.kind === "lucide" ? current.name : DEFAULT_ICON,
   );
-  const [color, setColor] = useState<ProjectIconColor>(
+  const [color, setColor] = useState<ProjectColor>(
     current && (current.kind === "lucide" || current.kind === "monogram")
       ? current.color
       : automatic.color,
@@ -167,23 +168,7 @@ function ProjectIconPickerBody({
         {mode === "lucide" || mode === "monogram" ? (
           <div>
             <div className="mb-2 text-xs font-medium text-muted-foreground">Color</div>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Icon color">
-              {PROJECT_ICON_COLORS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-label={option.label}
-                  aria-pressed={color === option.value}
-                  className={cn(
-                    "flex size-6 items-center justify-center rounded-full border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                    color === option.value && "border-foreground/64",
-                  )}
-                  onClick={() => setColor(option.value)}
-                >
-                  <span className={cn("size-4 rounded-full", option.swatchClassName)} />
-                </button>
-              ))}
-            </div>
+            <ColorPicker label="Icon color" value={color} onChange={setColor} />
           </div>
         ) : null}
 
@@ -209,6 +194,7 @@ function ProjectIconPickerBody({
                       iconName === name && "border-border bg-accent",
                       selectedColorClassName,
                     )}
+                    style={projectIconColorStyle(color)}
                     onClick={() => setIconName(name)}
                   >
                     <PickerIcon name={name} />
