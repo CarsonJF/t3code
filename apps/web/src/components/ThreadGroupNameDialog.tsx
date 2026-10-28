@@ -50,7 +50,7 @@ function finish(details: ThreadGroupDetails | null) {
 
 export function ThreadGroupNameDialogHost() {
   const request = useRequest((state) => state.request);
-  // oxlint-disable-next-line t3code/react-effect-budget -- settles a pending prompt if the host unmounts
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- settles a pending prompt if the host unmounts
   useEffect(() => () => finish(null), []);
   return request ? <ThreadGroupNameDialog request={request} /> : null;
 }
