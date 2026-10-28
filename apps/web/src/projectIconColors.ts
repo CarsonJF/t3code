@@ -1,4 +1,6 @@
-import type { ProjectIconColor } from "@t3tools/contracts";
+import { isNamedProjectColor } from "@t3tools/client-runtime/thread-groups";
+import type { ProjectColor, ProjectIconColor } from "@t3tools/contracts";
+import type { CSSProperties } from "react";
 
 export const PROJECT_ICON_COLORS: ReadonlyArray<{
   readonly value: ProjectIconColor;
@@ -120,6 +122,11 @@ const PROJECT_ICON_COLOR_CLASSES = Object.fromEntries(
   PROJECT_ICON_COLORS.map(({ value, className }) => [value, className]),
 ) as Record<ProjectIconColor, string>;
 
-export function projectIconColorClassName(color: ProjectIconColor): string {
-  return PROJECT_ICON_COLOR_CLASSES[color];
+/** Empty for a custom color, which `projectIconColorStyle` carries instead. */
+export function projectIconColorClassName(color: ProjectColor): string {
+  return isNamedProjectColor(color) ? PROJECT_ICON_COLOR_CLASSES[color] : "";
+}
+
+export function projectIconColorStyle(color: ProjectColor | null | undefined) {
+  return color && !isNamedProjectColor(color) ? ({ color } satisfies CSSProperties) : undefined;
 }
