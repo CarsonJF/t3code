@@ -8,6 +8,7 @@ import {
   type ThreadGroup,
 } from "../../threadGroupsStore";
 import { cn } from "../../lib/utils";
+import { projectIconColorStyle } from "../../projectIconColors";
 import {
   ThreadGroupIcon,
   threadGroupColorClassName,
@@ -77,7 +78,8 @@ export function SidebarThreadGroupHeader(props: {
   count: number;
   expanded: boolean;
 }) {
-  const colorClassName = threadGroupColorClassName(props.group);
+  // A gradient is its own background, so the label stays in the foreground color to remain readable on it.
+  const colorClassName = props.group.gradient ? null : threadGroupColorClassName(props.group);
   const gradientStyle = threadGroupGradientStyle(props.group);
   const [dropEdge, setDropEdge] = useState<"before" | "after" | null>(null);
   const edgeOf = (event: DragEvent<HTMLLIElement>) => {
@@ -89,8 +91,9 @@ export function SidebarThreadGroupHeader(props: {
       data-thread-selection-safe
       data-testid="sidebar-thread-group-header"
       draggable
+      style={props.group.gradient ? undefined : projectIconColorStyle(props.group.color)}
       className={cn(
-        "relative mx-0.5 h-8 list-none",
+        "relative isolate mx-0.5 h-8 list-none",
         colorClassName,
         dropEdge === "before" &&
           "before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:rounded-full before:bg-ring",
@@ -120,11 +123,11 @@ export function SidebarThreadGroupHeader(props: {
         void openThreadGroupMenu(props.group, { x: event.clientX, y: event.clientY });
       }}
     >
-      {colorClassName ? (
+      {props.group.color ? (
         <span
           aria-hidden
           className={cn(
-            "pointer-events-none absolute inset-0 rounded-md",
+            "pointer-events-none absolute inset-0 -z-10 rounded-md",
             !gradientStyle && "bg-current/10",
           )}
           style={gradientStyle}
