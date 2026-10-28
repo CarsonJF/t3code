@@ -1,14 +1,17 @@
 import type { MenuAction } from "@react-native-menu/menu";
+import { THREAD_GROUP_COLOR_HEX } from "@t3tools/client-runtime/thread-groups";
 import {
   ProjectIconColor,
   ProjectMonogramText,
   type ProjectIconOverride,
   type ThreadGroup,
+  type ThreadGroupGradient,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { Image } from "expo-image";
-import { memo } from "react";
-import { Pressable, View } from "react-native";
+import { memo, useId } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
@@ -17,6 +20,7 @@ import { Menu } from "../../components/ui/Menu";
 import { cn } from "../../lib/cn";
 import {
   countGlyphs,
+  projectAutoMonogram,
   projectIconColorClassNames,
   resolveProjectIconSymbol,
 } from "../../lib/projectIcon";
@@ -30,26 +34,30 @@ import {
 import type { ThreadListV2GroupListItem } from "./thread-group-header-item";
 
 /** Native menus take color values, not class names. */
-export const THREAD_GROUP_SWATCH_HEX: Record<ProjectIconColor, string> = {
-  gray: "#6b7280",
-  red: "#ef4444",
-  orange: "#f97316",
-  amber: "#f59e0b",
-  yellow: "#eab308",
-  lime: "#84cc16",
-  green: "#22c55e",
-  emerald: "#10b981",
-  teal: "#14b8a6",
-  cyan: "#06b6d4",
-  sky: "#0ea5e9",
-  blue: "#3b82f6",
-  indigo: "#6366f1",
-  violet: "#8b5cf6",
-  purple: "#a855f7",
-  fuchsia: "#d946ef",
-  pink: "#ec4899",
-  rose: "#f43f5e",
-};
+export const THREAD_GROUP_SWATCH_HEX = THREAD_GROUP_COLOR_HEX;
+
+function GradientBackground(props: { readonly gradient: ThreadGroupGradient }) {
+  const id = useId();
+  return (
+    <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <LinearGradient id={id} x1="0%" x2="100%" y1="0%" y2="0%">
+          <Stop
+            offset="0"
+            stopColor={THREAD_GROUP_COLOR_HEX[props.gradient.from]}
+            stopOpacity={0.18}
+          />
+          <Stop
+            offset="1"
+            stopColor={THREAD_GROUP_COLOR_HEX[props.gradient.to]}
+            stopOpacity={0.18}
+          />
+        </LinearGradient>
+      </Defs>
+      <Rect width="100%" height="100%" fill={`url(#${id})`} />
+    </Svg>
+  );
+}
 
 const DOT_CLASS_NAMES: Record<ProjectIconColor, string> = {
   gray: "bg-gray-500",
@@ -76,9 +84,11 @@ const isMonogramText = Schema.is(ProjectMonogramText);
 
 const colorTitle = (color: ProjectIconColor) => color.charAt(0).toUpperCase() + color.slice(1);
 
-/** Emoji and monogram as on desktop; desktop-only icons fall back to the group's color dot. */
-export function ThreadGroupIcon(props: { readonly group: Pick<ThreadGroup, "color" | "icon"> }) {
-  const { icon, color } = props.group;
+/** Emoji, image and monogram as on desktop; a desktop-only symbol becomes the group's letters. */
+export function ThreadGroupIcon(props: {
+  readonly group: Pick<ThreadGroup, "name" | "color" | "icon">;
+}) {
+  const { icon, color, name } = props.group;
   if (icon?.kind === "emoji") {
     return <Text className="text-xs leading-none">{icon.emoji}</Text>;
   }
@@ -118,6 +128,24 @@ export function ThreadGroupIcon(props: { readonly group: Pick<ThreadGroup, "colo
       />
     );
   }
+  if (icon?.kind === "lucide") {
+    const monogram = projectAutoMonogram(name);
+    if (monogram?.kind === "monogram") {
+      const classNames = projectIconColorClassNames(color ?? icon.color);
+      return (
+        <View
+          className={cn(
+            "h-4 min-w-4 items-center justify-center rounded px-0.5",
+            classNames.background,
+          )}
+        >
+          <Text className={cn("font-mono text-[9px] font-t3-bold leading-none", classNames.text)}>
+            {monogram.text}
+          </Text>
+        </View>
+      );
+    }
+  }
   const dotColor = (icon?.kind === "lucide" ? icon.color : null) ?? color;
   return dotColor ? (
     <View className={cn("size-2 rounded-full", DOT_CLASS_NAMES[dotColor])} />
@@ -139,6 +167,21 @@ function groupMenuActions(group: ThreadGroup): MenuAction[] {
           image: "circle.fill",
           imageColor: THREAD_GROUP_SWATCH_HEX[color],
           state: group.color === color ? "on" : "off",
+        })),
+      ],
+    },
+    {
+      id: "group-gradient",
+      title: "Gradient",
+      image: "paintpalette",
+      subactions: [
+        { id: "group-gradient:none", title: "None", state: group.gradient ? "off" : "on" },
+        ...ProjectIconColor.literals.map((color): MenuAction => ({
+          id: `group-gradient:${color}`,
+          title: `To ${colorTitle(color)}`,
+          image: "circle.fill",
+          imageColor: THREAD_GROUP_SWATCH_HEX[color],
+          state: group.gradient?.to === color ? "on" : "off",
         })),
       ],
     },
@@ -175,7 +218,16 @@ function setGroupColor(group: ThreadGroup, color: ProjectIconColor | null) {
     group.icon && (group.icon.kind === "lucide" || group.icon.kind === "monogram") && color
       ? { ...group.icon, color }
       : undefined;
-  threadGroupActions.update(group.id, { color, ...(icon ? { icon } : {}) });
+  threadGroupActions.update(group.id, { color, gradient: null, ...(icon ? { icon } : {}) });
+}
+
+function setGroupGradient(group: ThreadGroup, to: ProjectIconColor | null) {
+  if (to === null) {
+    threadGroupActions.update(group.id, { gradient: null });
+    return;
+  }
+  const from = group.color ?? (to === "blue" ? "purple" : "blue");
+  threadGroupActions.update(group.id, { color: from, gradient: { from, to } });
 }
 
 function promptGroupIcon(group: ThreadGroup, kind: "emoji" | "monogram") {
@@ -214,10 +266,15 @@ function handleGroupMenuAction(group: ThreadGroup, event: string) {
     });
   }
   if (event === "group-color:none") setGroupColor(group, null);
+  if (event === "group-gradient:none") setGroupGradient(group, null);
+  const isColor = (value: string): value is ProjectIconColor =>
+    (ProjectIconColor.literals as ReadonlyArray<string>).includes(value);
   const color = event.startsWith("group-color:") ? event.slice("group-color:".length) : null;
-  if (color !== null && (ProjectIconColor.literals as ReadonlyArray<string>).includes(color)) {
-    setGroupColor(group, color as ProjectIconColor);
-  }
+  if (color !== null && isColor(color)) setGroupColor(group, color);
+  const gradientTo = event.startsWith("group-gradient:")
+    ? event.slice("group-gradient:".length)
+    : null;
+  if (gradientTo !== null && isColor(gradientTo)) setGroupGradient(group, gradientTo);
   if (event === "group-icon:none") threadGroupActions.update(group.id, { icon: null });
   if (event === "group-icon:emoji") promptGroupIcon(group, "emoji");
   if (event === "group-icon:monogram") promptGroupIcon(group, "monogram");
@@ -248,13 +305,16 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
       accessibilityHint={expanded ? "Collapses this group" : "Expands this group"}
       accessibilityState={{ expanded }}
       className={cn(
-        "mb-1 mt-3 flex-row items-center gap-2 rounded-lg px-2 py-1.5",
+        "mb-1 mt-3 flex-row items-center gap-2 overflow-hidden rounded-lg px-2 py-1.5",
         sidebarPane ? "mx-1" : "mx-3",
-        tint?.background ?? (sidebarPane ? "bg-drawer-border/40" : "bg-subtle"),
+        group.gradient
+          ? null
+          : (tint?.background ?? (sidebarPane ? "bg-drawer-border/40" : "bg-subtle")),
       )}
       onPress={() => toggle(group.id)}
       style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
     >
+      {group.gradient ? <GradientBackground gradient={group.gradient} /> : null}
       <ThreadGroupIcon group={group} />
       <Text
         numberOfLines={1}
