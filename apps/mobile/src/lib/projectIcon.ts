@@ -13,7 +13,7 @@ export function countGlyphs(text: string): number {
   return Array.from(text.replace(/\p{M}/gu, "")).length;
 }
 
-function projectMonogramColor(projectName: string): ProjectIconColor {
+export function projectMonogramColor(projectName: string): ProjectIconColor {
   const seed = projectName.normalize("NFKC").trim().toLocaleLowerCase("en-US") || "project";
   let index = 0;
   for (const glyph of seed) {
