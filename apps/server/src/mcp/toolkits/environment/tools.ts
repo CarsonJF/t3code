@@ -10,6 +10,7 @@ import {
   ServerSettings,
   ServerSettingsPatch,
   ThreadGroup,
+  ThreadGroupGradient,
   ThreadGroupId,
 } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
@@ -88,10 +89,11 @@ const ThreadGroupsReadTool = Tool.make("t3_thread_groups_read", {
   .annotate(Tool.Destructive, false);
 const groupColor = Schema.optionalKey(Schema.NullOr(ProjectIconColor));
 const groupIcon = Schema.optionalKey(Schema.NullOr(ProjectIconOverride));
+const groupGradient = Schema.optionalKey(Schema.NullOr(ThreadGroupGradient));
 const ThreadGroupsUpdateTool = Tool.make("t3_thread_groups_update", {
   ...shared,
   description:
-    "Edit sidebar thread groups. Live full-access or default caller thread only. Ops apply in order, all or none. `createGroup` returns the new id in `groups`; assign it in a later call. `setProjectGroup` moves the project's future threads only; `groupId: null` ungroups. Deleting a group ungroups its threads.",
+    "Edit sidebar thread groups. Live full-access or default caller thread only. Ops apply in order, all or none. `createGroup` returns the new id in `groups`; assign it in a later call. `setProjectGroup` moves the project's future threads only; `groupId: null` ungroups. `gradient` is {from, to} colors (set `color` to `from` too); `null` clears it. `reorderGroups` lists group ids in the new order. Deleting a group ungroups its threads.",
   parameters: Schema.Struct({
     ops: Schema.Array(
       Schema.Union([
@@ -99,6 +101,7 @@ const ThreadGroupsUpdateTool = Tool.make("t3_thread_groups_update", {
           type: Schema.Literal("createGroup"),
           name: ThreadGroup.fields.name,
           color: groupColor,
+          gradient: groupGradient,
           icon: groupIcon,
         }),
         Schema.Struct({
@@ -106,9 +109,14 @@ const ThreadGroupsUpdateTool = Tool.make("t3_thread_groups_update", {
           groupId: ThreadGroupId,
           name: Schema.optionalKey(ThreadGroup.fields.name),
           color: groupColor,
+          gradient: groupGradient,
           icon: groupIcon,
         }),
         Schema.Struct({ type: Schema.Literal("deleteGroup"), groupId: ThreadGroupId }),
+        Schema.Struct({
+          type: Schema.Literal("reorderGroups"),
+          groupIds: Schema.Array(ThreadGroupId).check(Schema.isMinLength(1)),
+        }),
         Schema.Struct({
           type: Schema.Literal("setProjectGroup"),
           projectIds: Schema.Array(ProjectId).check(Schema.isMinLength(1)),
