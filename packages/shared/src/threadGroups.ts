@@ -33,6 +33,15 @@ function applyThreadGroupOp(state: ThreadGroupsState, op: ThreadGroupOp): Thread
         ),
       };
     }
+    case "reorderGroups": {
+      const rank = new Map(op.groupIds.map((groupId, index) => [groupId, index]));
+      const listed = state.groups.filter((group) => rank.has(group.id));
+      listed.sort((left, right) => rank.get(left.id)! - rank.get(right.id)!);
+      return {
+        ...state,
+        groups: [...listed, ...state.groups.filter((group) => !rank.has(group.id))],
+      };
+    }
     case "deleteGroup":
       if (!hasGroup(state, op.groupId)) return state;
       return {
