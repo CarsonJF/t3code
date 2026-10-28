@@ -65,6 +65,16 @@ export const ProjectIconColor = Schema.Literals([
 ]);
 export type ProjectIconColor = typeof ProjectIconColor.Type;
 
+/** A user-picked color as `#rrggbb`, or `#rrggbbaa` when it is translucent. */
+export const CustomColor = Schema.String.check(
+  Schema.isPattern(/^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$/),
+);
+export type CustomColor = typeof CustomColor.Type;
+
+/** A named palette color or a custom one. */
+export const ProjectColor = Schema.Union([ProjectIconColor, CustomColor]);
+export type ProjectColor = typeof ProjectColor.Type;
+
 const ProjectLucideIconName = TrimmedNonEmptyString.check(
   Schema.isMaxLength(64),
   Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
@@ -81,7 +91,7 @@ export const ProjectMonogramText = TrimmedNonEmptyString.check(
 const ProjectLucideIcon = Schema.Struct({
   kind: Schema.Literal("lucide"),
   name: ProjectLucideIconName,
-  color: ProjectIconColor,
+  color: ProjectColor,
 });
 const ProjectEmojiIcon = Schema.Struct({
   kind: Schema.Literal("emoji"),
@@ -90,7 +100,7 @@ const ProjectEmojiIcon = Schema.Struct({
 const ProjectMonogramIcon = Schema.Struct({
   kind: Schema.Literal("monogram"),
   text: ProjectMonogramText,
-  color: ProjectIconColor,
+  color: ProjectColor,
 });
 // Uploaded icons are downscaled by the client, so the cap keeps them inline in events and settings.
 export const PROJECT_IMAGE_ICON_MAX_LENGTH = 24_000;

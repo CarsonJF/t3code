@@ -9,7 +9,7 @@ import { createElement, lazy, Suspense, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { projectFaviconUrlAtom } from "../state/assets";
 import { deriveProjectIdentity } from "../projectIdentity";
-import { projectIconColorClassName } from "../projectIconColors";
+import { projectIconColorClassName, projectIconColorStyle } from "../projectIconColors";
 import { ProjectMonogram } from "./ProjectMonogram";
 import { cn } from "~/lib/utils";
 
@@ -80,7 +80,11 @@ export function ProjectFavicon(input: {
       input.className,
     );
     return (
-      <span aria-hidden="true" className={iconClassName}>
+      <span
+        aria-hidden="true"
+        className={iconClassName}
+        style={projectIconColorStyle(project.projectIcon.color)}
+      >
         <Suspense fallback={<DynamicProjectIconFallback />}>
           <LucideProjectIcon
             name={project.projectIcon.name}
