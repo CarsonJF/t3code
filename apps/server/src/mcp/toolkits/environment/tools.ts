@@ -4,7 +4,7 @@ import {
   ExecutionEnvironmentDescriptor,
   OrchestratorMcpEnvironmentTarget,
   OrchestratorMcpFailure,
-  ProjectIconColor,
+  ProjectColor,
   ProjectIconOverride,
   ProjectId,
   ServerSettings,
@@ -87,7 +87,7 @@ const ThreadGroupsReadTool = Tool.make("t3_thread_groups_read", {
 })
   .annotate(Tool.Readonly, true)
   .annotate(Tool.Destructive, false);
-const groupColor = Schema.optionalKey(Schema.NullOr(ProjectIconColor));
+const groupColor = Schema.optionalKey(Schema.NullOr(ProjectColor));
 const groupIcon = Schema.optionalKey(Schema.NullOr(ProjectIconOverride));
 const groupGradient = Schema.optionalKey(Schema.NullOr(ThreadGroupGradient));
 const ThreadGroupsUpdateTool = Tool.make("t3_thread_groups_update", {
