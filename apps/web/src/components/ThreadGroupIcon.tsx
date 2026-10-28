@@ -1,5 +1,6 @@
+import { THREAD_GROUP_COLOR_HEX } from "@t3tools/client-runtime/thread-groups";
 import { FolderCodeIcon } from "lucide-react";
-import { createElement, lazy, Suspense } from "react";
+import { createElement, lazy, Suspense, type CSSProperties } from "react";
 
 import { projectIconColorClassName } from "../projectIconColors";
 import type { ThreadGroup } from "@t3tools/contracts";
@@ -18,6 +19,18 @@ const LucideGroupIcon = lazy(() =>
 
 export function threadGroupColorClassName(group: Pick<ThreadGroup, "color">): string | null {
   return group.color ? projectIconColorClassName(group.color) : null;
+}
+
+/** A soft left-to-right wash of the gradient's two colors, as a header background. */
+export function threadGroupGradientStyle(
+  group: Pick<ThreadGroup, "gradient">,
+): CSSProperties | undefined {
+  const { gradient } = group;
+  if (!gradient) return undefined;
+  const stop = (color: keyof typeof THREAD_GROUP_COLOR_HEX) => `${THREAD_GROUP_COLOR_HEX[color]}2e`;
+  return {
+    backgroundImage: `linear-gradient(90deg, ${stop(gradient.from)}, ${stop(gradient.to)})`,
+  };
 }
 
 /** The group's icon, or a color dot when it only has a color. */

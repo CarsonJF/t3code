@@ -7,10 +7,18 @@ import { ProjectIconColor, ProjectIconOverride, ReceivedProjectIcon } from "./pr
 export const ThreadGroupId = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
 export type ThreadGroupId = typeof ThreadGroupId.Type;
 
+export const ThreadGroupGradient = Schema.Struct({
+  from: ProjectIconColor,
+  to: ProjectIconColor,
+});
+export type ThreadGroupGradient = typeof ThreadGroupGradient.Type;
+
 export const ThreadGroup = Schema.Struct({
   id: ThreadGroupId,
   name: TrimmedNonEmptyString.check(Schema.isMaxLength(200)),
+  // With a gradient, `color` is its `from` stop, so clients without gradients still show a color.
   color: Schema.optional(Schema.NullOr(ProjectIconColor)),
+  gradient: Schema.optional(Schema.NullOr(ThreadGroupGradient)),
   // Forward-compatible so a future icon kind drops the icon instead of failing the whole state.
   icon: Schema.optional(Schema.NullOr(ReceivedProjectIcon)),
 });
@@ -51,9 +59,12 @@ export const ThreadGroupOp = Schema.Union([
     groupId: ThreadGroupId,
     name: Schema.optionalKey(ThreadGroup.fields.name),
     color: Schema.optionalKey(Schema.NullOr(ProjectIconColor)),
+    gradient: Schema.optionalKey(Schema.NullOr(ThreadGroupGradient)),
     icon: Schema.optionalKey(Schema.NullOr(ProjectIconOverride)),
   }),
   Schema.Struct({ type: Schema.Literal("deleteGroup"), groupId: ThreadGroupId }),
+  /** Listed groups take this order; unlisted ones keep their relative order after them. */
+  Schema.Struct({ type: Schema.Literal("reorderGroups"), groupIds: Schema.Array(ThreadGroupId) }),
   Schema.Struct({
     type: Schema.Literal("setProjectDefault"),
     projectIds: Schema.Array(ProjectId),
