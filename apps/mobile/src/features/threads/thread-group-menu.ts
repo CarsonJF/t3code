@@ -1,3 +1,4 @@
+import { projectColorHex } from "@t3tools/client-runtime/thread-groups";
 import type { MenuAction } from "@react-native-menu/menu";
 import { resolveThreadGroupId } from "@t3tools/client-runtime/thread-groups";
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
@@ -7,7 +8,6 @@ import {
   threadGroupActions,
   useThreadGroupsView,
 } from "../../state/thread-groups";
-import { THREAD_GROUP_SWATCH_HEX } from "./thread-group-header";
 
 const SET_PREFIX = "thread-group:set:";
 
@@ -35,7 +35,7 @@ export function useThreadGroupMenu(thread: {
           id: `${SET_PREFIX}${group.id}`,
           title: group.name,
           ...(group.color
-            ? { image: "circle.fill", imageColor: THREAD_GROUP_SWATCH_HEX[group.color] }
+            ? { image: "circle.fill", imageColor: projectColorHex(group.color) }
             : {}),
           state: group.id === currentGroupId ? "on" : "off",
         })),
