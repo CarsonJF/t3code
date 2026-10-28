@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   environmentsWithThreadGroup,
   mergeThreadGroups,
+  moveThreadGroup,
   resolveThreadGroupId,
   splitThreadsByGroup,
   withThreadGroup,
@@ -95,5 +96,16 @@ describe("withThreadGroup", () => {
     ]);
     expect(withThreadGroup(state, state.groups[0]!, op)).toEqual([op]);
     expect(withThreadGroup(undefined, null, op)).toEqual([op]);
+  });
+});
+
+describe("moveThreadGroup", () => {
+  it("drops the group on the chosen edge of the target", () => {
+    const ids = ["a", "b", "c", "d"];
+    expect(moveThreadGroup(ids, "a", "c", "before")).toEqual(["b", "a", "c", "d"]);
+    expect(moveThreadGroup(ids, "a", "c", "after")).toEqual(["b", "c", "a", "d"]);
+    expect(moveThreadGroup(ids, "d", "a", "before")).toEqual(["d", "a", "b", "c"]);
+    expect(moveThreadGroup(ids, "b", "b", "after")).toEqual(ids);
+    expect(moveThreadGroup(ids, "x", "a", "after")).toEqual(ids);
   });
 });

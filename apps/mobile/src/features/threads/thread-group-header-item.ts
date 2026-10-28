@@ -18,6 +18,8 @@ export function threadGroupListItemsAreEqual(
     previous.expanded === item.expanded &&
     previous.group.name === item.group.name &&
     previous.group.color === item.group.color &&
+    previous.group.gradient?.from === item.group.gradient?.from &&
+    previous.group.gradient?.to === item.group.gradient?.to &&
     JSON.stringify(previous.group.icon ?? null) === JSON.stringify(item.group.icon ?? null)
   );
 }
