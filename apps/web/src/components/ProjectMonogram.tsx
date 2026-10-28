@@ -1,5 +1,5 @@
-import type { ProjectIconColor } from "@t3tools/contracts";
-import { projectIconColorClassName } from "../projectIconColors";
+import type { ProjectColor } from "@t3tools/contracts";
+import { projectIconColorClassName, projectIconColorStyle } from "../projectIconColors";
 import { cn } from "~/lib/utils";
 
 const monogramSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
@@ -10,7 +10,7 @@ export function ProjectMonogram({
   className,
 }: {
   readonly text: string;
-  readonly color: ProjectIconColor;
+  readonly color: ProjectColor;
   readonly className?: string | undefined;
 }) {
   // Wrap the tile to avoid menu/button SVG margin trimming.
@@ -26,6 +26,7 @@ export function ProjectMonogram({
           projectIconColorClassName(color),
         )}
         style={{
+          ...projectIconColorStyle(color),
           backgroundColor: "color-mix(in srgb, currentColor 14%, transparent)",
         }}
       >
