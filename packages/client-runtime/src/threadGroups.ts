@@ -1,5 +1,6 @@
 import type {
   EnvironmentId,
+  ProjectIconColor,
   ProjectId,
   ThreadGroup,
   ThreadGroupOp,
@@ -88,3 +89,40 @@ export function withThreadGroup(
     ? [op]
     : [{ type: "createGroup", group }, op];
 }
+
+/** Ids after dragging `groupId` onto the `edge` of `targetId`; unchanged when either is unknown. */
+export function moveThreadGroup(
+  groupIds: ReadonlyArray<string>,
+  groupId: string,
+  targetId: string,
+  edge: "before" | "after",
+): string[] {
+  if (groupId === targetId || !groupIds.includes(groupId) || !groupIds.includes(targetId)) {
+    return [...groupIds];
+  }
+  const rest = groupIds.filter((id) => id !== groupId);
+  rest.splice(rest.indexOf(targetId) + (edge === "after" ? 1 : 0), 0, groupId);
+  return rest;
+}
+
+/** Tailwind's 500 shades, for gradients and native menus that cannot take class names. */
+export const THREAD_GROUP_COLOR_HEX: Record<ProjectIconColor, string> = {
+  gray: "#6b7280",
+  red: "#ef4444",
+  orange: "#f97316",
+  amber: "#f59e0b",
+  yellow: "#eab308",
+  lime: "#84cc16",
+  green: "#22c55e",
+  emerald: "#10b981",
+  teal: "#14b8a6",
+  cyan: "#06b6d4",
+  sky: "#0ea5e9",
+  blue: "#3b82f6",
+  indigo: "#6366f1",
+  violet: "#8b5cf6",
+  purple: "#a855f7",
+  fuchsia: "#d946ef",
+  pink: "#ec4899",
+  rose: "#f43f5e",
+};
