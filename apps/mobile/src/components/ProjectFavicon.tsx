@@ -16,6 +16,7 @@ import { projectFaviconUrlAtom } from "../state/assets";
 import {
   countGlyphs,
   projectAutoMonogram,
+  customProjectColorValues,
   projectIconColorClassNames,
   resolveProjectIconGlyph,
   resolveProjectIconSymbol,
@@ -81,6 +82,7 @@ export const ProjectFavicon = memo(function ProjectFavicon(props: {
         name={symbol.name}
         size={size}
         tintColorClassName={projectIconColorClassNames(symbol.color).tint}
+        tintColor={customProjectColorValues(symbol.color)?.tint}
         type="monochrome"
       />
     );
@@ -123,10 +125,12 @@ function ProjectIconGlyphView(props: { readonly glyph: ProjectIconGlyph; readonl
   }
 
   const colors = projectIconColorClassNames(glyph.color);
+  const custom = customProjectColorValues(glyph.color);
   return (
     <View
       className={colors.background}
       style={{
+        ...custom?.background,
         width: size,
         height: size,
         borderRadius: size * 0.25,
@@ -144,6 +148,7 @@ function ProjectIconGlyphView(props: { readonly glyph: ProjectIconGlyph; readonl
           lineHeight: size,
           textAlign: "center",
           includeFontPadding: false,
+          ...custom?.text,
         }}
       >
         {glyph.text}
