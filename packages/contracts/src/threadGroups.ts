@@ -2,14 +2,14 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { IsoDateTime, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
-import { ProjectIconColor, ProjectIconOverride, ReceivedProjectIcon } from "./project.ts";
+import { ProjectColor, ProjectIconOverride, ReceivedProjectIcon } from "./project.ts";
 
 export const ThreadGroupId = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
 export type ThreadGroupId = typeof ThreadGroupId.Type;
 
 export const ThreadGroupGradient = Schema.Struct({
-  from: ProjectIconColor,
-  to: ProjectIconColor,
+  from: ProjectColor,
+  to: ProjectColor,
 });
 export type ThreadGroupGradient = typeof ThreadGroupGradient.Type;
 
@@ -17,7 +17,7 @@ export const ThreadGroup = Schema.Struct({
   id: ThreadGroupId,
   name: TrimmedNonEmptyString.check(Schema.isMaxLength(200)),
   // With a gradient, `color` is its `from` stop, so clients without gradients still show a color.
-  color: Schema.optional(Schema.NullOr(ProjectIconColor)),
+  color: Schema.optional(Schema.NullOr(ProjectColor)),
   gradient: Schema.optional(Schema.NullOr(ThreadGroupGradient)),
   // Forward-compatible so a future icon kind drops the icon instead of failing the whole state.
   icon: Schema.optional(Schema.NullOr(ReceivedProjectIcon)),
@@ -58,7 +58,7 @@ export const ThreadGroupOp = Schema.Union([
     type: Schema.Literal("updateGroup"),
     groupId: ThreadGroupId,
     name: Schema.optionalKey(ThreadGroup.fields.name),
-    color: Schema.optionalKey(Schema.NullOr(ProjectIconColor)),
+    color: Schema.optionalKey(Schema.NullOr(ProjectColor)),
     gradient: Schema.optionalKey(Schema.NullOr(ThreadGroupGradient)),
     icon: Schema.optionalKey(Schema.NullOr(ProjectIconOverride)),
   }),
