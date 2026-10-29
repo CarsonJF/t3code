@@ -128,23 +128,29 @@ export const THREAD_GROUP_COLOR_HEX: Record<ProjectIconColor, string> = {
   rose: "#f43f5e",
 };
 
-const NAMED_GRADIENT_ALPHA = 0.8;
+const GRADIENT_WASH_ALPHA = 0.18;
 
 export const isNamedProjectColor = (color: ProjectColor): color is ProjectIconColor =>
   color in THREAD_GROUP_COLOR_HEX;
 
-/** The color as `#rrggbb` plus its opacity, for gradients and anything else that cannot take class names. */
+/** The color as `#rrggbb` plus its opacity, for anything that cannot take class names. */
 export function projectColorStop(color: ProjectColor): {
   readonly hex: string;
   readonly alpha: number;
 } {
   if (isNamedProjectColor(color)) {
-    return { hex: THREAD_GROUP_COLOR_HEX[color], alpha: NAMED_GRADIENT_ALPHA };
+    return { hex: THREAD_GROUP_COLOR_HEX[color], alpha: 1 };
   }
   return {
     hex: color.slice(0, 7),
     alpha: color.length === 9 ? parseInt(color.slice(7), 16) / 255 : 1,
   };
+}
+
+/** One end of a group header's gradient: the color's own opacity, softened into a wash. */
+export function gradientWashStop(color: ProjectColor) {
+  const { hex, alpha } = projectColorStop(color);
+  return { hex, alpha: alpha * GRADIENT_WASH_ALPHA };
 }
 
 /** The color as one CSS-ready hex, where a named color is its palette shade. */
