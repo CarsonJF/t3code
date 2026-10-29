@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+﻿import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import "~/index.css";
 import { render } from "../../test/render";
@@ -22,7 +22,7 @@ describe("ThreadGroupNameDialog", () => {
     const result = requestThreadGroupDetails({
       title: "New group",
       submitLabel: "Create",
-      initial: { name: "Docs", color: null, gradient: null, icon: null },
+      initial: { name: "Docs", color: null, gradient: null, textColor: null, icon: null },
     });
 
     await userEvent.click(page.getByRole("button", { name: "Add icon" }));
@@ -41,7 +41,7 @@ describe("ThreadGroupNameDialog gradient", () => {
     const result = requestThreadGroupDetails({
       title: "New group",
       submitLabel: "Create",
-      initial: { name: "Docs", color: null, gradient: null, icon: null },
+      initial: { name: "Docs", color: null, gradient: null, textColor: null, icon: null },
     });
 
     await userEvent.click(page.getByText("Gradient", { exact: true }));
