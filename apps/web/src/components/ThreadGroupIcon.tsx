@@ -1,4 +1,4 @@
-import { projectColorStop } from "@t3tools/client-runtime/thread-groups";
+import { gradientWashStop } from "@t3tools/client-runtime/thread-groups";
 import { FolderCodeIcon } from "lucide-react";
 import { createElement, lazy, Suspense, type CSSProperties } from "react";
 
@@ -28,7 +28,7 @@ export function threadGroupGradientStyle(
   const { gradient } = group;
   if (!gradient) return undefined;
   const stop = (color: ProjectColor) => {
-    const { hex, alpha } = projectColorStop(color);
+    const { hex, alpha } = gradientWashStop(color);
     return `color-mix(in oklch, ${hex} ${Math.round(alpha * 100)}%, transparent)`;
   };
   return {
