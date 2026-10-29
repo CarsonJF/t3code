@@ -20,6 +20,7 @@ export function threadGroupListItemsAreEqual(
     previous.group.color === item.group.color &&
     previous.group.gradient?.from === item.group.gradient?.from &&
     previous.group.gradient?.to === item.group.gradient?.to &&
+    previous.group.textColor === item.group.textColor &&
     JSON.stringify(previous.group.icon ?? null) === JSON.stringify(item.group.icon ?? null)
   );
 }
