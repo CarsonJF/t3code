@@ -1,6 +1,8 @@
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { useState, type DragEvent, type MouseEvent } from "react";
 
+import { projectColorHex } from "@t3tools/client-runtime/thread-groups";
+
 import { readLocalApi } from "../../localApi";
 import {
   readThreadGroupsView,
@@ -50,6 +52,7 @@ async function openThreadGroupMenu(group: ThreadGroup, position: { x: number; y:
         name: group.name,
         color: group.color ?? null,
         gradient: group.gradient ?? null,
+        textColor: group.textColor ?? null,
         icon: group.icon ?? null,
       },
     });
@@ -78,9 +81,11 @@ export function SidebarThreadGroupHeader(props: {
   count: number;
   expanded: boolean;
 }) {
-  // A gradient is its own background, so the label stays in the foreground color to remain readable on it.
-  const colorClassName = props.group.gradient ? null : threadGroupColorClassName(props.group);
+  const colorClassName = threadGroupColorClassName(props.group);
   const gradientStyle = threadGroupGradientStyle(props.group);
+  const textStyle = props.group.textColor
+    ? { color: projectColorHex(props.group.textColor) }
+    : undefined;
   const [dropEdge, setDropEdge] = useState<"before" | "after" | null>(null);
   const edgeOf = (event: DragEvent<HTMLLIElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -91,7 +96,7 @@ export function SidebarThreadGroupHeader(props: {
       data-thread-selection-safe
       data-testid="sidebar-thread-group-header"
       draggable
-      style={props.group.gradient ? undefined : projectIconColorStyle(props.group.color)}
+      style={projectIconColorStyle(props.group.color)}
       className={cn(
         "relative isolate mx-0.5 h-8 list-none",
         colorClassName,
@@ -137,9 +142,13 @@ export function SidebarThreadGroupHeader(props: {
         onClick={() => threadGroupActions.toggleCollapsed(props.group.id)}
         expanded={props.expanded}
         tone="muted"
-        accessory={<span className="font-normal tabular-nums">{props.count}</span>}
+        accessory={
+          <span className="font-normal tabular-nums" style={textStyle}>
+            {props.count}
+          </span>
+        }
       >
-        <span className={cn("flex items-center gap-1.5", colorClassName)}>
+        <span className={cn("flex items-center gap-1.5", colorClassName)} style={textStyle}>
           <ThreadGroupIcon group={props.group} />
           {props.group.name}
         </span>
