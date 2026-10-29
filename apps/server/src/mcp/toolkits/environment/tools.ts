@@ -102,6 +102,7 @@ const ThreadGroupsUpdateTool = Tool.make("t3_thread_groups_update", {
           name: ThreadGroup.fields.name,
           color: groupColor,
           gradient: groupGradient,
+          textColor: groupColor,
           icon: groupIcon,
         }),
         Schema.Struct({
@@ -110,6 +111,7 @@ const ThreadGroupsUpdateTool = Tool.make("t3_thread_groups_update", {
           name: Schema.optionalKey(ThreadGroup.fields.name),
           color: groupColor,
           gradient: groupGradient,
+          textColor: groupColor,
           icon: groupIcon,
         }),
         Schema.Struct({ type: Schema.Literal("deleteGroup"), groupId: ThreadGroupId }),
