@@ -19,6 +19,8 @@ export const ThreadGroup = Schema.Struct({
   // With a gradient, `color` is its `from` stop, so clients without gradients still show a color.
   color: Schema.optional(Schema.NullOr(ProjectColor)),
   gradient: Schema.optional(Schema.NullOr(ThreadGroupGradient)),
+  // Header label and count; null or absent is Automatic, the theme's own text color.
+  textColor: Schema.optional(Schema.NullOr(ProjectColor)),
   // Forward-compatible so a future icon kind drops the icon instead of failing the whole state.
   icon: Schema.optional(Schema.NullOr(ReceivedProjectIcon)),
 });
@@ -60,6 +62,7 @@ export const ThreadGroupOp = Schema.Union([
     name: Schema.optionalKey(ThreadGroup.fields.name),
     color: Schema.optionalKey(Schema.NullOr(ProjectColor)),
     gradient: Schema.optionalKey(Schema.NullOr(ThreadGroupGradient)),
+    textColor: Schema.optionalKey(Schema.NullOr(ProjectColor)),
     icon: Schema.optionalKey(Schema.NullOr(ProjectIconOverride)),
   }),
   Schema.Struct({ type: Schema.Literal("deleteGroup"), groupId: ThreadGroupId }),
