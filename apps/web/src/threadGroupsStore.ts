@@ -40,6 +40,7 @@ export interface ThreadGroupDetails {
   readonly name: string;
   readonly color: ProjectColor | null;
   readonly gradient: ThreadGroupGradient | null;
+  readonly textColor: ProjectColor | null;
   readonly icon: ProjectIconOverride | null;
 }
 

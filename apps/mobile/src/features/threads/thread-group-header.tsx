@@ -1,7 +1,8 @@
 import type { MenuAction } from "@react-native-menu/menu";
 import {
   isNamedProjectColor,
-  projectColorStop,
+  gradientWashStop,
+  projectColorHex,
   THREAD_GROUP_COLOR_HEX,
 } from "@t3tools/client-runtime/thread-groups";
 import {
@@ -43,8 +44,8 @@ const THREAD_GROUP_SWATCH_HEX = THREAD_GROUP_COLOR_HEX;
 
 function GradientBackground(props: { readonly gradient: ThreadGroupGradient }) {
   const id = useId();
-  const from = projectColorStop(props.gradient.from);
-  const to = projectColorStop(props.gradient.to);
+  const from = gradientWashStop(props.gradient.from);
+  const to = gradientWashStop(props.gradient.to);
   return (
     <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
       <Defs>
@@ -312,6 +313,7 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
   const sidebarPane = props.pane === "sidebar";
   const tint = group.color ? projectIconColorClassNames(group.color) : null;
   const customTint = customProjectColorValues(group.color);
+  const textStyle = group.textColor ? { color: projectColorHex(group.textColor) } : undefined;
   const header = (
     <Pressable
       accessibilityRole="button"
@@ -335,16 +337,25 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
       <ThreadGroupIcon group={group} />
       <Text
         numberOfLines={1}
-        style={customTint?.text}
+        style={textStyle ?? customTint?.text}
         className={cn(
           "min-w-0 shrink text-xs font-t3-medium",
-          tint?.text ??
-            (sidebarPane ? "text-drawer-foreground-muted" : "text-foreground-secondary"),
+          textStyle
+            ? null
+            : (tint?.text ??
+                (sidebarPane ? "text-drawer-foreground-muted" : "text-foreground-secondary")),
         )}
       >
         {group.name}
       </Text>
-      {expanded ? null : <Text className="text-xs text-foreground-tertiary">{String(count)}</Text>}
+      {expanded ? null : (
+        <Text
+          style={textStyle}
+          className={cn("text-xs", textStyle ? null : "text-foreground-tertiary")}
+        >
+          {String(count)}
+        </Text>
+      )}
       <View className="flex-1" />
       <SymbolView
         name="chevron.down"
