@@ -46,7 +46,7 @@ export async function createThreadGroupFromPrompt(): Promise<ThreadGroup | null>
   const details = await requestThreadGroupDetails({
     title: "New group",
     submitLabel: "Create",
-    initial: { name: "", color: null, gradient: null, icon: null },
+    initial: { name: "", color: null, gradient: null, textColor: null, icon: null },
   });
   return details === null ? null : newThreadGroup(details);
 }
@@ -68,6 +68,7 @@ function ThreadGroupNameDialog({ request }: { request: Request }) {
   const [name, setName] = useState(request.initial.name);
   const [color, setColor] = useState(request.initial.color);
   const [gradientTo, setGradientTo] = useState(request.initial.gradient?.to ?? null);
+  const [textColor, setTextColor] = useState(request.initial.textColor);
   const [icon, setIcon] = useState(request.initial.icon);
   const [pickingIcon, setPickingIcon] = useState(false);
   const trimmed = name.trim();
@@ -88,6 +89,7 @@ function ThreadGroupNameDialog({ request }: { request: Request }) {
                 name: trimmed,
                 color,
                 gradient: color && gradientTo ? { from: color, to: gradientTo } : null,
+                textColor,
                 icon,
               });
             }
@@ -146,6 +148,23 @@ function ThreadGroupNameDialog({ request }: { request: Request }) {
                   />
                 </>
               ) : null}
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-muted-foreground">Text color</div>
+                <Toggle
+                  variant="outline"
+                  size="xs"
+                  aria-label="Automatic text color"
+                  pressed={textColor === null}
+                  onPressedChange={(pressed) => setTextColor(pressed ? null : "gray")}
+                >
+                  Automatic
+                </Toggle>
+              </div>
+              {textColor === null ? null : (
+                <ColorPicker label="Text color" value={textColor} onChange={setTextColor} />
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Button
