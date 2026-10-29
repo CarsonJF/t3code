@@ -2,6 +2,7 @@ import { EnvironmentId, ProjectId, ThreadId, type ThreadGroupsState } from "@t3t
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  gradientWashStop,
   projectColorStop,
   environmentsWithThreadGroup,
   mergeThreadGroups,
@@ -115,6 +116,11 @@ describe("projectColorStop", () => {
   it("splits a custom color's alpha from its hex and shades a named one", () => {
     expect(projectColorStop("#22c55e")).toEqual({ hex: "#22c55e", alpha: 1 });
     expect(projectColorStop("#22c55e80").alpha).toBeCloseTo(0.5, 2);
-    expect(projectColorStop("green")).toEqual({ hex: "#22c55e", alpha: 0.8 });
+    expect(projectColorStop("green")).toEqual({ hex: "#22c55e", alpha: 1 });
+  });
+
+  it("softens gradient stops into a wash that keeps a custom alpha", () => {
+    expect(gradientWashStop("green").alpha).toBeCloseTo(0.18, 2);
+    expect(gradientWashStop("#22c55e80").alpha).toBeCloseTo(0.09, 2);
   });
 });
