@@ -1,7 +1,16 @@
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
-import { useState, type DragEvent, type MouseEvent } from "react";
-
 import { projectColorHex } from "@t3tools/client-runtime/thread-groups";
+import {
+  CircleAlertIcon,
+  CircleCheckIcon,
+  CircleDashedIcon,
+  MessageCircleQuestionIcon,
+  ShieldQuestionIcon,
+  UserRoundIcon,
+} from "lucide-react";
+import { useState, type DragEvent, type MouseEvent } from "react";
 
 import { readLocalApi } from "../../localApi";
 import {
@@ -11,6 +20,12 @@ import {
 } from "../../threadGroupsStore";
 import { cn } from "../../lib/utils";
 import { projectIconColorStyle } from "../../projectIconColors";
+import { useUiStateStore } from "../../uiStateStore";
+import {
+  resolveCollapsedGroupStatuses,
+  resolveThreadLastVisitedAt,
+  type CollapsedGroupStatus,
+} from "../Sidebar.logic";
 import {
   ThreadGroupIcon,
   threadGroupColorClassName,
@@ -18,8 +33,30 @@ import {
 } from "../ThreadGroupIcon";
 import { requestThreadGroupDetails } from "../ThreadGroupNameDialog";
 import { CollapsibleSectionHeader } from "../ui/collapsible-section-header";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 const DRAG_TYPE = "application/x-t3-thread-group";
+
+// Same icons and colors as the thread rows' top status.
+const GROUP_STATUS: Record<
+  CollapsedGroupStatus,
+  { Icon: typeof CircleDashedIcon; label: string; className: string }
+> = {
+  approval: {
+    Icon: ShieldQuestionIcon,
+    label: "need approval",
+    className: "text-warning-foreground",
+  },
+  input: {
+    Icon: MessageCircleQuestionIcon,
+    label: "awaiting input",
+    className: "text-indigo-600 dark:text-indigo-300",
+  },
+  request: { Icon: UserRoundIcon, label: "guest requests", className: "text-guest-foreground" },
+  failed: { Icon: CircleAlertIcon, label: "failed", className: "text-error-foreground" },
+  working: { Icon: CircleDashedIcon, label: "working", className: "text-info-foreground" },
+  done: { Icon: CircleCheckIcon, label: "done", className: "text-success-foreground" },
+};
 
 async function openThreadGroupMenu(group: ThreadGroup, position: { x: number; y: number }) {
   const api = readLocalApi();
@@ -80,12 +117,24 @@ export function SidebarThreadGroupHeader(props: {
   group: ThreadGroup;
   count: number;
   expanded: boolean;
+  /** The group's threads while it is collapsed, for the status icons; empty when open. */
+  statusThreads: ReadonlyArray<EnvironmentThreadShell>;
 }) {
   const colorClassName = threadGroupColorClassName(props.group);
   const gradientStyle = threadGroupGradientStyle(props.group);
   const textStyle = props.group.textColor
     ? { color: projectColorHex(props.group.textColor) }
     : undefined;
+  const localLastVisitedAtById = useUiStateStore((state) => state.threadLastVisitedAtById);
+  const statuses = resolveCollapsedGroupStatuses(
+    props.statusThreads.map((thread) => ({
+      ...thread,
+      lastVisitedAt: resolveThreadLastVisitedAt(
+        thread.lastVisitedAt,
+        localLastVisitedAtById[scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))],
+      ),
+    })),
+  );
   const [dropEdge, setDropEdge] = useState<"before" | "after" | null>(null);
   const edgeOf = (event: DragEvent<HTMLLIElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -143,8 +192,29 @@ export function SidebarThreadGroupHeader(props: {
         expanded={props.expanded}
         tone="muted"
         accessory={
-          <span className="font-normal tabular-nums" style={textStyle}>
-            {props.count}
+          <span className="inline-flex items-center gap-1.5">
+            {statuses.map(({ status, count }) => {
+              const { Icon, label, className } = GROUP_STATUS[status];
+              return (
+                <Tooltip key={status}>
+                  <TooltipTrigger
+                    render={
+                      <span
+                        className={cn("inline-flex items-center gap-0.5 tabular-nums", className)}
+                      >
+                        <Icon aria-hidden className="size-3" />
+                        <span className="sr-only">{`${count} ${label}`}</span>
+                        {count > 1 ? <span aria-hidden>{count}</span> : null}
+                      </span>
+                    }
+                  />
+                  <TooltipPopup side="top">{`${count} ${label}`}</TooltipPopup>
+                </Tooltip>
+              );
+            })}
+            <span className="font-normal tabular-nums" style={textStyle}>
+              {props.count}
+            </span>
           </span>
         }
       >
