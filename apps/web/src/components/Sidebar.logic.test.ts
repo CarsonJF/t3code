@@ -34,6 +34,7 @@ import {
   resolveSidebarDropVerb,
   groupSidebarThreadsByProject,
   resolveSidebarFolderDot,
+  resolveCollapsedGroupStatuses,
   sidebarFolderExpansionKeys,
 } from "./Sidebar.logic";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
@@ -1667,5 +1668,45 @@ describe("shouldCreateNewThreadInCurrentProject", () => {
     expect(shouldCreateNewThreadInCurrentProject(false, 1, 3)).toBe(true);
     expect(shouldCreateNewThreadInCurrentProject(false, 0, 0)).toBe(true);
     expect(shouldCreateNewThreadInCurrentProject(true, 2, 2)).toBe(true);
+  });
+});
+
+describe("resolveCollapsedGroupStatuses", () => {
+  it("counts each status, most urgent first, and skips idle and waiting threads", () => {
+    const idle = {
+      hasActionableProposedPlan: false,
+      hasPendingApprovals: false,
+      hasPendingUserInput: false,
+      interactionMode: "default" as const,
+      latestRun: makeLatestRun(),
+      lastVisitedAt: "2026-03-09T10:06:00.000Z",
+      runtime: null,
+    };
+    const runtime = {
+      status: "running" as const,
+      activeRunId: null,
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      providerName: "Codex",
+      lastError: null,
+      updatedAt: "2026-03-09T10:00:00.000Z",
+    };
+    const working = { ...idle, runtime };
+    const unread = { ...idle, lastVisitedAt: "2026-03-09T10:04:00.000Z" };
+    const input = { ...idle, hasPendingUserInput: true };
+    const limited = {
+      ...idle,
+      runtime: { ...runtime, status: "failed" as const, lastErrorClass: "usage_limit" as const },
+    };
+    const waiting = { ...unread, runtime: { ...runtime, status: "idle" as const } };
+
+    expect(resolveCollapsedGroupStatuses([idle, waiting])).toEqual([]);
+    expect(resolveCollapsedGroupStatuses([working, unread, working, input, limited, idle])).toEqual(
+      [
+        { status: "input", count: 1 },
+        { status: "failed", count: 1 },
+        { status: "working", count: 2 },
+        { status: "done", count: 1 },
+      ],
+    );
   });
 });
