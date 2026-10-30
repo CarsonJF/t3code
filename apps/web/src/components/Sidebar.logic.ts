@@ -898,6 +898,42 @@ export function resolveSidebarFolderDot(
   return null;
 }
 
+export type CollapsedGroupStatus = "approval" | "input" | "request" | "failed" | "working" | "done";
+
+const COLLAPSED_GROUP_STATUS_ORDER: ReadonlyArray<CollapsedGroupStatus> = [
+  "approval",
+  "input",
+  "request",
+  "failed",
+  "working",
+  "done",
+];
+
+/** Per-status thread counts for a collapsed group header, most urgent first. Waiting stays quiet, like rows. */
+export function resolveCollapsedGroupStatuses(
+  threads: ReadonlyArray<ThreadStatusInput & SidebarThreadStatusInput>,
+): Array<{ status: CollapsedGroupStatus; count: number }> {
+  const counts = new Map<CollapsedGroupStatus, number>();
+  for (const thread of threads) {
+    const raw = resolveSidebarThreadStatus(thread);
+    const status: CollapsedGroupStatus | null =
+      raw === "limited"
+        ? "failed"
+        : raw === "ready"
+          ? hasUnseenCompletion(thread)
+            ? "done"
+            : null
+          : raw === "waiting"
+            ? null
+            : raw;
+    if (status !== null) counts.set(status, (counts.get(status) ?? 0) + 1);
+  }
+  return COLLAPSED_GROUP_STATUS_ORDER.flatMap((status) => {
+    const count = counts.get(status);
+    return count === undefined ? [] : [{ status, count }];
+  });
+}
+
 /**
  * Keys the old per-project sidebar saved folder open state under, most
  * specific first, for `resolveProjectExpanded`. Boring folders read and write
