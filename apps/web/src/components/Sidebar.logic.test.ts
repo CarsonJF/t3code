@@ -34,6 +34,7 @@ import {
   resolveSidebarDropVerb,
   groupSidebarThreadsByProject,
   resolveSidebarFolderDot,
+  resolveCollapsedGroupStatuses,
   sidebarFolderExpansionKeys,
 } from "./Sidebar.logic";
 import { resolveProjectExpanded } from "../uiStateStore";
@@ -1445,5 +1446,45 @@ describe("resolveSidebarFolderDot", () => {
     expect(resolveSidebarFolderDot([idle, working])).toBe("working");
     expect(resolveSidebarFolderDot([working, unread])).toBe("unread");
     expect(resolveSidebarFolderDot([unread, limited])).toBe("attention");
+  });
+});
+
+describe("resolveCollapsedGroupStatuses", () => {
+  it("counts each status, most urgent first, and skips idle and waiting threads", () => {
+    const idle = {
+      hasActionableProposedPlan: false,
+      hasPendingApprovals: false,
+      hasPendingUserInput: false,
+      interactionMode: "default" as const,
+      latestRun: makeLatestRun(),
+      lastVisitedAt: "2026-03-09T10:06:00.000Z",
+      runtime: null,
+    };
+    const runtime = {
+      status: "running" as const,
+      activeRunId: null,
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      providerName: "Codex",
+      lastError: null,
+      updatedAt: "2026-03-09T10:00:00.000Z",
+    };
+    const working = { ...idle, runtime };
+    const unread = { ...idle, lastVisitedAt: "2026-03-09T10:04:00.000Z" };
+    const input = { ...idle, hasPendingUserInput: true };
+    const limited = {
+      ...idle,
+      runtime: { ...runtime, status: "failed" as const, lastErrorClass: "usage_limit" as const },
+    };
+    const waiting = { ...unread, runtime: { ...runtime, status: "idle" as const } };
+
+    expect(resolveCollapsedGroupStatuses([idle, waiting])).toEqual([]);
+    expect(resolveCollapsedGroupStatuses([working, unread, working, input, limited, idle])).toEqual(
+      [
+        { status: "input", count: 1 },
+        { status: "failed", count: 1 },
+        { status: "working", count: 2 },
+        { status: "done", count: 1 },
+      ],
+    );
   });
 });
