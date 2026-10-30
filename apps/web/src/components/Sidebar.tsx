@@ -505,6 +505,7 @@ function useSidebarThreads(input: {
       group,
       count: groupThreads.length,
       expanded,
+      statusThreads: expanded ? [] : groupThreads,
       threads: expanded ? groupThreads : routeThreadOnly(groupThreads, routeRowThreadKey),
     };
   });
@@ -3526,6 +3527,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                               group={section.group}
                               count={section.count}
                               expanded={section.expanded}
+                              statusThreads={section.statusThreads}
                             />,
                           );
                           for (const thread of section.threads) {
