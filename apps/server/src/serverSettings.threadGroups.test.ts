@@ -17,6 +17,7 @@ import * as Stream from "effect/Stream";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
 import * as ServerConfig from "./config.ts";
 import * as SqlitePersistence from "./persistence/Sqlite.ts";
+import * as ManagedPolicy from "./policy/ManagedPolicy.ts";
 import * as ServerSettingsModule from "./serverSettings.ts";
 
 const decodeServerSettingsJson = Schema.decodeUnknownEffect(Schema.fromJsonString(ServerSettings));
@@ -24,6 +25,7 @@ const decodeServerSettingsJson = Schema.decodeUnknownEffect(Schema.fromJsonStrin
 const layerServerSettings = () =>
   ServerSettingsModule.layer.pipe(
     Layer.provide(ServerSecretStore.layer),
+    Layer.provide(ManagedPolicy.layerTest()),
     Layer.provideMerge(Layer.fresh(SqlitePersistence.layerMemory)),
     Layer.provideMerge(
       Layer.fresh(ServerConfig.layerTest(process.cwd(), { prefix: "t3code-thread-groups-test-" })),
