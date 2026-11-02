@@ -16,6 +16,11 @@ vi.mock("../../state/threads", () => ({
   olderSettledThreads: { shelfAtom: vi.fn() },
   threadFamilies: { mountRows: () => () => {} },
 }));
+vi.mock("../../state/thread-groups", () => {
+  const view = { byEnvironment: {}, groups: [] };
+  const collapsed = { collapsed: [] };
+  return { useThreadGroupsView: () => view, useCollapsedThreadGroups: () => collapsed };
+});
 vi.mock("../../state/atom-registry", () => ({ appAtomRegistry: undefined }));
 
 it("reuses a large thread list across tab renders and updates when its inputs change", async () => {
