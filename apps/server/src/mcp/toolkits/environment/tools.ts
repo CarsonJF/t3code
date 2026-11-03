@@ -13,7 +13,7 @@ import {
   ThreadGroupGradient,
   ThreadGroupId,
 } from "@t3tools/contracts";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
@@ -128,7 +128,7 @@ const ThreadGroupsUpdateTool = Tool.make("t3_thread_groups_update", {
     ).check(Schema.isMinLength(1), Schema.isMaxLength(50)),
   }),
   success: ThreadGroupsResult,
-  dependencies: [...shared.dependencies, ProjectService.ProjectService, Crypto.Crypto],
+  dependencies: [...shared.dependencies, ProjectService.ProjectService, SecureRandom.SecureRandom],
 }).annotate(Tool.Destructive, true);
 export const EnvironmentToolkit = Toolkit.make(
   EnvironmentReadTool,
