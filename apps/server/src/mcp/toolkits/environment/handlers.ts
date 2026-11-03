@@ -5,7 +5,7 @@ import {
   type ThreadGroupOp,
   type ThreadGroupsState,
 } from "@t3tools/contracts";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Environment from "../../../environment/ServerEnvironment.ts";
@@ -105,7 +105,7 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const executor = yield* ThreadCommandExecutor.ThreadCommandExecutor;
-      const crypto = yield* Crypto.Crypto;
+      const crypto = yield* SecureRandom.SecureRandom;
       const projects = yield* Project.ProjectService;
       const update = Effect.gen(function* () {
         yield* check;
@@ -124,7 +124,7 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
         for (const op of ops) {
           if (op.type === "createGroup") {
             const { type: _type, ...details } = op;
-            const id = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
+            const id = yield* crypto.uuidV4();
             threadGroupOps.push({ type: "createGroup", group: { id, ...details } });
             continue;
           }
