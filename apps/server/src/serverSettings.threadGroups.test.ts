@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   AuthSettingsWriteScope,
@@ -35,7 +36,7 @@ const layerServerSettings = () =>
 const PROJECT = ProjectId.make("project-1");
 const group = (id: string) => ({ id, name: id });
 
-it.layer(NodeServices.layer)("server thread groups", (it) => {
+it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server thread groups", (it) => {
   it.effect("applies every client's concurrent edits instead of the last writer's copy", () =>
     Effect.gen(function* () {
       const service = yield* ServerSettingsModule.ServerSettingsService;
