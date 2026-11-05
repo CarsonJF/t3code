@@ -1043,7 +1043,9 @@ export function resolveCollapsedGroupStatuses(
             : null
           : raw === "waiting"
             ? null
-            : raw;
+            : raw === "preparing"
+              ? "working"
+              : raw;
     if (status !== null) counts.set(status, (counts.get(status) ?? 0) + 1);
   }
   return COLLAPSED_GROUP_STATUS_ORDER.flatMap((status) => {
