@@ -7,7 +7,7 @@ import type {
   DesktopSshEnvironmentTarget,
 } from "@t3tools/contracts";
 import { waitForHttpReady as waitForHttpReadyShared } from "@t3tools/shared/httpReadiness";
-import { cliReleaseDownloadBaseUrl } from "@t3tools/shared/cliRelease";
+import { CLI_RELEASE_TAG_SUFFIX, cliReleaseDownloadBaseUrl } from "@t3tools/shared/cliRelease";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import * as NetService from "@t3tools/shared/Net";
 import { extractJsonObject, fromLenientJson } from "@t3tools/shared/schemaJson";
@@ -468,6 +468,7 @@ if [ -n "$T3_NODE_SCRIPT_PATH" ]; then
   exec node "$T3_NODE_SCRIPT_PATH" "$@"
 fi
 T3_ARCHIVE_VERSION=@@T3_ARCHIVE_VERSION@@
+T3_ARCHIVE_TAG_SUFFIX=@@T3_ARCHIVE_TAG_SUFFIX@@
 if [ -z "$T3_ARCHIVE_VERSION" ]; then
   printf 'No t3 release version was provided for the remote runtime.\\n' >&2
   exit 1
@@ -530,8 +531,8 @@ if ! t3_runtime_ready; then
       exit 1
     }
   }
-  t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/SHA256SUMS" "$T3_STAGING/SHA256SUMS" @@T3_ARCHIVE_CHECKSUMS_SECONDS@@
-  t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/$T3_ARCHIVE" "$T3_STAGING/$T3_ARCHIVE" @@T3_ARCHIVE_DOWNLOAD_SECONDS@@
+  t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION$T3_ARCHIVE_TAG_SUFFIX/SHA256SUMS" "$T3_STAGING/SHA256SUMS" @@T3_ARCHIVE_CHECKSUMS_SECONDS@@
+  t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION$T3_ARCHIVE_TAG_SUFFIX/$T3_ARCHIVE" "$T3_STAGING/$T3_ARCHIVE" @@T3_ARCHIVE_DOWNLOAD_SECONDS@@
   T3_EXPECTED="$(grep " \\*\\{0,1\\}$T3_ARCHIVE$" "$T3_STAGING/SHA256SUMS" | cut -d' ' -f1)"
   if command -v sha256sum >/dev/null 2>&1; then
     T3_ACTUAL="$(sha256sum "$T3_STAGING/$T3_ARCHIVE" | cut -d' ' -f1)"
@@ -1017,14 +1018,18 @@ export function buildRemoteT3RunnerScript(input?: RemoteT3RunnerOptions): string
   if (archiveVersion !== "" && !EXACT_ARCHIVE_VERSION.test(archiveVersion)) {
     throw new SshInvalidArchiveVersionError({ archiveVersion });
   }
-  const releaseBaseUrl = cliReleaseDownloadBaseUrl("", input?.releaseBaseUrl ?? undefined).replace(
-    /\/v$/u,
+  const mirrorBaseUrl = input?.releaseBaseUrl?.trim() ?? "";
+  const releaseBaseUrl = cliReleaseDownloadBaseUrl("", mirrorBaseUrl || undefined).replace(
+    /\/v[^/]*$/u,
     "",
   );
+  // A mirror serves plain `v<version>` paths; the fork's GitHub feed adds `-custom` to its tags.
+  const archiveTagSuffix = mirrorBaseUrl === "" ? CLI_RELEASE_TAG_SUFFIX : "";
   return stripTrailingNewlines(
     applyScriptPlaceholders(REMOTE_RUNNER_SCRIPT, {
       T3_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
       T3_ARCHIVE_VERSION: shellSingleQuote(archiveVersion),
+      T3_ARCHIVE_TAG_SUFFIX: shellSingleQuote(archiveTagSuffix),
       T3_RELEASE_BASE_URL: shellSingleQuote(releaseBaseUrl),
       T3_ARCHIVE_LOCK_WAIT_SECONDS: String(REMOTE_ARCHIVE_LOCK_WAIT_SECONDS),
       T3_ARCHIVE_DOWNLOAD_SECONDS: String(REMOTE_ARCHIVE_DOWNLOAD_SECONDS),
