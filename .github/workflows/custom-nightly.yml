@@ -7,6 +7,11 @@ name: Custom nightly
 on:
   schedule:
     - cron: "17 */3 * * *"
+  # Publish now without gh auth: `git tag -f publish-custom-nightly && git push -f
+  # origin publish-custom-nightly`. The run checks out `custom`, not the tag.
+  push:
+    tags:
+      - publish-custom-nightly
   workflow_dispatch:
     inputs:
       upstream_tag:
