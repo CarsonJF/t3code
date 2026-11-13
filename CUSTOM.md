@@ -59,8 +59,11 @@ workflows never run here.
     gh workflow enable custom-nightly.yml -R CarsonJF/t3code
 
 Run now: `gh workflow run custom-nightly.yml -R CarsonJF/t3code` (add `-f force=true` to
-rebuild an existing release, `-f upstream_tag=v...` to pick a tag). If the macOS job fails with
-"not acquired by Runner", arm64 runners are out of capacity: rerun with `-f mac_runner=macos-15-intel`.
+rebuild an existing release, `-f upstream_tag=v...` to pick a tag). Without `gh` auth, push a
+throwaway tag instead — it checks out `custom` and runs the same pipeline:
+`git push -f origin HEAD:publish-custom-nightly` (or `git tag -f publish-custom-nightly &&
+git push -f origin publish-custom-nightly`). If the macOS job fails with "not acquired by
+Runner", arm64 runners are out of capacity: rerun with `-f mac_runner=macos-15-intel`.
 
 ## Resolving a rebase conflict
 
