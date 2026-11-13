@@ -54,6 +54,7 @@ jobs:
       need_win: ${{ steps.resolve.outputs.need_win }}
       need_mac: ${{ steps.resolve.outputs.need_mac }}
       need_android: ${{ steps.resolve.outputs.need_android }}
+      need_linux: ${{ steps.resolve.outputs.need_linux }}
       upstream_tag: ${{ steps.resolve.outputs.upstream_tag }}
       version: ${{ steps.resolve.outputs.version }}
       release_tag: ${{ steps.resolve.outputs.release_tag }}
@@ -77,15 +78,24 @@ jobs:
           fi
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]{8}\.[0-9]+$ ]] || { echo "Bad upstream tag: '$tag'" >&2; exit 1; }
           release_tag="${tag}-custom"
-          mode=full need_win=true need_mac=true need_android=true repair_sha=
+          mode=full need_win=true need_mac=true need_android=true need_linux=true repair_sha=
           if [[ "$FORCE" != "true" ]] && assets="$(gh release view "$release_tag" -R "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' 2>/dev/null)"; then
-            # Each platform counts as published once its feed manifest (desktop) or APK is attached.
+            # Each platform counts as published once its feed manifest (desktop), APK, or
+            # CLI archive and checksums (Linux server/WSL runtime) is attached.
             grep -qx 'nightly.yml' <<<"$assets" && need_win=false
             grep -qx 'nightly-mac.yml' <<<"$assets" && need_mac=false
             grep -q '\.apk$' <<<"$assets" && need_android=false
-            if [[ "$need_win$need_mac$need_android" == falsefalsefalse ]]; then
+            if grep -qE '^t3-.*-linux-x64\.tar\.gz$' <<<"$assets" && grep -qx 'SHA256SUMS' <<<"$assets"; then
+              need_linux=false
+            fi
+            if [[ "$need_win$need_mac$need_android$need_linux" == falsefalsefalsefalse ]]; then
               mode=skip
               echo "Release $release_tag has every platform; nothing to do."
+            elif [[ "$need_linux" == true ]]; then
+              # The Linux CLI is this fork's own updater, baked to read this repository. A repair
+              # at the old tag would publish a binary that still updates from upstream, so rebuild
+              # the whole release at the rebased HEAD the first time the archive is missing.
+              echo "Release $release_tag has no custom Linux CLI; rebuilding the full release."
             else
               mode=repair
               repair_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$release_tag" -q .sha)"
@@ -100,6 +110,7 @@ jobs:
             echo "need_win=$need_win"
             echo "need_mac=$need_mac"
             echo "need_android=$need_android"
+            echo "need_linux=$need_linux"
             echo "repair_sha=$repair_sha"
           } >> "$GITHUB_OUTPUT"
 
@@ -198,9 +209,87 @@ jobs:
           git push --force-with-lease="refs/heads/${BRANCH}:${OLD_TIP}" origin "HEAD:refs/heads/${BRANCH}"
           git push --force origin "refs/remotes/upstream/main:refs/heads/main"
 
+  # The Linux CLI is both the server runtime and the WSL backend in the Windows
+  # installer. Building it here (rather than reusing upstream's) puts the custom
+  # server commits on every Linux environment, and bakes in the fork's update feed.
+  build_linux:
+    name: Build Linux x64 CLI
+    needs: [prepare]
+    if: >-
+      needs.prepare.outputs.mode != 'skip' &&
+      (needs.prepare.outputs.need_linux == 'true' || needs.prepare.outputs.need_win == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      # The web client's "Update everything" lookup follows this repository.
+      T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
+      T3CODE_TELEMETRY_CHANNEL: dev
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ vars.T3CODE_CLERK_PUBLISHABLE_KEY }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ vars.T3CODE_CLERK_JWT_TEMPLATE }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ vars.T3CODE_CLERK_CLI_OAUTH_CLIENT_ID }}
+      T3CODE_RELAY_URL: ${{ vars.T3CODE_RELAY_URL }}
+    steps:
+      - name: Checkout
+        env:
+          SHA: ${{ needs.prepare.outputs.sha }}
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "$SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git checkout --detach FETCH_HEAD
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: false
+          run-install: false
+
+      - name: Install
+        run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/scripts...
+
+      - name: Build JS bundle and web client
+        run: |
+          set -euo pipefail
+          node scripts/update-release-package-versions.ts "$VERSION"
+          vp run --filter @t3tools/web build
+          node apps/server/scripts/cli.ts build
+          node scripts/apply-web-brand-assets.ts nightly apps/server/dist/client
+
+      - name: Build resource monitor
+        run: cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml
+
+      - name: Build CLI single-executable
+        run: node apps/server/scripts/cli.ts build-exe --verbose
+
+      - name: Package Linux CLI archive
+        run: |
+          set -euo pipefail
+          command -v patchelf || { sudo apt-get update && sudo apt-get install -y patchelf; }
+          mkdir -p cli-resource-monitor/linux-x64
+          cp native/resource-monitor/target/release/t3-resource-monitor cli-resource-monitor/linux-x64/
+          node scripts/build-cli-archive.ts \
+            --platform linux --arch x64 --version "$VERSION" \
+            --resource-monitor-dir "$PWD/cli-resource-monitor" \
+            --output-dir release-cli
+          (cd release-cli && sha256sum t3-*.tar.gz > SHA256SUMS)
+          node scripts/smoke-cli-archive.ts --archive release-cli/*.tar.gz --expect-version "$VERSION"
+          ls -la release-cli
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cli-linux-x64
+          path: release-cli/*
+          if-no-files-found: error
+          retention-days: 7
+
   build:
     name: Build Windows x64
-    needs: [prepare]
+    needs: [prepare, build_linux]
     if: needs.prepare.outputs.mode != 'skip' && needs.prepare.outputs.need_win == 'true'
     runs-on: windows-latest
     timeout-minutes: 90
@@ -248,10 +337,13 @@ jobs:
           node scripts/update-release-package-versions.ts "$VERSION"
           vp run build:desktop
 
-      # The WSL backend runs the Linux CLI inside the distro; reuse upstream's
-      # archive for the same nightly (our commits are client-only).
-      - name: Download upstream Linux CLI archive for WSL
-        run: gh release download "${{ needs.prepare.outputs.upstream_tag }}" -R "$UPSTREAM_REPO" -p "t3-*-linux-x64.tar.gz" -D wsl-runtime
+      # The WSL backend runs the Linux CLI inside the distro; use the archive this
+      # pipeline just built from the same commit so WSL gets the custom server too.
+      - name: Fetch custom Linux CLI archive for WSL
+        uses: actions/download-artifact@v8
+        with:
+          name: cli-linux-x64
+          path: wsl-runtime
 
       - name: Build installer
         run: |
@@ -524,10 +616,11 @@ jobs:
   # next scheduled run (repair mode) until a newer upstream nightly supersedes it.
   publish:
     name: Publish release
-    needs: [prepare, build, build_mac, build_android]
+    needs: [prepare, build, build_linux, build_mac, build_android]
     if: >-
       always() && needs.prepare.result == 'success' && needs.prepare.outputs.mode != 'skip' &&
-      (needs.build.result == 'success' || needs.build_mac.result == 'success' || needs.build_android.result == 'success')
+      (needs.build.result == 'success' || needs.build_linux.result == 'success' ||
+      needs.build_mac.result == 'success' || needs.build_android.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -590,12 +683,13 @@ jobs:
           grep -qx 'nightly.yml' <<<"$assets" && platforms+=("Windows x64")
           grep -qx 'nightly-mac.yml' <<<"$assets" && platforms+=("macOS arm64 + x64")
           grep -q '\.apk$' <<<"$assets" && platforms+=("Android arm64")
+          grep -qE '^t3-.*-linux-x64\.tar\.gz$' <<<"$assets" && platforms+=("Linux x64 CLI")
           list="$(IFS=,; echo "${platforms[*]}" | sed 's/,/, /g')"
           notes="Upstream nightly [${UPSTREAM_TAG}](https://github.com/${UPSTREAM_REPO}/releases/tag/${UPSTREAM_TAG}) plus the commits on \`custom\` (${SHA:0:12}). Platforms: ${list}. Not notarized or store-signed; see CUSTOM.md to install."
           gh release edit "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --notes "$notes"
 
       - name: Close failure issue
-        if: needs.build.result != 'failure' && needs.build_mac.result != 'failure' && needs.build_android.result != 'failure'
+        if: needs.build.result != 'failure' && needs.build_linux.result != 'failure' && needs.build_mac.result != 'failure' && needs.build_android.result != 'failure'
         run: |
           set -euo pipefail
           for n in $(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "custom-nightly failed"' --json number -q '.[].number'); do
@@ -604,7 +698,7 @@ jobs:
 
   report_failure:
     name: Report failure
-    needs: [prepare, build, build_mac, build_android, publish]
+    needs: [prepare, build, build_linux, build_mac, build_android, publish]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -614,7 +708,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       DETAIL: ${{ needs.prepare.outputs.failure }}
       UPSTREAM_TAG: ${{ needs.prepare.outputs.upstream_tag }}
-      RESULTS: "prepare=${{ needs.prepare.result }} windows=${{ needs.build.result }} mac=${{ needs.build_mac.result }} android=${{ needs.build_android.result }} publish=${{ needs.publish.result }}"
+      RESULTS: "prepare=${{ needs.prepare.result }} windows=${{ needs.build.result }} linux=${{ needs.build_linux.result }} mac=${{ needs.build_mac.result }} android=${{ needs.build_android.result }} publish=${{ needs.publish.result }}"
     steps:
       - name: Open or update the failure issue
         run: |
