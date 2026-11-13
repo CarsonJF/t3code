@@ -3,7 +3,10 @@ import * as Schema from "effect/Schema";
 
 import { compareSemverVersions } from "./semver.ts";
 
-const CLI_RELEASE_REPOSITORY = "pingdotgg/t3code";
+/** Custom builds update from the fork's releases, so every environment gets the custom commits. */
+const CLI_RELEASE_REPOSITORY = "CarsonJF/t3code";
+/** Fork releases sit on `<upstream tag>-custom`, so fetching upstream tags never collides. */
+export const CLI_RELEASE_TAG_SUFFIX = "-custom";
 export const CLI_RELEASES_PAGE_URL = `https://github.com/${CLI_RELEASE_REPOSITORY}/releases`;
 export const CLI_RELEASE_CHECKSUMS_FILE = "SHA256SUMS";
 export const CLI_RELEASE_BASE_URL_ENV = "T3CODE_RELEASE_BASE_URL";
@@ -48,7 +51,11 @@ export function cliReleaseDownloadBaseUrl(
   version: string,
   baseUrl: string | undefined = CLI_RELEASE_DEFAULT_BASE_URL,
 ): string {
-  return `${(baseUrl?.trim() || CLI_RELEASE_DEFAULT_BASE_URL).replace(/\/+$/, "")}/v${version}`;
+  const base = (baseUrl?.trim() || CLI_RELEASE_DEFAULT_BASE_URL).replace(/\/+$/, "");
+  // An update mirror lays out its own `v<version>` paths; only the fork's GitHub feed uses
+  // the `-custom` tag suffix.
+  const tagSuffix = base === CLI_RELEASE_DEFAULT_BASE_URL ? CLI_RELEASE_TAG_SUFFIX : "";
+  return `${base}/v${version}${tagSuffix}`;
 }
 
 /** `segments` added to `baseUrl`'s path, keeping its query, such as a signed mirror URL's token. */
@@ -64,7 +71,7 @@ export function cliReleaseAssetUrl(
   fileName: string,
   baseUrl: string | undefined = CLI_RELEASE_DEFAULT_BASE_URL,
 ): string {
-  return releaseAssetUrl(baseUrl?.trim() || CLI_RELEASE_DEFAULT_BASE_URL, `v${version}`, fileName);
+  return releaseAssetUrl(cliReleaseDownloadBaseUrl(version, baseUrl), fileName);
 }
 
 export function parseChecksums(text: string): ReadonlyMap<string, string> {
@@ -146,7 +153,10 @@ export function newestCliReleaseVersion(
 ): string | undefined {
   for (const release of releases) {
     if (release.draft) continue;
-    const version = /^v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/.exec(release.tag_name)?.[1];
+    const tag = release.tag_name.endsWith(CLI_RELEASE_TAG_SUFFIX)
+      ? release.tag_name.slice(0, -CLI_RELEASE_TAG_SUFFIX.length)
+      : release.tag_name;
+    const version = /^v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/.exec(tag)?.[1];
     if (version === undefined) continue;
     if (cliReleaseChannelOf(version) === channel) return version;
   }
