@@ -75,7 +75,7 @@ function TotsRows(props: { readonly environmentId: EnvironmentId }) {
       {linksOn ? null : (
         <SettingsRow
           title="Other machines"
-          description="Turn on Linked environments in Beta settings, here and on each machine, so Tots can reach your other machines."
+          description="Turn on Linked environments in Labs, here and on each machine, so Tots can reach your other machines."
         />
       )}
       {tots.map((tot) => (

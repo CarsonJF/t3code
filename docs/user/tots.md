@@ -26,7 +26,7 @@ Tots always run in full access, and they can approve requests in your other thre
 
 ## Other machines
 
-Tots live on one server and reach your other machines through linked environments. Turn on **Linked environments** in Beta settings on each machine, and link them at full access so a Tot can act and approve there.
+Tots live on one server and reach your other machines through linked environments. Turn on **Linked environments** in **Settings → Labs** on each machine, and link them at full access so a Tot can act and approve there.
 
 ## Instructions and fresh starts
 
