@@ -77,7 +77,7 @@ it("the new-thread project picker follows the manual sidebar project order", asy
   await userEvent.click(page.elementLocator(trigger));
   await expect.element(page.getByRole("option", { name: "beta" })).toBeVisible();
 
-  // The draft's own project leads; the rest keep the sidebar's order.
+  // The most recent project leads, then every project in the sidebar's order.
   await vi.waitFor(() => {
     expect(
       page
@@ -85,8 +85,9 @@ it("the new-thread project picker follows the manual sidebar project order", asy
         .elements()
         .map((option) => option.textContent),
     ).toEqual([
-      expect.stringMatching(/render$/),
+      expect.stringMatching(/alpha$/),
       expect.stringMatching(/beta$/),
+      expect.stringMatching(/render$/),
       expect.stringMatching(/alpha$/),
       "Add project",
     ]);
