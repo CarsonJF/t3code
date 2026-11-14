@@ -1322,7 +1322,11 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
    independent; error, warning, and update roles are themeable below. */
 /* The non-empty marker adds enough specificity to outrank the generated root
    dark variant without reintroducing raw `.dark` selectors. */
-html[data-theme-id]:not([data-theme-id=""]) {
+/* [data-scoped-theme] is a part of the app a user gave its own theme (a Tot, project or group):
+   it sets the --app-theme-* roles inline and gets the same mapping, since a token resolved at the
+   root would not see them. */
+html[data-theme-id]:not([data-theme-id=""]),
+[data-scoped-theme] {
   --background: var(--app-theme-canvas);
   --app-chrome-background: var(--app-theme-chrome);
   --toolbar-background: var(--app-theme-toolbar);
