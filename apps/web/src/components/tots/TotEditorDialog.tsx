@@ -40,6 +40,7 @@ import {
 } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { Switch } from "../ui/switch";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { TotAvatar } from "./TotAvatar";
@@ -48,10 +49,16 @@ import { useTotModelChoice } from "./useTotModelChoice";
 
 const COLOR_CHOICES = ["#0A7EA4", "#7C3AED", "#DB2777", "#EA580C", "#16A34A", "#475569"];
 
-const faceOf = (color: string, skin: number | null, shape: TotShape): TotAvatarValue => ({
+const faceOf = (
+  color: string,
+  skin: number | null,
+  shape: TotShape,
+  antenna: boolean,
+): TotAvatarValue => ({
   color,
   ...(skin === null ? {} : { skin }),
   ...(shape === "round" ? {} : { shape }),
+  ...(antenna ? { antenna } : {}),
 });
 
 /** Mounted once; opens for whatever asked for it. */
@@ -83,6 +90,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const [color, setColor] = useState(editing?.avatar.color ?? COLOR_CHOICES[0]!);
   const [skin, setSkin] = useState<number | null>(editing?.avatar.skin ?? null);
   const [shape, setShape] = useState<TotShape>(editing?.avatar.shape ?? "round");
+  const [antenna, setAntenna] = useState(editing?.avatar.antenna === true);
   const [skinSeries, setSkinSeries] = useState(() => totSkinSeriesOf(skin));
   const [scope, setScope] = useState<TotScope>(editing?.scope ?? "all");
   const [instructions, setInstructions] = useState(editing?.instructions ?? "");
@@ -123,7 +131,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
       return;
     }
     const checked = validateTotDraft(
-      { name, color, skin, shape, scope, instructions, modelSelection: model.selection },
+      { name, color, skin, shape, antenna, scope, instructions, modelSelection: model.selection },
       environmentTots.map((tot) => tot.id),
       editing?.id ?? null,
     );
@@ -197,7 +205,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
                 <TotAvatar
-                  avatar={faceOf(color, skin, shape)}
+                  avatar={faceOf(color, skin, shape, antenna)}
                   state="idle"
                   animation={animate && !reducedMotion ? "full" : "still"}
                   size={56}
@@ -280,13 +288,17 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                       onClick={() => setShape(choice)}
                     >
                       <TotAvatar
-                        avatar={faceOf(color, skin, choice)}
+                        avatar={faceOf(color, skin, choice, antenna)}
                         state="idle"
                         animation="still"
                         size={28}
                       />
                     </button>
                   ))}
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground text-xs">Antenna</span>
+                  <Switch aria-label="Antenna" checked={antenna} onCheckedChange={setAntenna} />
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-muted-foreground text-xs">Skin</span>
@@ -322,7 +334,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                       onClick={() => setSkin(choice)}
                     >
                       <TotAvatar
-                        avatar={faceOf(color, choice, shape)}
+                        avatar={faceOf(color, choice, shape, antenna)}
                         state="idle"
                         animation="still"
                         size={28}
