@@ -103,7 +103,7 @@ export function useTotActions(environmentId: EnvironmentId, tot: Tot) {
     },
     async editInstructions() {
       if (project === null) return;
-      const root = project.workspaceRoot.replace(/[\/]+$/, "");
+      const root = project.workspaceRoot.replace(/[/\\]+$/, "");
       const separator = root.includes("\\") && !root.includes("/") ? "\\" : "/";
       const result = await openInEditor(`${root}${separator}AGENTS.md`);
       if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
