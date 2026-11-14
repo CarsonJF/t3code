@@ -38,6 +38,7 @@ import {
   RELAY_URL_SECRET,
 } from "../cloud/config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
@@ -329,11 +330,25 @@ const makeTestRelay = Effect.fnUntraced(function* (
     }),
     Effect.provideService(FetchHttpClient.Fetch, fetch),
     Effect.provide(NodeCrypto.layer),
+    Effect.provide(ServerSettings.layerTest()),
   );
   return { relay, secrets, secretReads, currentShell, shellReads, publications, catchUp };
 });
 
 describe("AgentAwarenessRelay", () => {
+  it.effect("leaves a thread a Tot launched to that Tot instead of the phone", () =>
+    Effect.gen(function* () {
+      const launched = ThreadId.make("tot-launched:yui:c1");
+      const { relay, publications } = yield* makeTestRelay({
+        readShell: (threadId) => Effect.succeed(shell({ id: threadId, status: "running" })),
+      });
+      yield* relay.publishThread(launched);
+      assert.equal(publications.length, 0);
+      yield* relay.publishThread(THREAD_ID);
+      assert.equal(publications.length, 1);
+    }),
+  );
+
   it.effect("publishes the parent as needing approval while its subagent waits", () =>
     Effect.gen(function* () {
       const shells = yield* Ref.make(
