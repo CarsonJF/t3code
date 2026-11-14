@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useTotHostEnvironmentId } from "../tots/totEditorStore";
 import { TotEditorHost } from "../tots/TotEditorDialog";
+import { TotMemoryHost } from "../tots/TotMemoryDialog";
 import type { ReactNode } from "react";
 import { T, useGT } from "gt-react";
 import { memo } from "react";
@@ -339,6 +340,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <SidebarUpdateArchitectureWarning />
       <SidebarUtilityMenu />
       <TotEditorHost />
+      <TotMemoryHost />
     </SidebarFooter>
   );
 });
