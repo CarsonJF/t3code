@@ -1,5 +1,6 @@
 import {
   CommandId,
+  DEFAULT_HOME_TOT,
   HOME_TOT_ID,
   MessageId,
   type EnvironmentId,
@@ -326,7 +327,13 @@ const make = Effect.gen(function* () {
   }, locked);
 
   const remove = Effect.fn("TotService.remove")(function* (id: TotId) {
-    if (id === HOME_TOT_ID) return yield* fail("Home cannot be deleted. Turn it off instead.");
+    if (id === HOME_TOT_ID) {
+      // Every machine keeps a Home, so removing it resets it: off, and back to the default.
+      yield* disableUnlocked(id);
+      yield* replace(DEFAULT_HOME_TOT);
+      yield* refreshFolders();
+      return;
+    }
     yield* disableUnlocked(id);
     yield* writeTots((tots) => tots.filter((tot) => tot.id !== id));
     yield* refreshFolders();
