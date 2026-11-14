@@ -641,6 +641,13 @@ it.effect("keeps one project per Tot and refreshes its AGENTS.md", () =>
       const memoryPath = path.join(first.workspaceRoot, "MEMORY.md");
       assert.include(yield* fileSystem.readFileString(memoryPath), "# Memory");
       yield* fileSystem.writeFileString(memoryPath, "# Memory\n\n- Carson's host is Asuna.\n");
+      // Every Tot shares the memory one level up.
+      const sharedPath = path.resolve(baseDir, "tots", "MEMORY.md");
+      assert.include(yield* fileSystem.readFileString(sharedPath), "# Shared memory");
+      yield* fileSystem.writeFileString(
+        sharedPath,
+        "# Shared memory\n\n- Carson likes short replies.\n",
+      );
 
       const again = yield* folders.ensureTotProject({ ...yui, instructions: "Be brief." }, [yui]);
       assert.equal(again.projectId, first.projectId);
@@ -648,6 +655,7 @@ it.effect("keeps one project per Tot and refreshes its AGENTS.md", () =>
       assert.include(agents, "Be brief.");
       assert.include(agents, "keep me");
       assert.include(yield* fileSystem.readFileString(memoryPath), "Carson's host is Asuna.");
+      assert.include(yield* fileSystem.readFileString(sharedPath), "Carson likes short replies.");
     }),
   ),
 );
