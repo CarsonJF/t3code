@@ -5,8 +5,11 @@ import {
   HOME_TOT_ID,
   ProjectId,
   ProviderInstanceId,
+  ScheduledTaskId,
   ThreadId,
   TotError,
+  type ScheduledTask,
+  type ScheduledTaskUpsertInput,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
@@ -19,6 +22,7 @@ import * as ThreadLaunch from "../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProjectService from "../project/ProjectService.ts";
+import * as ScheduledTasks from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TotService from "./TotService.ts";
 
@@ -26,7 +30,11 @@ const totProjectId = ProjectId.make("tot-project");
 const modelSelection = { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" };
 const avatar = { color: "#123456" };
 
-const makeTots = (settings?: Parameters<typeof ServerSettings.layerTest>[0]) => {
+const makeTots = (
+  settings?: Parameters<typeof ServerSettings.layerTest>[0],
+  routines: Array<ScheduledTask> = [],
+) => {
+  const savedRoutines: Array<ScheduledTaskUpsertInput> = [];
   const ensured: Array<{ readonly id: string; readonly siblings: ReadonlyArray<string> }> = [];
   const launched: Array<ThreadLaunch.ThreadLaunchInput> = [];
   const sent: Array<ThreadManagement.ThreadManagementSendInput> = [];
@@ -60,6 +68,13 @@ const makeTots = (settings?: Parameters<typeof ServerSettings.layerTest>[0]) => 
             return Effect.succeed({} as never);
           },
         }),
+        Layer.mock(ScheduledTasks.ScheduledTaskService)({
+          list: () => Effect.succeed({ tasks: routines }),
+          upsert: (input) => {
+            savedRoutines.push(input);
+            return Effect.succeed({} as never);
+          },
+        }),
         Layer.mock(ThreadLaunch.ThreadLaunchService)({
           launch: (input) => {
             launched.push(input);
@@ -80,8 +95,24 @@ const makeTots = (settings?: Parameters<typeof ServerSettings.layerTest>[0]) => 
       ),
     ),
   );
-  return { layer, ensured, launched, sent, dispatched, renamedProjects, running };
+  return { layer, ensured, savedRoutines, launched, sent, dispatched, renamedProjects, running };
 };
+
+const routine = (id: string, threadId: string | null) =>
+  ({
+    id: ScheduledTaskId.make(id),
+    title: `Routine ${id}`,
+    prompt: "Check the deploys.",
+    enabled: true,
+    schedule: { kind: "interval", everyMinutes: 60 },
+    projectId: totProjectId,
+    threadId: threadId === null ? null : ThreadId.make(threadId),
+    threadMode: threadId === null ? "new_thread" : "continue",
+    workspaceStrategy: { type: "root" },
+    modelSelection,
+    runtimeMode: "full-access",
+    interactionMode: "default",
+  }) as unknown as ScheduledTask;
 
 const create = (name: string) =>
   TotService.TotService.pipe(
@@ -115,6 +146,27 @@ it.effect("brings every set-up Tot's folder up to date at start and when the Tot
     yield* tots.create({ name: "Work", avatar, scope: "all", instructions: "", modelSelection });
     // Home's list of fellow Tots now names Work; Work has no folder until it is turned on.
     expect(ensured).toEqual([{ id: "home", siblings: ["home", "work"] }]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("moves a Tot's routines to its new thread, and no one else's", () => {
+  const { layer, savedRoutines } = makeTots(undefined, [
+    routine("mine", "tot:home:before"),
+    routine("other-tot", "tot:yui:x"),
+    routine("ordinary", "thread:ordinary"),
+    routine("unbound", null),
+  ]);
+  return Effect.gen(function* () {
+    const { threadId } = yield* (yield* TotService.TotService).enable(HOME_TOT_ID, modelSelection);
+    expect(savedRoutines).toEqual([
+      expect.objectContaining({
+        id: "mine",
+        threadId,
+        threadMode: "continue",
+        prompt: "Check the deploys.",
+        schedule: { kind: "interval", everyMinutes: 60 },
+      }),
+    ]);
   }).pipe(Effect.provide(layer));
 });
 

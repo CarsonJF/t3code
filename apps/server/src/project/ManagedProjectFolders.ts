@@ -563,15 +563,22 @@ const make = Effect.gen(function* () {
         .writeFileString(claudePath, "@AGENTS.md\n")
         .pipe(Effect.mapError(folderError));
     }
-    // The Tot's memory; it reads and edits this file itself, so only seed it once.
-    const memoryPath = path.join(workspaceRoot, "MEMORY.md");
-    if (!(yield* fileSystem.exists(memoryPath).pipe(Effect.mapError(folderError)))) {
-      yield* fileSystem
-        .writeFileString(
-          memoryPath,
-          `# Memory\n\nWhat ${tot.name} remembers. One short line each.\n`,
-        )
-        .pipe(Effect.mapError(folderError));
+    // The Tot's memory, and one level up the memory every Tot shares. Tots read and
+    // edit these themselves, so they are only seeded once.
+    const seeds = [
+      [
+        path.join(workspaceRoot, "MEMORY.md"),
+        `# Memory\n\nWhat ${tot.name} remembers. One short line each.\n`,
+      ],
+      [
+        path.resolve(config.baseDir, "tots", "MEMORY.md"),
+        "# Shared memory\n\nWhat every Tot knows about the user. One short line each.\n",
+      ],
+    ] as const;
+    for (const [seedPath, text] of seeds) {
+      if (!(yield* fileSystem.exists(seedPath).pipe(Effect.mapError(folderError)))) {
+        yield* fileSystem.writeFileString(seedPath, text).pipe(Effect.mapError(folderError));
+      }
     }
     const id = yield* random
       .uuidV4()
