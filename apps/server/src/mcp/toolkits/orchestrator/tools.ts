@@ -66,7 +66,11 @@ const linkingDependencies = [
   PeerLinks.PeerLinks,
 ];
 /** A send there may record a follow-up to a remote task. */
-const sendDependencies = [...dependencies, RemoteDelegation.RemoteDelegation];
+const sendDependencies = [
+  ...dependencies,
+  RemoteDelegation.RemoteDelegation,
+  TotService.TotService,
+];
 const threadMetadataDependencies = [
   McpInvocationContext.McpInvocationContext,
   ThreadManagementService.ThreadManagementService,
