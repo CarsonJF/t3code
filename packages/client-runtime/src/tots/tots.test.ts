@@ -16,6 +16,7 @@ import {
   isTotProject,
   resolveTotAnimation,
   selectTots,
+  totHostOrder,
   withoutTotProjects,
   totFaceInputFromShell,
   totFaceState,
@@ -133,5 +134,15 @@ describe("selectTots", () => {
     ]);
     const untouched = [sameIdElsewhere, other];
     expect(withoutTotProjects(untouched, environmentTots)).toBe(untouched);
+  });
+
+  it("offers every connected machine as a Tot's home, the one hosting Tots first", () => {
+    const offline = EnvironmentId.make("offline");
+    const on = (environmentId: EnvironmentId) => ({ environmentId, tot: yui });
+    expect(totHostOrder([promini, asuna], [on(asuna), on(offline), on(asuna)])).toEqual([
+      asuna,
+      promini,
+    ]);
+    expect(totHostOrder([promini, asuna], [])).toEqual([promini, asuna]);
   });
 });

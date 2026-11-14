@@ -2,7 +2,7 @@ import type { EnvironmentId, Tot } from "@t3tools/contracts";
 import { useSyncExternalStore } from "react";
 
 import { usePrimaryEnvironmentId } from "~/state/environments";
-import { useTots } from "~/state/tots";
+import { useTotHosts } from "~/state/tots";
 
 export type TotEditorTarget =
   | { readonly mode: "create"; readonly environmentId: EnvironmentId }
@@ -36,9 +36,9 @@ export function useTotEditorTarget(): TotEditorTarget | null {
   );
 }
 
-/** Where new Tots go: the environment that already hosts Tots, else this one. */
+/** Where new Tots go unless the user picks: beside the existing Tots, else this one. */
 export function useTotHostEnvironmentId(): EnvironmentId | null {
-  const tots = useTots();
+  const hosts = useTotHosts();
   const primary = usePrimaryEnvironmentId();
-  return tots[0]?.environmentId ?? primary;
+  return hosts[0]?.environmentId ?? primary;
 }
