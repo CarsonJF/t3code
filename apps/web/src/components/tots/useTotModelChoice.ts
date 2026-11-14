@@ -5,10 +5,27 @@ import { useState } from "react";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { resolveAppModelSelectionForInstance } from "~/modelSelection";
-import { providerInstanceEntriesFor } from "~/providerInstances";
+import {
+  isProviderInstancePickerReady,
+  providerInstanceEntriesFor,
+  type ProviderInstanceEntry,
+} from "~/providerInstances";
 import { serverEnvironment } from "~/state/server";
 
 const NO_PROVIDERS = [] as const;
+
+/** The first provider that is ready and reports a model; a broken one ahead of it is skipped. */
+export function firstReadyModel(
+  entries: ReadonlyArray<ProviderInstanceEntry>,
+  resolveModel: (instanceId: ProviderInstanceEntry["instanceId"]) => string | null,
+): ModelSelection | null {
+  for (const entry of entries) {
+    if (!isProviderInstancePickerReady(entry)) continue;
+    const model = resolveModel(entry.instanceId);
+    if (model !== null) return createModelSelection(entry.instanceId, model);
+  }
+  return null;
+}
 
 /**
  * The model a Tot runs with on one environment: the user's pick, else the
@@ -21,18 +38,16 @@ export function useTotModelChoice(environmentId: EnvironmentId, initial: ModelSe
   const [picked, setPicked] = useState<ModelSelection | null>(initial);
   const entries = providerInstanceEntriesFor(providers, settings, null);
   const usable = (instanceId: string) =>
-    entries.some((entry) => entry.instanceId === instanceId && entry.enabled && entry.isAvailable);
-  const fallbackEntry = entries.find((entry) => entry.enabled && entry.isAvailable);
-  const fallbackModel = fallbackEntry
-    ? resolveAppModelSelectionForInstance(fallbackEntry.instanceId, settings, providers, null)
-    : null;
+    entries.some(
+      (entry) => entry.instanceId === instanceId && isProviderInstancePickerReady(entry),
+    );
   const selection =
     picked ??
     (settings.defaultModelSelection && usable(settings.defaultModelSelection.instanceId)
       ? settings.defaultModelSelection
-      : fallbackEntry && fallbackModel
-        ? createModelSelection(fallbackEntry.instanceId, fallbackModel)
-        : null);
+      : firstReadyModel(entries, (instanceId) =>
+          resolveAppModelSelectionForInstance(instanceId, settings, providers, null),
+        ));
   return {
     selection,
     entries,
