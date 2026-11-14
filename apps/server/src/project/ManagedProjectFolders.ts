@@ -134,6 +134,14 @@ export class ManagedProjectFolders extends Context.Service<
       { readonly projectId: ProjectId; readonly workspaceRoot: string },
       NamedProjectError
     >;
+    /**
+     * Finds or creates the project a group chat's room thread lives in, at
+     * `<baseDir>/tots/rooms/<id>`. The room runs no agent, so the folder holds nothing.
+     */
+    readonly ensureRoomProject: (room: {
+      readonly id: string;
+      readonly name: string;
+    }) => Effect.Effect<{ readonly projectId: ProjectId }, NamedProjectError>;
     /** Removes failed/cancelled creations' folders only while no project owns them. */
     readonly createNamedProject: (input: { readonly name: string }) => Effect.Effect<
       {
@@ -615,6 +623,38 @@ const make = Effect.gen(function* () {
     return { projectId: bootstrapped.project.id, workspaceRoot };
   });
 
+  const ensureRoomProject: ManagedProjectFolders["Service"]["ensureRoomProject"] = Effect.fn(
+    "ManagedProjectFolders.ensureRoomProject",
+  )(function* (room) {
+    const workspaceRoot = path.resolve(config.baseDir, "tots", "rooms", room.id);
+    yield* fileSystem
+      .makeDirectory(workspaceRoot, { recursive: true })
+      .pipe(
+        Effect.mapError((cause) => new NamedProjectFolderError({ folder: workspaceRoot, cause })),
+      );
+    const id = yield* random
+      .uuidV4()
+      .pipe(Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })));
+    const bootstrapped = yield* projects
+      .bootstrap({
+        commandId: CommandId.make(`tot-room-project:${room.id}:${id}`),
+        projectId: ProjectId.make(id),
+        title: room.name,
+        workspaceRoot,
+      })
+      .pipe(
+        Effect.catchTags({
+          ProjectConflictError: (conflict) =>
+            Effect.succeed({
+              project: { id: conflict.conflictingProjectId },
+              created: false,
+            }),
+        }),
+        Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })),
+      );
+    return { projectId: bootstrapped.project.id };
+  });
+
   return ManagedProjectFolders.of({
     scratchRoot,
     ensureScratchProject,
@@ -622,6 +662,7 @@ const make = Effect.gen(function* () {
     folderForThread,
     namedProjectsRoot,
     ensureTotProject,
+    ensureRoomProject,
     createNamedProject,
   });
 });
