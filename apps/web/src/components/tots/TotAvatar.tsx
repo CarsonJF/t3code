@@ -1,5 +1,5 @@
 import type { TotAnimation } from "@t3tools/client-runtime/tots";
-import { applyTotHeadShape } from "@t3tools/client-runtime/tots/shapes";
+import { applyTotAntenna, applyTotHeadShape } from "@t3tools/client-runtime/tots/shapes";
 import {
   TOT_FACE_ACTION,
   type TotAvatar as TotAvatarValue,
@@ -56,6 +56,13 @@ export function TotAvatar(props: {
     if (!defined || face === null) return;
     applyTotHeadShape(face, props.avatar.shape);
   }, [defined, props.avatar.shape]);
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- hides or shows the boop-face antenna in its shadow root
+  useEffect(() => {
+    const face = ref.current;
+    if (!defined || face === null) return;
+    applyTotAntenna(face, props.avatar.antenna === true);
+  }, [defined, props.avatar.antenna]);
 
   return (
     <boop-face
