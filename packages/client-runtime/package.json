@@ -307,6 +307,10 @@
       "types": "./src/tots/tots.ts",
       "default": "./src/tots/tots.ts"
     },
+    "./tots/editor": {
+      "types": "./src/tots/totEditor.ts",
+      "default": "./src/tots/totEditor.ts"
+    },
     "./state/outdatedServerUpdate": {
       "types": "./src/state/outdatedServerUpdate.ts",
       "default": "./src/state/outdatedServerUpdate.ts"

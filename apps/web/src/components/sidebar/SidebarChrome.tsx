@@ -1,4 +1,12 @@
-import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  BotIcon,
+  ChartNoAxesColumnIcon,
+  SettingsIcon,
+} from "lucide-react";
+import { openTotEditor, useTotHostEnvironmentId } from "../tots/totEditorStore";
+import { TotEditorHost } from "../tots/TotEditorDialog";
 import type { ReactNode } from "react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
@@ -226,6 +234,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     select: (location) => isSidebarUtilityPage(location.pathname),
   });
   const pullRequestsSupported = usePullRequestsSupported();
+  const totHostEnvironmentId = useTotHostEnvironmentId();
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -283,6 +292,16 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             label="Usage"
             onClick={handleUsageClick}
           />
+          {totHostEnvironmentId === null ? null : (
+            <SidebarUtilityItem
+              icon={<BotIcon />}
+              label="New Tot"
+              onClick={() => {
+                closeMobileSidebar();
+                openTotEditor({ mode: "create", environmentId: totHostEnvironmentId });
+              }}
+            />
+          )}
         </>
       )}
       <SidebarThreadUndoNotice />
@@ -297,6 +316,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
       <SidebarUtilityMenu />
+      <TotEditorHost />
     </SidebarFooter>
   );
 });
