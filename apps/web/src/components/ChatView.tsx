@@ -82,6 +82,7 @@ import {
   type ScopedThreadRef,
   type ThreadId,
   ProviderInteractionMode,
+  isGroupChatThreadId,
   parseTotThreadId,
   resolveIdleCompaction,
   RuntimeMode,
@@ -313,6 +314,7 @@ import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { GroupChatHero } from "./tots/GroupChatHero";
 import { TotHeaderTint, TotThreadHero } from "./tots/TotThreadHero";
 import { useSideChat } from "./chat/useSideChat";
 import { sideThreadComposer, sideThreadKindOf } from "@t3tools/client-runtime/side-thread";
@@ -1071,6 +1073,7 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
   const isTotThread =
     activeThreadRef !== null && parseTotThreadId(activeThreadRef.threadId) !== null;
+  const isRoomThread = activeThreadRef !== null && isGroupChatThreadId(activeThreadRef.threadId);
   const activeEnvironmentServerBrowser = useEnvironmentSupportsServerBrowser(
     activeThreadRef?.environmentId ?? null,
   );
@@ -3587,6 +3590,11 @@ export default function ChatView(props: ChatViewProps) {
                   environmentId={activeThread.environmentId}
                   threadId={activeThread.id}
                 />
+              ) : isRoomThread ? (
+                <GroupChatHero
+                  environmentId={activeThread.environmentId}
+                  threadId={activeThread.id}
+                />
               ) : null}
               <WorkspaceMutationIdContext value={workspaceMutationId}>
                 <ThreadTimeline
@@ -4053,7 +4061,7 @@ export default function ChatView(props: ChatViewProps) {
                 />
 
                 {/* A Tot's thread is a conversation, not work in a checkout. */}
-                {isTotThread ? null : (
+                {isTotThread || isRoomThread ? null : (
                   <ThreadDetailsPanel
                     anchor={threadPanelPopoverAnchorRef}
                     handle={threadPanelPopoverHandle}
