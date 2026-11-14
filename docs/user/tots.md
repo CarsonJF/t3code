@@ -36,6 +36,20 @@ A Tot is one conversation. Its project holds only its own thread, so Tots never 
 
 Each Tot remembers in its own folder. `MEMORY.md` holds short lines about you, your machines and projects, your preferences, decisions and work in flight; longer notes go in a `memory` folder beside it. The Tot reads it when a new thread starts and keeps it up to date as it learns. Ask a Tot what it remembers, or tell it to forget something. Home can read every Tot's memory.
 
+Open a Tot's memory from **Settings → Tots → Memory**, or right-click it in the sidebar. You can edit its files there. **Shared memory** shows what every Tot knows about you; it is read-only there.
+
+## Moving a Tot
+
+A Tot lives on one machine. To move it, open **Edit**, choose another machine under **Lives on**, and save. The Tot is made again on that machine with its memory; its thread starts fresh, and its model and any project scope are chosen again there. The original is removed once the new one is ready. Home stays where it is.
+
+## In the sidebar
+
+Tots sit under the search bar. Each row shows what the Tot is doing (working, needs you, failed, off) and a filled dot when it has replied since you last looked. Right-click a Tot to open, edit, open its memory, start fresh, turn it off or delete it. The **Tots** button at the bottom opens Tots settings.
+
+Turn on **Tot toasts** in Appearance settings to get a toast when a Tot replies, needs you or fails while you are in another thread.
+
+A Tot's replies are drawn in its color, with its face and name beside them.
+
 ## Instructions and fresh starts
 
 **Settings → Tots → Instructions** opens a Tot's `AGENTS.md`; the editor's instructions are kept there.
@@ -44,6 +58,6 @@ Each Tot remembers in its own folder. `MEMORY.md` holds short lines about you, y
 
 ## Faces
 
-Pick a face's color, shape and skin when you create or edit a Tot. Skins come in series, such as Jelly, Metal or Wood; pick a series to see its skins. On mobile you can change the color and shape; a skin set on desktop shows there too.
+Pick a face's color, shape and skin when you create or edit a Tot. The antenna is off unless you turn it on for that Tot. Skins come in series, such as Jelly, Metal or Wood; pick a series to see its skins. On mobile you can change the color and shape; a skin set on desktop shows there too.
 
 Faces move in a Tot's own thread, in the Tots tab, and when you hover them in the sidebar. To keep them still, turn off **Animate Tot avatars** in Appearance settings, on each device.
