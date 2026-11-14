@@ -2,6 +2,7 @@ import { EnvironmentId, ProjectId, ThreadId, type ThreadGroupsState } from "@t3t
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  buildProjectPickerSections,
   gradientWashStop,
   projectColorStop,
   environmentsWithThreadGroup,
@@ -84,6 +85,40 @@ describe("splitThreadsByGroup", () => {
     ]);
     expect(split.ungrouped).toEqual([threads[2], threads[3]]);
     expect(environmentsWithThreadGroup(byEnvironment, "xn")).toEqual([DESKTOP, LAPTOP]);
+  });
+});
+
+describe("buildProjectPickerSections", () => {
+  it("puts the most recent first, then pinned, groups in order, and the rest", () => {
+    const project = (id: string, pinned = false) => ({ id: ProjectId.make(id), pinned });
+    const byEnvironment = new Map([
+      [
+        DESKTOP,
+        {
+          ...state,
+          projectDefaults: {
+            [ProjectId.make("grouped")]: [{ groupId: "other", since: "2026-10-26T10:00:00.000Z" }],
+            [ProjectId.make("pinned")]: [{ groupId: "xn", since: "2026-10-26T10:00:00.000Z" }],
+          },
+        },
+      ],
+    ]);
+    const projects = [project("loose"), project("grouped"), project("pinned", true)];
+
+    const sections = buildProjectPickerSections({
+      projects,
+      mostRecent: projects[0]!,
+      isPinned: (candidate) => candidate.pinned,
+      projectRefs: (candidate) => [{ environmentId: DESKTOP, projectId: candidate.id }],
+      byEnvironment,
+    });
+
+    expect(sections.map((section) => [section.label, section.projects])).toEqual([
+      ["Most recent", [projects[0]]],
+      ["Pinned", [projects[2]]],
+      ["other", [projects[1]]],
+      ["Other projects", [projects[0]]],
+    ]);
   });
 });
 
