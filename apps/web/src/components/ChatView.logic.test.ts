@@ -213,6 +213,25 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
     ).toBe(true);
   });
 
+  it("acknowledges a group chat message by the message alone, since a room starts no run", () => {
+    const localDispatch = createLocalDispatchSnapshot(
+      makeThread({ latestRun: completedTurn, runtime: readySession }),
+      { latestUserMessageId: MessageId.make("before") },
+    );
+    const input = {
+      localDispatch,
+      phase: "ready" as const,
+      latestRun: completedTurn,
+      latestUserMessageId: MessageId.make("after"),
+      runtime: readySession,
+      hasPendingApproval: false,
+      hasPendingUserInput: false,
+      threadError: null,
+    };
+    expect(hasServerAcknowledgedLocalDispatch(input)).toBe(false);
+    expect(hasServerAcknowledgedLocalDispatch({ ...input, threadId: "tot-room:hello" })).toBe(true);
+  });
+
   it("holds a first send while the thread shell still reports a preparing run", () => {
     const localDispatch = createLocalDispatchSnapshot(makeThread());
     const preparingRun = {
