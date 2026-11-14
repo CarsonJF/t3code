@@ -2731,6 +2731,7 @@ export const layerWsRpc = (
         [WS_METHODS.totsDisable]: (input) => tots.disable(input.id),
         [WS_METHODS.totsStartFresh]: (input) => tots.startFresh(input.id),
         [WS_METHODS.totsReadMemory]: (input) => tots.readMemory(input.id),
+        [WS_METHODS.totsDesignAvatar]: (input) => tots.askForAvatar(input.id, input.prompt),
         [WS_METHODS.groupChatsCreate]: (input) => groupChats.create(input),
         [WS_METHODS.groupChatsUpdate]: (input) => groupChats.update(input),
         [WS_METHODS.groupChatsRemove]: (input) => groupChats.remove(input.id),
