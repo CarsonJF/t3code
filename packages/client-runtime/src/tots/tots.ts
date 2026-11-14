@@ -110,6 +110,17 @@ export function selectTots(
   });
 }
 
+/** Machines a new Tot can live on: the one already hosting Tots first, then the rest. */
+export function totHostOrder(
+  connected: ReadonlyArray<EnvironmentId>,
+  tots: ReadonlyArray<EnvironmentTot>,
+): ReadonlyArray<EnvironmentId> {
+  const hosting = tots
+    .map((entry) => entry.environmentId)
+    .filter((environmentId) => connected.includes(environmentId));
+  return [...new Set([...hosting, ...connected])];
+}
+
 export const isTotProject = (projectId: ProjectId, tots: ReadonlyArray<Tot>): boolean =>
   tots.some((tot) => tot.projectId === projectId);
 
