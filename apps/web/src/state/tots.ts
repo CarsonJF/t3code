@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { selectTots, type EnvironmentTot } from "@t3tools/client-runtime/tots";
+import { selectTots, withoutTotProjects, type EnvironmentTot } from "@t3tools/client-runtime/tots";
 import {
   HOME_TOT_ID,
   type EnvironmentId,
@@ -10,6 +10,7 @@ import {
 import { Atom } from "effect/reactivity";
 
 import { appAtomRegistry } from "../rpc/atomRegistry";
+import { useProjects } from "./entities";
 import { environmentSummaries } from "./presentation";
 import { serverEnvironment } from "./server";
 
@@ -25,6 +26,11 @@ const totsAtom = Atom.make((get): ReadonlyArray<EnvironmentTot> => {
 
 export function useTots(): ReadonlyArray<EnvironmentTot> {
   return useAtomValue(totsAtom);
+}
+
+/** Projects offered for new work: everything but the Tots' own projects. */
+export function usePickableProjects() {
+  return withoutTotProjects(useProjects(), useTots());
 }
 
 /** Home's current thread, for the shortcut and palette; null while Home is off. */
