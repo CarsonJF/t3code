@@ -1,6 +1,8 @@
 import { OrchestratorMcpFailure } from "@t3tools/contracts";
-import { refuseTots } from "../../totCaller.ts";
+import { readTotCaller, refuseTots } from "../../totCaller.ts";
+import * as TotService from "../../../tots/TotService.ts";
 import { OrchestratorToolkit } from "./tools.ts";
+import * as Option from "effect/Option";
 import * as Effect from "effect/Effect";
 
 import * as PeerForwarding from "../../../peer/PeerForwarding.ts";
@@ -183,7 +185,24 @@ const handlers = {
         Effect.gen(function* () {
           const scope = yield* McpInvocationContext.McpInvocationContext;
           const service = yield* OrchestratorMcpService.OrchestratorMcpService;
-          return yield* service.sendToThread(scope, input);
+          const sent = yield* service.sendToThread(scope, input);
+          // A Tot handing work to another Tot hears when that run ends.
+          const tot = yield* readTotCaller();
+          if (Option.isSome(tot) && tot.value.via === "local") {
+            const tots = yield* TotService.TotService;
+            const target = yield* tots.totForThread(input.threadId);
+            if (Option.isSome(target)) {
+              yield* tots
+                .addWatch(tot.value.totId, {
+                  environmentId: scope.environmentId,
+                  threadId: input.threadId,
+                  reason: "sent",
+                  runId: sent.runId,
+                })
+                .pipe(Effect.ignore);
+            }
+          }
+          return sent;
         }),
     ),
     // There the thread's parent is here, so only this side can make a follow-up a task.
