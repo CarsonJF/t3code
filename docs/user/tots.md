@@ -69,6 +69,10 @@ Deleting a group chat deletes its thread. Deleting a Tot removes it from its gro
 
 ## Faces
 
-Pick a face's color, shape and skin when you create or edit a Tot. The antenna is off unless you turn it on for that Tot. Skins come in series, such as Jelly, Metal or Wood; pick a series to see its skins. On mobile you can change the color and shape; a skin set on desktop shows there too.
+Pick a face's color, shape and skin when you create or edit a Tot. The antenna is off unless you turn it on for that Tot. When you edit a Tot that is on, type a few words under the face controls and press **Ask**: the Tot designs its own face, which becomes its face and joins a row of saved designs you can pick from later. Skins come in series, such as Jelly, Metal or Wood; pick a series to see its skins. On mobile you can change the color and shape; a skin set on desktop shows there too.
 
 Faces move in a Tot's own thread, in the Tots tab, and when you hover them in the sidebar. To keep them still, turn off **Animate Tot avatars** in Appearance settings, on each device.
+
+## Themes
+
+A Tot can wear its own theme: pick one under **Theme** when you edit it. Projects have a **Theme** row in their settings, and **Appearance → Group themes** sets one per thread group. A thread uses its Tot's theme, else its project's, else its group's, else the app's own. These choices are kept on the device. Picking **Same as the app** (or **Same as the project**) removes one.
