@@ -32,6 +32,7 @@ import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../times
 import { readThreadTurnItems } from "../../state/entities";
 import { useV2ItemSupport } from "../../state/v2ItemSupport";
 import { TimelineRowCtx, TimelineRowActivityCtx, type TimelineRow } from "./timelineRowContext";
+import { TotMessageBubble, useTotThreadSpeaker } from "../tots/TotMessageBubble";
 import { MESSAGE_HEADING_LEVEL, MessageAuthorHeading } from "./TimelineRowParts";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -50,47 +51,57 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
   const text = liveText ?? row.message.text;
   const messageText =
     text || (row.message.streaming || row.suppressEmptyResponse ? "" : gt("(empty response)"));
+  const speaker = useTotThreadSpeaker(ctx.threadRef);
+  const body = (
+    <>
+      <div data-thread-find-text="true">
+        <AssistantCitationSource
+          messageId={row.message.id}
+          {...(ctx.threadRef ? { threadRef: ctx.threadRef } : {})}
+          itemKey={row.id}
+          request={ctx.citationRequest}
+          listRef={ctx.listRef}
+        >
+          <ChatMarkdown
+            text={messageText}
+            renderInsights
+            cwd={ctx.markdownCwd}
+            agentDirectories={() =>
+              ctx.threadRef && row.projectedItem
+                ? agentWorkingDirectories(readThreadTurnItems(ctx.threadRef), row.projectedItem)
+                : []
+            }
+            threadRef={ctx.threadRef ?? undefined}
+            isStreaming={Boolean(row.message.streaming)}
+            lineBreaks={shouldPreserveAssistantLineBreaks(messageText)}
+            skills={ctx.skills}
+            headingLevelOffset={MESSAGE_HEADING_LEVEL}
+            onUseArtifactTemplate={ctx.onUseArtifactTemplate}
+            onRunShellCommand={ctx.onRunShellCommand}
+            onImageExpand={ctx.onImageExpand}
+          />
+        </AssistantCitationSource>
+      </div>
+      {ctx.onOpenTurnDiff ? (
+        <AssistantChangedFilesSection
+          turnSummary={row.assistantTurnDiffSummary}
+          routeThreadKey={ctx.routeThreadKey}
+          resolvedTheme={ctx.resolvedTheme}
+          onOpenTurnDiff={ctx.onOpenTurnDiff}
+        />
+      ) : null}
+    </>
+  );
 
   return (
     <>
       <div className="relative min-w-0 px-1 py-0.5">
-        <MessageAuthorHeading>T3 Code</MessageAuthorHeading>
-        <div data-thread-find-text="true">
-          <AssistantCitationSource
-            messageId={row.message.id}
-            {...(ctx.threadRef ? { threadRef: ctx.threadRef } : {})}
-            itemKey={row.id}
-            request={ctx.citationRequest}
-            listRef={ctx.listRef}
-          >
-            <ChatMarkdown
-              text={messageText}
-              renderInsights
-              cwd={ctx.markdownCwd}
-              agentDirectories={() =>
-                ctx.threadRef && row.projectedItem
-                  ? agentWorkingDirectories(readThreadTurnItems(ctx.threadRef), row.projectedItem)
-                  : []
-              }
-              threadRef={ctx.threadRef ?? undefined}
-              isStreaming={Boolean(row.message.streaming)}
-              lineBreaks={shouldPreserveAssistantLineBreaks(messageText)}
-              skills={ctx.skills}
-              headingLevelOffset={MESSAGE_HEADING_LEVEL}
-              onUseArtifactTemplate={ctx.onUseArtifactTemplate}
-              onRunShellCommand={ctx.onRunShellCommand}
-              onImageExpand={ctx.onImageExpand}
-            />
-          </AssistantCitationSource>
-        </div>
-        {ctx.onOpenTurnDiff ? (
-          <AssistantChangedFilesSection
-            turnSummary={row.assistantTurnDiffSummary}
-            routeThreadKey={ctx.routeThreadKey}
-            resolvedTheme={ctx.resolvedTheme}
-            onOpenTurnDiff={ctx.onOpenTurnDiff}
-          />
-        ) : null}
+        <MessageAuthorHeading>{speaker?.tot.name ?? "T3 Code"}</MessageAuthorHeading>
+        {speaker === undefined ? (
+          body
+        ) : (
+          <TotMessageBubble speaker={speaker}>{body}</TotMessageBubble>
+        )}
         {!row.showAssistantMeta && row.projectedItem?.item.status === "interrupted" ? (
           <div className="mt-1.5 flex">
             <AssistantStatusBadge status="interrupted" />
@@ -98,7 +109,7 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
         ) : null}
         {row.showAssistantMeta ? (
           <AssistantMessageMeta
-            className="mt-1.5"
+            className={speaker === undefined ? "mt-1.5" : "mt-1.5 pl-9.5"}
             projectedItem={row.projectedItem}
             message={row.message}
             showCopyButton={row.showAssistantCopyButton}
