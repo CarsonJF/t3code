@@ -1056,18 +1056,27 @@ const make = Effect.gen(function* () {
       runs: ReadonlyArray<OrchestrationV2Run>,
     ) {
       const current = yield* outcome(runs);
-      if (input.untilAttention === true && current.run.status === "waiting") {
+      // A run can stay "running" while a request waits on someone, so look at the requests.
+      if (input.untilAttention === true && !isTerminalRunStatus(current.run.status)) {
         const { runtimeRequests } = yield* getProjectThreadRecords(input, ["runtimeRequests"]);
-        const asked = runtimeRequests.find((request) => request.status === "pending");
-        const attention: "question" | "approval" | undefined =
-          asked === undefined ? undefined : asked.kind === "user_input" ? "question" : "approval";
-        return {
-          ...current,
-          settled: true,
-          resultRun: undefined,
-          attention,
-          attentionRequestId: asked?.id,
-        };
+        // App tool calls and auth refreshes are the client's to answer, not an agent's.
+        const asked = runtimeRequests.find(
+          (request) =>
+            request.status === "pending" &&
+            request.kind !== "dynamic_tool_call" &&
+            request.kind !== "auth_refresh",
+        );
+        if (asked !== undefined || current.run.status === "waiting") {
+          const attention: "question" | "approval" | undefined =
+            asked === undefined ? undefined : asked.kind === "user_input" ? "question" : "approval";
+          return {
+            ...current,
+            settled: true,
+            resultRun: undefined,
+            attention,
+            attentionRequestId: asked?.id,
+          };
+        }
       }
       if (!current.settled || !untilDelegatedWorkSettled) {
         return {
@@ -1112,6 +1121,7 @@ const make = Effect.gen(function* () {
             ...(untilDelegatedWorkSettled
               ? (["subagent.updated", "provider-thread.updated"] as const)
               : []),
+            ...(input.untilAttention === true ? (["runtime-request.updated"] as const) : []),
           ] as const
         ).map((eventType) =>
           orchestrator.streamStoredEventsFrom({
