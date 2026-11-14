@@ -196,7 +196,11 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
         environmentId: target.environmentId,
         input: { id: editing.id },
       });
-      const created = await createTot({ environmentId, input: checked.value });
+      // Every machine already has a Home of its own, so Home takes its settings there instead.
+      const created =
+        editing.id === HOME_TOT_ID
+          ? await updateTot({ environmentId, input: { id: HOME_TOT_ID, ...checked.value } })
+          : await createTot({ environmentId, input: checked.value });
       if (created._tag === "Failure") {
         setPending(false);
         if (!isAtomCommandInterrupted(created)) {
@@ -315,7 +319,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                 </div>
               </div>
 
-              {hosts.length > 1 && editing?.id !== HOME_TOT_ID ? (
+              {hosts.length > 1 ? (
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-sm">Lives on</span>
                   <Select
