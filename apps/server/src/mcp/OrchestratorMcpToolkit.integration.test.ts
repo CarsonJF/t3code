@@ -1,4 +1,5 @@
 import * as NodeURL from "node:url";
+import * as TotTestkit from "../tots/TotTestkit.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
@@ -268,7 +269,9 @@ describe("orchestrator MCP toolkit", () => {
         Layer.provide(layerProviderRegistry),
         Layer.provide(ServerSettings.layerTest()),
         Layer.provide(layerUnusedScheduledTaskStub),
-        Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
+        Layer.provide(
+          Layer.merge(Layer.mock(PeerForwarding.PeerForwarding)({}), TotTestkit.notTotLayer),
+        ),
         Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
         Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
         Layer.provide(Layer.mock(ProjectService.ProjectService)({})),
