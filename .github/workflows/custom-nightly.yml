@@ -63,7 +63,7 @@ jobs:
       upstream_tag: ${{ steps.resolve.outputs.upstream_tag }}
       version: ${{ steps.resolve.outputs.version }}
       release_tag: ${{ steps.resolve.outputs.release_tag }}
-      sha: ${{ steps.rebase.outputs.sha || steps.resolve.outputs.repair_sha }}
+      sha: ${{ steps.budget.outputs.sha || steps.rebase.outputs.sha || steps.resolve.outputs.repair_sha }}
       failure: ${{ steps.rebase.outputs.failure || steps.checks.outputs.failure }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -167,7 +167,18 @@ jobs:
           old_base="$(git merge-base HEAD upstream/main)"
           echo "old_tip=$old_tip" >> "$GITHUB_OUTPUT"
           echo "Our commits:"; git log --oneline "$old_base..HEAD"
-          if ! git rebase --onto "$tag_sha" "$old_base" HEAD; then
+          # The budget is a measured snapshot, regenerated after the rebase, so a conflict
+          # on it alone takes upstream's side (ours, mid-rebase) and moves on.
+          budget=apps/server/src/provider/agentContextBudget.json
+          rebase_ok=true
+          git rebase --onto "$tag_sha" "$old_base" HEAD || rebase_ok=false
+          while [[ "$rebase_ok" == false ]]; do
+            [[ "$(git diff --name-only --diff-filter=U)" == "$budget" ]] || break
+            git checkout --ours -- "$budget"
+            git add "$budget"
+            if GIT_EDITOR=true git rebase --continue; then rebase_ok=true; fi
+          done
+          if [[ "$rebase_ok" == false ]]; then
             {
               echo "failure<<EOF"
               echo "Rebase of \`$BRANCH\` onto \`$TAG\` (${tag_sha}) conflicted. Conflicting files:"
@@ -187,6 +198,19 @@ jobs:
           node-version-file: package.json
           cache: true
           run-install: false
+
+      - id: budget
+        name: Regenerate the agent context budget
+        if: steps.resolve.outputs.mode == 'full'
+        run: |
+          set -euo pipefail
+          vp install
+          (cd apps/server && UPDATE_AGENT_CONTEXT_BUDGET=1 vp test run src/provider/AgentContextBudget.test.ts)
+          if ! git diff --quiet -- apps/server/src/provider/agentContextBudget.json; then
+            git add apps/server/src/provider/agentContextBudget.json
+            git commit -m "chore(server): regenerate the agent context budget after rebase"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Format, lint, knip, typecheck of affected packages, and tests beside
       # our changed files, measured against the upstream nightly commit.
