@@ -120,3 +120,21 @@ export function totStillHeadPath(shape: TotShape | undefined): string | null {
     .map((point, i) => `${i === 0 ? "M" : "L"}${toBox(point.x)} ${toBox(point.y)}`)
     .join(" ")} Z`;
 }
+
+const ANTENNA_STYLE_ID = "tot-antenna-style";
+
+/** BoopFace draws its antenna as a circle in the shadow root; a Tot shows it only when asked. */
+export function applyTotAntenna(element: HTMLElement, visible: boolean): void {
+  const root = element.shadowRoot;
+  if (!root) return;
+  const existing = root.getElementById(ANTENNA_STYLE_ID);
+  if (visible) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+  const style = document.createElement("style");
+  style.id = ANTENNA_STYLE_ID;
+  style.textContent = "#antennaDot{display:none}";
+  root.append(style);
+}
