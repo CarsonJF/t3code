@@ -1132,3 +1132,65 @@ it.effect("waitForThread until attention returns when the run stops for an appro
     expect(yield* Fiber.join(plain)).toMatchObject({ timedOut: true });
   }),
 );
+
+it.effect("waitForThread until attention wakes for an approval a running run opens", () =>
+  Effect.gen(function* () {
+    const projectId = ProjectId.make("project:thread-management:wait-request");
+    const threadId = ThreadId.make("thread:thread-management:wait-request");
+    const runId = RunId.make("run:thread-management:wait-request");
+    const subscribed = yield* Deferred.make<void>();
+    const requestEvents = yield* Queue.unbounded<OrchestrationV2StoredEvent>();
+    let runtimeRequests: Array<{ id: string; kind: string; status: string }> = [];
+    const layerTest = ThreadManagementService.layer.pipe(
+      Layer.provide(Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({})),
+      Layer.provide(
+        Layer.mock(Orchestrator.OrchestratorV2)({
+          getThreadEventSequence: () => Effect.succeed(0),
+          restartContinuationPending: () => Effect.succeed(false),
+          streamStoredEventsFrom: (input) =>
+            input?.eventType === "runtime-request.updated"
+              ? Stream.fromEffect(Deferred.succeed(subscribed, undefined)).pipe(
+                  Stream.drain,
+                  Stream.concat(Stream.fromQueue(requestEvents)),
+                )
+              : Stream.never,
+          getThreadRecords: () =>
+            Effect.sync(
+              () =>
+                ({
+                  thread: { id: threadId, projectId, deletedAt: null },
+                  // Claude keeps the run running while a command waits for approval.
+                  runs: [{ id: runId, status: "running" }],
+                  runtimeRequests,
+                }) as unknown as OrchestrationV2ThreadProjection,
+            ),
+        }),
+      ),
+      Layer.provide(ServerSettings.layerTest()),
+      Layer.provide(layerReceiptsTest),
+    );
+    const service = yield* ThreadManagementService.ThreadManagementService.pipe(
+      Effect.provide(layerTest),
+    );
+    const attentive = yield* service
+      .waitForThread({ projectId, threadId, runId, timeoutMs: 60_000, untilAttention: true })
+      .pipe(Effect.forkChild);
+    yield* Deferred.await(subscribed);
+    // An app's tool call is the client's to answer, so the approval behind it is the one reported.
+    runtimeRequests = [
+      { id: "request:app", kind: "dynamic_tool_call", status: "pending" },
+      { id: "request:echo", kind: "command", status: "pending" },
+    ];
+    yield* Queue.offer(requestEvents, {
+      sequence: 1,
+      event: { threadId, type: "runtime-request.updated", payload: { id: "request:echo" } },
+    } as unknown as OrchestrationV2StoredEvent);
+
+    expect(yield* Fiber.join(attentive)).toMatchObject({
+      timedOut: false,
+      run: { id: runId, status: "running" },
+      attention: "approval",
+      attentionRequestId: "request:echo",
+    });
+  }),
+);
