@@ -1066,3 +1066,69 @@ it.effect(
       }).pipe(Effect.provide(layerTest));
     }),
 );
+
+it.effect("waitForThread until attention returns when the run stops for an approval", () =>
+  Effect.gen(function* () {
+    const projectId = ProjectId.make("project:thread-management:wait-attention");
+    const threadId = ThreadId.make("thread:thread-management:wait-attention");
+    const runId = RunId.make("run:thread-management:wait-attention");
+    const subscribed = yield* Deferred.make<void>();
+    const events = yield* Queue.unbounded<OrchestrationV2StoredEvent>();
+    let runs: Array<{ id: RunId; status: OrchestrationV2Run["status"] }> = [
+      { id: runId, status: "running" },
+    ];
+    let runtimeRequests: Array<{ kind: string; status: string }> = [];
+    const layerTest = ThreadManagementService.layer.pipe(
+      Layer.provide(Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({})),
+      Layer.provide(
+        Layer.mock(Orchestrator.OrchestratorV2)({
+          getThreadEventSequence: () => Effect.succeed(0),
+          restartContinuationPending: () => Effect.succeed(false),
+          streamStoredEventsFrom: (input) =>
+            input?.eventType === "run.updated"
+              ? Stream.fromEffect(Deferred.succeed(subscribed, undefined)).pipe(
+                  Stream.drain,
+                  Stream.concat(Stream.fromQueue(events)),
+                )
+              : Stream.never,
+          getThreadRecords: () =>
+            Effect.sync(
+              () =>
+                ({
+                  thread: { id: threadId, projectId, deletedAt: null },
+                  runs,
+                  runtimeRequests,
+                }) as unknown as OrchestrationV2ThreadProjection,
+            ),
+        }),
+      ),
+      Layer.provide(ServerSettings.layerTest()),
+      Layer.provide(layerReceiptsTest),
+    );
+    const service = yield* ThreadManagementService.ThreadManagementService.pipe(
+      Effect.provide(layerTest),
+    );
+    const attentive = yield* service
+      .waitForThread({ projectId, threadId, runId, timeoutMs: 60_000, untilAttention: true })
+      .pipe(Effect.forkChild);
+    const plain = yield* service
+      .waitForThread({ projectId, threadId, runId, timeoutMs: 60_000 })
+      .pipe(Effect.forkChild);
+    yield* Deferred.await(subscribed);
+    runs = [{ id: runId, status: "waiting" }];
+    runtimeRequests = [{ kind: "command", status: "pending" }];
+    yield* Queue.offer(events, {
+      sequence: 1,
+      event: { threadId, type: "run.updated", payload: { id: runId, status: "waiting" } },
+    } as unknown as OrchestrationV2StoredEvent);
+
+    expect(yield* Fiber.join(attentive)).toMatchObject({
+      timedOut: false,
+      run: { id: runId, status: "waiting" },
+      attention: "approval",
+    });
+    // Without the option the wait holds on for the run's end, as before.
+    yield* TestClock.adjust(Duration.seconds(61));
+    expect(yield* Fiber.join(plain)).toMatchObject({ timedOut: true });
+  }),
+);
