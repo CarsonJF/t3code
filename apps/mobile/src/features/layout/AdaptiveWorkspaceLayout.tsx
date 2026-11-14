@@ -283,7 +283,7 @@ function AdaptiveWorkspaceLayoutContent(
   const { width: viewportWidth, height } = nativeMetrics ?? windowDimensions;
   const pathname = props.pathname;
   const workspace = useWorkspaceTabs();
-  // Settings and Usage occupy the workspace rather than a list/detail pair.
+  // Settings and the page tabs (Usage, Tots, Workflows) occupy the workspace rather than a list/detail pair.
   const androidSettingsOpen = useAndroidWorkspaceRoot()?.settingsOpen ?? false;
   const safeAreaInsets = useSafeAreaInsets();
   const workspacePage =
