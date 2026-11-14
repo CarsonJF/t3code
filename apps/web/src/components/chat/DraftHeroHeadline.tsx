@@ -24,7 +24,8 @@ import {
   buildSidebarProjectPickerEntries,
   projectGroupsSpanEnvironments,
 } from "~/sidebarProjectGrouping";
-import { useProjects, useVisibleThreadShells } from "~/state/entities";
+import { useVisibleThreadShells } from "~/state/entities";
+import { usePickableProjects } from "~/state/tots";
 import { useThreadGroupsStore } from "~/threadGroupsStore";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { ProjectEnvironmentBadge } from "../ProjectEnvironmentBadge";
@@ -77,7 +78,7 @@ export function DraftHeroHeadline({
   activeProjectTitle,
 }: DraftHeroHeadlineProps) {
   const gt = useGT();
-  const projects = useProjects();
+  const projects = usePickableProjects();
   const threads = useVisibleThreadShells();
   const projectSortOrder = useClientSettings((settings) => settings.sidebarProjectSortOrder);
   const { environments } = useEnvironments();
