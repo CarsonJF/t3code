@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import {
+  DEFAULT_HOME_TOT,
   EnvironmentId,
   HOME_TOT_ID,
   ProjectId,
@@ -25,7 +26,8 @@ const totProjectId = ProjectId.make("tot-project");
 const modelSelection = { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" };
 const avatar = { color: "#123456" };
 
-const makeTots = () => {
+const makeTots = (settings?: Parameters<typeof ServerSettings.layerTest>[0]) => {
+  const ensured: Array<{ readonly id: string; readonly siblings: ReadonlyArray<string> }> = [];
   const launched: Array<ThreadLaunch.ThreadLaunchInput> = [];
   const sent: Array<ThreadManagement.ThreadManagementSendInput> = [];
   const dispatched: Array<OrchestrationV2ServerCommand> = [];
@@ -44,11 +46,13 @@ const makeTots = () => {
     Layer.provideMerge(
       Layer.mergeAll(
         NodeCrypto.layer,
-        ServerSettings.layerTest(),
+        ServerSettings.layerTest(settings),
         Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
           namedProjectsRoot: "/projects",
-          ensureTotProject: (tot) =>
-            Effect.succeed({ projectId: totProjectId, workspaceRoot: `/tots/${tot.id}` }),
+          ensureTotProject: (tot, siblings) => {
+            ensured.push({ id: tot.id, siblings: siblings.map((sibling) => sibling.id) });
+            return Effect.succeed({ projectId: totProjectId, workspaceRoot: `/tots/${tot.id}` });
+          },
         }),
         Layer.mock(ProjectService.ProjectService)({
           update: (input) => {
@@ -76,7 +80,7 @@ const makeTots = () => {
       ),
     ),
   );
-  return { layer, launched, sent, dispatched, renamedProjects, running };
+  return { layer, ensured, launched, sent, dispatched, renamedProjects, running };
 };
 
 const create = (name: string) =>
@@ -96,6 +100,21 @@ it.effect("creates a Tot with an id from its name and refuses a clashing name", 
     expect(clash.message).toBe("A Tot named like this already exists.");
     const tots = yield* (yield* TotService.TotService).list;
     expect(tots.map((tot) => tot.id)).toEqual(["home", "work"]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("brings every set-up Tot's folder up to date at start and when the Tots change", () => {
+  const { layer, ensured } = makeTots({
+    tots: [{ ...DEFAULT_HOME_TOT, projectId: totProjectId }],
+  });
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    // At start: Home's instructions and memory file catch up with this version.
+    expect(ensured).toEqual([{ id: "home", siblings: ["home"] }]);
+    ensured.length = 0;
+    yield* tots.create({ name: "Work", avatar, scope: "all", instructions: "", modelSelection });
+    // Home's list of fellow Tots now names Work; Work has no folder until it is turned on.
+    expect(ensured).toEqual([{ id: "home", siblings: ["home", "work"] }]);
   }).pipe(Effect.provide(layer));
 });
 

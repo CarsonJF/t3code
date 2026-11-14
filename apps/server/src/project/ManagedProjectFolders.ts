@@ -563,6 +563,16 @@ const make = Effect.gen(function* () {
         .writeFileString(claudePath, "@AGENTS.md\n")
         .pipe(Effect.mapError(folderError));
     }
+    // The Tot's memory; it reads and edits this file itself, so only seed it once.
+    const memoryPath = path.join(workspaceRoot, "MEMORY.md");
+    if (!(yield* fileSystem.exists(memoryPath).pipe(Effect.mapError(folderError)))) {
+      yield* fileSystem
+        .writeFileString(
+          memoryPath,
+          `# Memory\n\nWhat ${tot.name} remembers. One short line each.\n`,
+        )
+        .pipe(Effect.mapError(folderError));
+    }
     const id = yield* random
       .uuidV4()
       .pipe(Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })));
