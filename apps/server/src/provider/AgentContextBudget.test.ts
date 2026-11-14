@@ -1,13 +1,14 @@
-import * as NodeFS from "node:fs";
-
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as TotTestkit from "../tots/TotTestkit.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import { ProviderInstanceId } from "@t3tools/contracts";
 import { McpProviderSessions } from "@t3tools/provider-core/server/McpProviderSessions";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import { McpServer } from "effect/ai";
 
 import { AssetSigner } from "../assets/AssetSigner.ts";
@@ -157,9 +158,12 @@ it.effect("agent context matches the committed budget", () =>
     };
 
     // The fork's nightly sets this after rebasing so a drifting budget never blocks a release.
-    if (process.env.UPDATE_AGENT_CONTEXT_BUDGET === "1") {
-      NodeFS.writeFileSync(
-        new URL("./agentContextBudget.json", import.meta.url),
+    const update = yield* Config.String("UPDATE_AGENT_CONTEXT_BUDGET").pipe(Config.withDefault(""));
+    if (update === "1") {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* fs.writeFileString(
+        path.join(import.meta.dirname, "agentContextBudget.json"),
         `${JSON.stringify(measured, null, 2)}\n`,
       );
       return;
@@ -169,5 +173,5 @@ it.effect("agent context matches the committed budget", () =>
       measured,
       "Set agentContextBudget.json to the measured values. Before you cut text to fit, run the evals that cover it (evals/README.md).",
     ).toEqual(budget);
-  }).pipe(Effect.provide(layerAdvertisedTools)),
+  }).pipe(Effect.provide(Layer.merge(layerAdvertisedTools, NodeServices.layer))),
 );
