@@ -17,9 +17,9 @@ export const GroupChatId = TrimmedNonEmptyString.check(
 export type GroupChatId = typeof GroupChatId.Type;
 
 export const GROUP_CHAT_DEFAULT_HOP_LIMIT = 4;
-const GROUP_CHAT_MAX_HOP_LIMIT = 12;
-const GROUP_CHAT_MIN_MEMBERS = 2;
-const GROUP_CHAT_MAX_MEMBERS = 8;
+export const GROUP_CHAT_MAX_HOP_LIMIT = 12;
+export const GROUP_CHAT_MIN_MEMBERS = 2;
+export const GROUP_CHAT_MAX_MEMBERS = 8;
 
 const GroupChatMembers = Schema.Array(TotId).check(
   Schema.isMinLength(GROUP_CHAT_MIN_MEMBERS),
