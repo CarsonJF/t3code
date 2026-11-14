@@ -1907,6 +1907,24 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
+    createGroupChat: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:group-chats:create",
+      tag: WS_METHODS.groupChatsCreate,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
+    updateGroupChat: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:group-chats:update",
+      tag: WS_METHODS.groupChatsUpdate,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
+    removeGroupChat: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:group-chats:remove",
+      tag: WS_METHODS.groupChatsRemove,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
     readTotMemory: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:tots:read-memory",
       tag: WS_METHODS.totsReadMemory,
