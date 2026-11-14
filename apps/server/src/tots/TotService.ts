@@ -6,6 +6,7 @@ import {
   type ModelSelection,
   type ThreadId,
   type Tot,
+  type TotAvatar,
   type TotCreateInput,
   type TotId,
   type TotMemory,
@@ -13,6 +14,7 @@ import {
   type TotThreadResult,
   type TotUpdateInput,
   type TotWatch,
+  TOT_MAX_DESIGNS,
   TOT_REPORT_MESSAGE_ID_PREFIX,
   TotError,
   parseTotThreadId,
@@ -62,6 +64,10 @@ export class TotService extends Context.Service<
       id: TotId,
       files: ReadonlyArray<TotMemoryFile>,
     ) => Effect.Effect<void, TotError>;
+    /** Asks a Tot, in its own thread, to design its face; it answers by calling `t3_tot_design_avatar`. */
+    readonly askForAvatar: (id: TotId, prompt: string) => Effect.Effect<void, TotError>;
+    /** A Tot's own design: it becomes the Tot's face and joins its saved options. */
+    readonly saveDesign: (id: TotId, avatar: TotAvatar) => Effect.Effect<Tot, TotError>;
     readonly addWatch: (id: TotId, watch: TotWatch) => Effect.Effect<void, TotError>;
     readonly removeWatch: (
       id: TotId,
@@ -363,6 +369,45 @@ const make = Effect.gen(function* () {
     );
   }, locked);
 
+  const askForAvatar = Effect.fn("TotService.askForAvatar")(function* (id: TotId, prompt: string) {
+    const tot = yield* requireTot(id);
+    const shell = tot.threadId === null ? null : yield* liveShell(tot.threadId);
+    if (tot.threadId === null || shell === null) return yield* fail(`Turn ${tot.name} on first.`);
+    const messageId = `tot-avatar:${yield* newId}`;
+    yield* threads
+      .sendToThread({
+        projectId: shell.projectId,
+        commandId: CommandId.make(messageId),
+        threadId: tot.threadId,
+        messageId: MessageId.make(messageId),
+        text: [
+          "Design your own face. The user asked:",
+          prompt,
+          "",
+          "Call t3_tot_design_avatar once with a color (hex like #0A7EA4), and optionally a shape, a skin number and whether it has an antenna. Pick what fits you; the user keeps it as an option.",
+        ].join("\n"),
+        attachments: [],
+        mode: "auto",
+        createdBy: "system",
+        creationSource: "server",
+      })
+      .pipe(Effect.mapError(() => fail(`${tot.name} could not be asked.`)));
+  });
+
+  const saveDesign = Effect.fn("TotService.saveDesign")(function* (id: TotId, avatar: TotAvatar) {
+    const tot = yield* requireTot(id);
+    const faceKey = (face: TotAvatar) =>
+      `${face.color}|${face.skin ?? ""}|${face.shape ?? ""}|${face.antenna === true}`;
+    const key = faceKey(avatar);
+    const designs = [
+      avatar,
+      ...(tot.designs ?? []).filter((design) => faceKey(design) !== key),
+    ].slice(0, TOT_MAX_DESIGNS);
+    const next: Tot = { ...tot, avatar, designs };
+    yield* replace(next);
+    return next;
+  }, locked);
+
   const addWatch = Effect.fn("TotService.addWatch")(function* (id: TotId, watch: TotWatch) {
     const tot = yield* requireTot(id);
     const same = (existing: TotWatch) =>
@@ -441,6 +486,8 @@ const make = Effect.gen(function* () {
     }),
     readMemory,
     writeMemory,
+    askForAvatar,
+    saveDesign,
     addWatch,
     removeWatch,
     setWatchAll,
