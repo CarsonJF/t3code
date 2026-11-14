@@ -40,6 +40,7 @@ import * as PeerLinks from "../../apps/server/src/peer/PeerLinks.ts";
 import * as RemoteDelegation from "../../apps/server/src/peer/RemoteDelegation.ts";
 import * as SqlitePersistence from "../../apps/server/src/persistence/Sqlite.ts";
 import * as ServerSettings from "../../apps/server/src/serverSettings.ts";
+import * as TotTestkit from "../../apps/server/src/tots/TotTestkit.ts";
 
 const threadId = ThreadId.make("mcp-tool-use-eval");
 const providerThreadId = ProviderThreadId.make("provider-thread:mcp-tool-use-eval");
@@ -84,6 +85,7 @@ export const makeBackgroundWait = Effect.fn("evaluateMcpToolUse.makeBackgroundWa
             get: () => Effect.succeedSome(runtime),
           }),
           ServerSettings.layerTest(),
+          TotTestkit.notTotLayer,
           CommandReceiptStore.layer.pipe(Layer.provide(SqlitePersistence.layerMemory)),
         ),
       ),
@@ -106,6 +108,7 @@ export const makeBackgroundWait = Effect.fn("evaluateMcpToolUse.makeBackgroundWa
       Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
       Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
       Layer.provide(Layer.mock(RemoteDelegation.RemoteDelegation)({})),
+      Layer.provide(TotTestkit.notTotLayer),
     ),
   );
   type Entry = Parameters<McpServer.McpServer["Service"]["addTool"]>[0];
