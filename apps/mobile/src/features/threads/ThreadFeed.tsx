@@ -288,6 +288,8 @@ import { ZoomableImagePressable } from "./ZoomableImagePressable";
 import { openSettings } from "../settings/settings-navigation";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { formatMessageTimestamp } from "./messageTimestamp";
+import { useAnimateTotAvatars, useTots } from "../../state/tots";
+import { TotLiveFace } from "../tots/TotLiveFace";
 
 const WIDE_MARKDOWN_BLOCK_OPTIONS = {
   // iOS blockquotes and selectable text measure separately; definite bubble width matches UIKit's drawing width.
@@ -2592,6 +2594,7 @@ function ThreadFeedPlaceholder(props: {
   readonly horizontalPadding: number;
   readonly title: string;
   readonly topInset: number;
+  readonly visual?: ReactNode;
 }) {
   return (
     <View
@@ -2606,6 +2609,7 @@ function ThreadFeedPlaceholder(props: {
       }}
     >
       <View className="max-w-[320px] items-center gap-2">
+        {props.visual}
         <Text className="text-center font-t3-bold text-lg text-foreground">{props.title}</Text>
         <Text className="text-center text-sm leading-normal text-foreground-secondary">
           {props.detail}
@@ -2736,6 +2740,10 @@ const THREAD_FEED_MAINTAIN_SCROLL_AT_END = {
 
 export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const { listRef, onIsAtEndChange, onHeaderMaterialVisibilityChange } = props;
+  const tot = useTots().find(
+    (entry) => entry.environmentId === props.environmentId && entry.tot.threadId === props.threadId,
+  );
+  const animateTot = useAnimateTotAvatars();
   const workflowOpening = useWorkflowOpening(props.detailRef);
   const guestShare = useThreadGuestShare(props.detailRef);
   const deviceType = useDeviceType();
@@ -3919,8 +3927,25 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             style={[StyleSheet.absoluteFill, { left: contentLeftInset, right: contentRightInset }]}
           >
             <ThreadFeedPlaceholder
-              title="No conversation yet"
-              detail="Ask the agent to inspect the repo, run a command, or continue the active thread."
+              {...(tot === undefined
+                ? {
+                    title: "No conversation yet",
+                    detail:
+                      "Ask the agent to inspect the repo, run a command, or continue the active thread.",
+                  }
+                : {
+                    title: tot.tot.name,
+                    detail:
+                      "Tell it what you want done. It starts, watches and answers the threads in its scope for you.",
+                    visual: (
+                      <TotLiveFace
+                        avatar={tot.tot.avatar}
+                        state="idle"
+                        size={112}
+                        animate={animateTot}
+                      />
+                    ),
+                  })}
               topInset={topContentInset}
               bottomInset={bottomContentInset}
               horizontalPadding={horizontalPadding}
