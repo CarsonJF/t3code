@@ -154,6 +154,7 @@
     "@types/react-dom": "catalog:",
     "aws4fetch": "1.0.20",
     "babel-preset-expo": "~58.0.24",
+    "boopface": "0.8.0",
     "gt": "2.27.0",
     "jsdom": "^30.0.1",
     "nitrogen": "0.37.2",
