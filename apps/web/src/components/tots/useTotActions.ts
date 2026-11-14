@@ -15,6 +15,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { toastManager } from "../ui/toast";
 import { openTotEditor } from "./totEditorStore";
+import { openTotMemory } from "./TotMemoryDialog";
 import { useTotModelChoice } from "./useTotModelChoice";
 
 function reportFailure(title: string, error: unknown) {
@@ -71,6 +72,7 @@ export function useTotActions(environmentId: EnvironmentId, tot: Tot) {
     hasInstructionsFile: project !== null,
     openThread,
     edit: () => openTotEditor({ mode: "edit", environmentId, tot }),
+    openMemory: () => openTotMemory({ environmentId, tot }),
     async turnOn() {
       const started = await run(`Could not turn on ${tot.name}`, () =>
         enableTot({
