@@ -19,6 +19,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { useMediaQuery } from "~/hooks/useMediaQuery";
+import { useScopedThemes } from "~/hooks/useScopedThemes";
+import { scopedThemeKey } from "~/scopedThemes.logic";
 import { useClientSettings } from "~/hooks/useSettings";
 import { getCustomModelOptionsByInstance } from "~/modelSelection";
 import { useProjects } from "~/state/entities";
@@ -27,6 +29,7 @@ import { useTotHosts, useTots } from "~/state/tots";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
+import { ScopedThemeSelect } from "../settings/ScopedThemeSelect";
 import { SETTINGS_PICKER_TRIGGER_CLASSNAME } from "../settings/settingsLayout";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -89,6 +92,12 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const enableTot = useAtomCommand(serverEnvironment.enableTot, { reportFailure: false });
   const removeTot = useAtomCommand(serverEnvironment.removeTot, { reportFailure: false });
   const designAvatar = useAtomCommand(serverEnvironment.designTotAvatar, { reportFailure: false });
+  const scopedThemes = useScopedThemes();
+  const [themeId, setThemeId] = useState<string | null>(
+    editing === null
+      ? null
+      : (scopedThemes.scoped.tots[scopedThemeKey(target.environmentId, editing.id)] ?? null),
+  );
   const [designPrompt, setDesignPrompt] = useState("");
   const [designState, setDesignState] = useState<"idle" | "asking" | "asked">("idle");
   const [designFailure, setDesignFailure] = useState<string | null>(null);
@@ -209,6 +218,8 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
               input: { id: created.value.id, modelSelection: checked.value.modelSelection },
             });
       await removeTot({ environmentId: target.environmentId, input: { id: editing.id } });
+      scopedThemes.set("tots", target.environmentId, editing.id, null);
+      scopedThemes.set("tots", environmentId, created.value.id, themeId);
       setPending(false);
       closeTotEditor();
       if (enabled?._tag === "Success") {
@@ -231,6 +242,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
         }
         return;
       }
+      scopedThemes.set("tots", environmentId, editing.id, themeId);
       closeTotEditor();
       return;
     }
@@ -242,6 +254,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
       }
       return;
     }
+    scopedThemes.set("tots", environmentId, created.value.id, themeId);
     const enabled = await enableTot({
       environmentId,
       input: { id: created.value.id, modelSelection: checked.value.modelSelection },
@@ -547,6 +560,16 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                     onInstanceModelChange={model.pick}
                   />
                 )}
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-sm">Theme</span>
+                <ScopedThemeSelect
+                  label="Theme"
+                  value={themeId}
+                  inheritLabel="Same as the project"
+                  onChange={setThemeId}
+                />
               </div>
 
               {failure ? <p className="text-destructive-foreground text-sm">{failure}</p> : null}
