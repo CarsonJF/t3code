@@ -329,8 +329,7 @@ const makeTestRelay = Effect.fnUntraced(function* (
       getById: () => Effect.succeedSome(project),
     }),
     Effect.provideService(FetchHttpClient.Fetch, fetch),
-    Effect.provide(NodeCrypto.layer),
-    Effect.provide(ServerSettings.layerTest()),
+    Effect.provide(Layer.merge(NodeCrypto.layer, ServerSettings.layerTest())),
   );
   return { relay, secrets, secretReads, currentShell, shellReads, publications, catchUp };
 });
