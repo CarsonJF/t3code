@@ -558,7 +558,6 @@ export const WS_METHODS = {
   peerLinksAnswerRequest: "peerLinks.answerRequest",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
-  // Tots
   totsCreate: "tots.create",
   totsUpdate: "tots.update",
   totsRemove: "tots.remove",
