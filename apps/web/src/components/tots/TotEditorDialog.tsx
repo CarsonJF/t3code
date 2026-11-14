@@ -8,6 +8,7 @@ import { TOT_SKIN_SERIES, totSkinSeriesOf, totSkinsIn } from "@t3tools/client-ru
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   TOT_SHAPES,
+  type EnvironmentId,
   type ProjectId,
   type TotAvatar as TotAvatarValue,
   type TotScope,
@@ -21,7 +22,7 @@ import { useClientSettings } from "~/hooks/useSettings";
 import { getCustomModelOptionsByInstance } from "~/modelSelection";
 import { useProjects } from "~/state/entities";
 import { serverEnvironment } from "~/state/server";
-import { useTots } from "~/state/tots";
+import { useTotHosts, useTots } from "~/state/tots";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
@@ -64,8 +65,10 @@ export function TotEditorHost() {
 
 function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const { target } = props;
-  const { environmentId } = target;
   const editing = target.mode === "edit" ? target.tot : null;
+  const [chosenHost, setChosenHost] = useState(target.environmentId);
+  const environmentId = editing === null ? chosenHost : target.environmentId;
+  const hosts = useTotHosts();
   const navigate = useNavigate();
   const tots = useTots();
   const projects = useProjects();
@@ -105,6 +108,13 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
       ? [...current, { environmentId, projectId }]
       : current.filter((entry) => entry.projectId !== projectId);
     setScope({ projects: next, groups: scope === "all" ? [] : scope.groups });
+  };
+  // Picked projects and models belong to the old machine, so a move starts them over.
+  const moveTo = (host: EnvironmentId) => {
+    if (host === environmentId) return;
+    setScope((current) => (current === "all" ? "all" : { projects: [], groups: [] }));
+    model.reset();
+    setChosenHost(host);
   };
 
   const submit = async () => {
@@ -206,6 +216,32 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                   ) : null}
                 </div>
               </div>
+
+              {editing === null && hosts.length > 1 ? (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-sm">Lives on</span>
+                  <Select
+                    value={environmentId}
+                    onValueChange={(value) => {
+                      const host = hosts.find((entry) => entry.environmentId === value);
+                      if (host !== undefined) moveTo(host.environmentId);
+                    }}
+                  >
+                    <SelectTrigger size="sm" className="w-48" aria-label="Lives on">
+                      <SelectValue>
+                        {hosts.find((host) => host.environmentId === environmentId)?.label}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup align="end" alignItemWithTrigger={false}>
+                      {hosts.map((host) => (
+                        <SelectItem key={host.environmentId} value={host.environmentId}>
+                          {host.label}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                </div>
+              ) : null}
 
               <fieldset className="flex flex-col gap-1.5">
                 <legend className="mb-1.5 font-medium text-sm">Face</legend>
