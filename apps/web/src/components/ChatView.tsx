@@ -326,6 +326,7 @@ import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { useThreadScopedThemeStyle } from "../hooks/useScopedThemes";
 import { GroupChatHero } from "./tots/GroupChatHero";
 import { TotHeaderTint, TotThreadHero } from "./tots/TotThreadHero";
 import { useSideChat } from "./chat/useSideChat";
@@ -1114,6 +1115,16 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
   const isTotThread =
     activeThreadRef !== null && parseTotThreadId(activeThreadRef.threadId) !== null;
+  const scopedThemeStyle = useThreadScopedThemeStyle(
+    activeThread === undefined || activeThread === null
+      ? null
+      : {
+          environmentId: activeThread.environmentId,
+          id: activeThread.id,
+          projectId: activeThread.projectId,
+          createdAt: activeThread.createdAt,
+        },
+  );
   const isRoomThread = activeThreadRef !== null && isGroupChatThreadId(activeThreadRef.threadId);
   const activeEnvironmentServerBrowser = useEnvironmentSupportsServerBrowser(
     activeThreadRef?.environmentId ?? null,
@@ -3565,7 +3576,9 @@ export default function ChatView(props: ChatViewProps) {
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-x-hidden",
           rightPanelMaximized ? "w-0 flex-none" : "flex-1",
+          scopedThemeStyle && "bg-background text-foreground",
         )}
+        {...(scopedThemeStyle ? { "data-scoped-theme": "", style: scopedThemeStyle } : {})}
         data-chat-column-maximized-away={rightPanelMaximized ? "true" : "false"}
         data-chat-column
         style={
