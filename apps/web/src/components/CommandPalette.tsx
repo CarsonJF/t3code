@@ -1,4 +1,6 @@
 import { ThreadContextDragGhost } from "./chat/ThreadContextDragGhost";
+import { openTotEditor, useTotHostEnvironmentId } from "./tots/totEditorStore";
+import { useTots } from "../state/tots";
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 
@@ -51,6 +53,7 @@ import {
   type EnvironmentId,
   type FilesystemBrowseResult,
   SourceControlProviderKind,
+  HOME_TOT_ID,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
   resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
@@ -58,6 +61,7 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   BugIcon,
+  BotIcon,
   ChartNoAxesColumnIcon,
   CheckIcon,
   ChevronRightIcon,
@@ -417,6 +421,8 @@ function OpenCommandPaletteDialog(props: {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { openChildSearch, setOpen } = props;
+  const tots = useTots();
+  const totHostEnvironmentId = useTotHostEnvironmentId();
   // Keyed by palette session: the intent and restored search only seed this
   // mount, and closing must not change what the closing palette shows.
   const [initialSearch] = useState(
@@ -1672,6 +1678,35 @@ function OpenCommandPaletteDialog(props: {
       );
     },
   });
+
+  for (const { environmentId, tot } of tots) {
+    const threadId = tot.threadId;
+    if (threadId === null) continue;
+    actionItems.push({
+      kind: "action",
+      value: `action:tot:${environmentId}:${tot.id}`,
+      searchTerms: ["tot", "agent", tot.name],
+      title: `Open ${tot.name}`,
+      icon: <BotIcon className={ITEM_ICON_CLASS} />,
+      ...(tot.id === HOME_TOT_ID ? { shortcutCommand: "tots.openHome" as const } : {}),
+      run: async () => {
+        await navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(scopeThreadRef(environmentId, threadId)),
+        });
+      },
+    });
+  }
+  if (totHostEnvironmentId !== null) {
+    actionItems.push({
+      kind: "action",
+      value: "action:new-tot",
+      searchTerms: ["new tot", "create tot", "agent", "coordinator"],
+      title: "New Tot",
+      icon: <BotIcon className={ITEM_ICON_CLASS} />,
+      run: async () => openTotEditor({ mode: "create", environmentId: totHostEnvironmentId }),
+    });
+  }
 
   actionItems.push({
     kind: "action",
