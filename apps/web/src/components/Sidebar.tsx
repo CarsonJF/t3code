@@ -2,6 +2,8 @@ import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { m } from "../i18n/messages";
 import { attachSidebarTree } from "../lib/sidebarTree";
+import { TotsSidebarSection } from "./tots/TotsSidebarSection";
+import { useTots } from "../state/tots";
 import { type EnvironmentId, type ScopedProjectRef } from "@t3tools/contracts";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
 import {
@@ -186,6 +188,7 @@ import {
 import {
   applySidebarThreadDrop,
   filterSidebarV2VisibleThreads,
+  withoutTotThreads,
   groupSidebarThreadsByProject,
   sidebarFolderExpansionKeys,
   buildBulkTitleRegenerationContextMenuItem,
@@ -458,7 +461,7 @@ function useSidebarThreads(input: {
     serverConfigs,
     connectedEnvironmentIds,
     optimisticDrop,
-    threads,
+    threads: allThreads,
     delegatedUnderParent,
     routeRowThreadKey,
     departingThreadKey,
@@ -466,6 +469,8 @@ function useSidebarThreads(input: {
     keepEmptyFolders: keepEmpty,
   } = input;
   const shelfRouteThreadKey = routeRowThreadKey === departingThreadKey ? null : routeRowThreadKey;
+  const tots = useTots();
+  const threads = withoutTotThreads(allThreads, tots);
   // Folders already separate the work, so boring mode has no Working shelf.
   const workingShelfEnabled =
     useClientSettings((s) => s.sidebarWorkingShelfEnabled) && folderGroups === null;
@@ -3159,6 +3164,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         className="min-h-full"
         fixedHeader={
           <SidebarGroup className="z-[1]">
+            <TotsSidebarSection />
             <SidebarThreadHeader
               hasProjects={projectGroups.length > 0}
               projectScope={
