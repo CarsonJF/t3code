@@ -1,4 +1,5 @@
 import { McpAttachmentInput } from "../attachment/input.ts";
+import * as TotService from "../../../tots/TotService.ts";
 import {
   clampedPositiveInt,
   NonNegativeInt,
@@ -48,6 +49,7 @@ const shared = {
     ThreadManagementService.ThreadManagementService,
     ProjectService.ProjectService,
     SecureRandom.SecureRandom,
+    TotService.TotService,
   ],
 };
 const ProjectListTool = Tool.make("t3_project_list", {
