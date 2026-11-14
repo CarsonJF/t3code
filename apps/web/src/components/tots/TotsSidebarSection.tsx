@@ -104,6 +104,7 @@ const TotRow = memo(function TotRow(props: {
     const items = [
       running ? { id: "open", label: "Open" } : { id: "turn-on", label: "Turn on" },
       { id: "edit", label: "Edit", icon: "settings" },
+      { id: "memory", label: "Memory" },
       ...(actions.hasInstructionsFile ? [{ id: "instructions", label: "Instructions" }] : []),
       ...(running
         ? [
@@ -125,6 +126,9 @@ const TotRow = memo(function TotRow(props: {
         break;
       case "edit":
         actions.edit();
+        break;
+      case "memory":
+        actions.openMemory();
         break;
       case "instructions":
         void actions.editInstructions();
