@@ -1914,6 +1914,8 @@ describe("withoutTotThreads", () => {
     const other = { environmentId: env, id: ThreadId.make("thread:other") };
     const tots = [{ environmentId: env, tot: { ...DEFAULT_HOME_TOT, threadId: current.id } }];
     expect(withoutTotThreads([current, former, other], tots)).toEqual([former, other]);
+    const room = { environmentId: env, id: ThreadId.make("tot-room:hello") };
+    expect(withoutTotThreads([room, other], [])).toEqual([other]);
     const untouched = [former, other];
     expect(withoutTotThreads(untouched, [])).toBe(untouched);
   });
