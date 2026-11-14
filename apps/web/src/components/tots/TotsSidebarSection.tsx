@@ -1,11 +1,11 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
+  TOT_FACE_STATE_LABELS as STATE_LABELS,
   resolveTotAnimation,
   totFaceInputFromShell,
   totFaceState,
   type EnvironmentTot,
 } from "@t3tools/client-runtime/tots";
-import type { TotFaceState } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { memo, useState } from "react";
 
@@ -16,15 +16,6 @@ import { useTots } from "~/state/tots";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { TotAvatar } from "./TotAvatar";
-
-const STATE_LABELS: Record<TotFaceState, string> = {
-  idle: "Idle",
-  working: "Working",
-  "needs-you": "Needs you",
-  success: "Done",
-  failure: "Failed",
-  sleep: "Off",
-};
 
 const TotRow = memo(function TotRow(props: { readonly entry: EnvironmentTot }) {
   const { environmentId, tot } = props.entry;

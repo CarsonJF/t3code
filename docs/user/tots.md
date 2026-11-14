@@ -28,11 +28,19 @@ Tots always run in full access, and they can approve requests in your other thre
 
 Tots live on one server and reach your other machines through linked environments. Turn on **Linked environments** in **Settings → Labs** on each machine, and link them at full access so a Tot can act and approve there.
 
+## One thread each
+
+A Tot is one conversation. Its project holds only its own thread, so Tots never appear when you pick a project for new work, and a new thread started from a Tot's thread goes to your usual project.
+
+## Memory
+
+Each Tot remembers in its own folder. `MEMORY.md` holds short lines about you, your machines and projects, your preferences, decisions and work in flight; longer notes go in a `memory` folder beside it. The Tot reads it when a new thread starts and keeps it up to date as it learns. Ask a Tot what it remembers, or tell it to forget something. Home can read every Tot's memory.
+
 ## Instructions and fresh starts
 
-Each Tot has its own folder. **Settings → Tots → Instructions** opens its `AGENTS.md`; the editor's instructions are kept there, and the Tot can keep notes in the folder.
+**Settings → Tots → Instructions** opens a Tot's `AGENTS.md`; the editor's instructions are kept there.
 
-**Start fresh** gives a Tot a new thread. Its notes and instructions carry over. **Turn off** stops it at once; its thread stays in your history.
+**Start fresh** gives a Tot a new thread. Its memory and instructions carry over; the old thread is settled. **Turn off** stops it at once; its thread stays in your history.
 
 ## Faces
 

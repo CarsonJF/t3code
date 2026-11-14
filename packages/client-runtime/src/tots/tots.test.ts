@@ -16,6 +16,7 @@ import {
   isTotProject,
   resolveTotAnimation,
   selectTots,
+  withoutTotProjects,
   totFaceInputFromShell,
   totFaceState,
 } from "./tots.ts";
@@ -121,5 +122,16 @@ describe("selectTots", () => {
     const tots = [{ ...yui, projectId: ProjectId.make("project:yui") }];
     expect(isTotProject(ProjectId.make("project:yui"), tots)).toBe(true);
     expect(isTotProject(ProjectId.make("project:other"), tots)).toBe(false);
+
+    const yuiProject = { environmentId: asuna, id: ProjectId.make("project:yui") };
+    const sameIdElsewhere = { environmentId: promini, id: ProjectId.make("project:yui") };
+    const other = { environmentId: asuna, id: ProjectId.make("project:other") };
+    const environmentTots = [{ environmentId: asuna, tot: tots[0]! }];
+    expect(withoutTotProjects([yuiProject, sameIdElsewhere, other], environmentTots)).toEqual([
+      sameIdElsewhere,
+      other,
+    ]);
+    const untouched = [sameIdElsewhere, other];
+    expect(withoutTotProjects(untouched, environmentTots)).toBe(untouched);
   });
 });

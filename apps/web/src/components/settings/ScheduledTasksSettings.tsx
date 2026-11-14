@@ -63,12 +63,8 @@ import {
   useEnvironmentHttpBaseUrl,
   type EnvironmentPresentation,
 } from "../../state/environments";
-import {
-  useProjects,
-  useQuietThreadShell,
-  useThreadShell,
-  useVisibleThreadShells,
-} from "../../state/entities";
+import { useQuietThreadShell, useThreadShell, useVisibleThreadShells } from "../../state/entities";
+import { usePickableProjects } from "../../state/tots";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { environmentAtomList, environmentIdsKey } from "../../state/environmentAtomList";
@@ -1368,7 +1364,7 @@ function ScheduledTaskEditorForm({
   const tasksQuery = useEnvironmentQuery(
     connected ? serverEnvironment.scheduledTasksLive({ environmentId, input: {} }) : null,
   );
-  const allProjects = useProjects();
+  const allProjects = usePickableProjects();
   const projectsOn = (id: EnvironmentId) =>
     allProjects.filter(
       (project) => project.environmentId === id && matchesScheduledTaskScope(scope, id, project.id),
