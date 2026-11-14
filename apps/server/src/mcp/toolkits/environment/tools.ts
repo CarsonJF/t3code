@@ -78,11 +78,12 @@ const EnvironmentPreferencesTool = Tool.make("t3_environment_preferences_update"
 const ThreadGroupsResult = Schema.Struct({
   groups: Schema.Array(ThreadGroup),
   projects: Schema.Array(Schema.Struct({ projectId: ProjectId, groupId: ThreadGroupId })),
+  favoriteProjectIds: Schema.Array(ProjectId),
 });
 const ThreadGroupsReadTool = Tool.make("t3_thread_groups_read", {
   ...shared,
   description:
-    "Read this environment's sidebar thread groups and each project's group (projects without one are omitted).",
+    "Read this environment's sidebar thread groups, each project's group (projects without one are omitted), and favorite projects.",
   success: ThreadGroupsResult,
 })
   .annotate(Tool.Readonly, true)
@@ -93,7 +94,7 @@ const groupGradient = Schema.optionalKey(Schema.NullOr(ThreadGroupGradient));
 const ThreadGroupsUpdateTool = Tool.make("t3_thread_groups_update", {
   ...shared,
   description:
-    "Edit sidebar thread groups. Live full-access or default caller thread only. Ops apply in order, all or none. `createGroup` returns the new id in `groups`; assign it in a later call. `setProjectGroup` moves the project's future threads only; `groupId: null` ungroups. `gradient` is {from, to} colors (set `color` to `from` too); `null` clears it. `reorderGroups` lists group ids in the new order. Deleting a group ungroups its threads.",
+    "Edit sidebar thread groups. Live full-access or default caller thread only. Ops apply in order, all or none. `createGroup` returns the new id in `groups`; assign it in a later call. `setProjectGroup` moves the project's future threads only; `groupId: null` ungroups. `gradient` is {from, to} colors (set `color` to `from` too); `null` clears it. `reorderGroups` lists group ids in the new order. Deleting a group ungroups its threads. `setProjectFavorite` pins projects above the groups in the new-thread project picker.",
   parameters: Schema.Struct({
     ops: Schema.Array(
       Schema.Union([
@@ -123,6 +124,11 @@ const ThreadGroupsUpdateTool = Tool.make("t3_thread_groups_update", {
           type: Schema.Literal("setProjectGroup"),
           projectIds: Schema.Array(ProjectId).check(Schema.isMinLength(1)),
           groupId: Schema.NullOr(ThreadGroupId),
+        }),
+        Schema.Struct({
+          type: Schema.Literal("setProjectFavorite"),
+          projectIds: Schema.Array(ProjectId).check(Schema.isMinLength(1)),
+          favorite: Schema.Boolean,
         }),
       ]),
     ).check(Schema.isMinLength(1), Schema.isMaxLength(50)),

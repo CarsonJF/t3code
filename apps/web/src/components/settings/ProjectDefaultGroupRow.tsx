@@ -1,9 +1,14 @@
-import { projectDefaultGroupId } from "@t3tools/client-runtime/thread-groups";
+import { isProjectFavorite, projectDefaultGroupId } from "@t3tools/client-runtime/thread-groups";
 import type { ScopedProjectRef } from "@t3tools/contracts";
 
-import { threadGroupActions, useThreadGroupsStore } from "../../threadGroupsStore";
+import {
+  canEditThreadGroups,
+  threadGroupActions,
+  useThreadGroupsStore,
+} from "../../threadGroupsStore";
 import { createThreadGroupFromPrompt } from "../ThreadGroupNameDialog";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { Switch } from "../ui/switch";
 import { SettingsRow } from "./settingsLayout";
 
 const NO_GROUP = "none";
@@ -60,6 +65,30 @@ export function ProjectDefaultGroupRow({
             <SelectItem value={NEW_GROUP}>New group…</SelectItem>
           </SelectPopup>
         </Select>
+      }
+    />
+  );
+}
+
+export function ProjectFavoriteRow({
+  memberProjectRefs,
+}: {
+  memberProjectRefs: readonly ScopedProjectRef[];
+}) {
+  const { byEnvironment } = useThreadGroupsStore();
+  return (
+    <SettingsRow
+      title="Favorite"
+      description="Favorites appear at the top of the project picker when you start a new thread."
+      control={
+        <Switch
+          checked={isProjectFavorite(byEnvironment, memberProjectRefs)}
+          disabled={!memberProjectRefs.every((ref) => canEditThreadGroups(ref.environmentId))}
+          onCheckedChange={(checked) =>
+            threadGroupActions.setProjectFavorite(memberProjectRefs, Boolean(checked))
+          }
+          aria-label="Favorite project"
+        />
       }
     />
   );

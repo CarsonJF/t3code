@@ -1,5 +1,5 @@
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import { projectDefaultGroupId } from "@t3tools/client-runtime/thread-groups";
+import { isProjectFavorite, projectDefaultGroupId } from "@t3tools/client-runtime/thread-groups";
 import { View } from "react-native";
 
 import {
@@ -9,6 +9,7 @@ import {
 } from "../../state/thread-groups";
 import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
 import { ListChoiceRow as SettingsChoiceRow } from "../../components/ui/ListChoiceRow";
+import { ListToggleRow } from "../../components/ui/ListToggleRow";
 import { SettingsSection } from "./components/SettingsSection";
 
 /** Sets the sidebar group new threads of every checkout start in, as on desktop. */
@@ -63,6 +64,30 @@ export function ProjectDefaultGroupSection(props: {
           />
         </View>
       ) : null}
+    </SettingsSection>
+  );
+}
+
+export function ProjectFavoriteSection(props: { readonly members: readonly EnvironmentProject[] }) {
+  const view = useThreadGroupsView();
+  const projectRefs = props.members.map((member) => ({
+    environmentId: member.environmentId,
+    projectId: member.id,
+  }));
+  if (props.members.some((member) => !view.byEnvironment.has(member.environmentId))) return null;
+  return (
+    <SettingsSection
+      title="Favorite"
+      footer="Favorites appear at the top of the project list when you start a new task."
+    >
+      <ListToggleRow
+        label="Favorite"
+        value={isProjectFavorite(view.byEnvironment, projectRefs)}
+        disabled={
+          !props.members.every((member) => view.writableEnvironmentIds.has(member.environmentId))
+        }
+        onValueChange={(favorite) => threadGroupActions.setProjectFavorite(projectRefs, favorite)}
+      />
     </SettingsSection>
   );
 }

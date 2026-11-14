@@ -175,11 +175,13 @@ it.effect("creates a group, then puts a project's new threads in it", () =>
         ops: [
           { type: "setProjectGroup", projectIds: [projectId], groupId },
           { type: "updateGroup", groupId, name: "Client work" },
+          { type: "setProjectFavorite", projectIds: [projectId], favorite: true },
         ],
       });
       expect(yield* callGroupsTool("t3_thread_groups_read", {})).toEqual({
         groups: [{ id: groupId, name: "Client work", color: "blue" }],
         projects: [{ projectId, groupId }],
+        favoriteProjectIds: [projectId],
       });
     }).pipe(Effect.provide(groupsLayer(settings, updates)));
   }),
@@ -201,6 +203,10 @@ it.effect("rejects the whole update when an op names a missing group or project"
         ops: [{ type: "setProjectGroup", projectIds: [ProjectId.make("gone")], groupId: null }],
       });
       expect(missingProject).toMatchObject({ code: "invalid_request" });
+      const missingFavorite = yield* callGroupsTool("t3_thread_groups_update", {
+        ops: [{ type: "setProjectFavorite", projectIds: [ProjectId.make("gone")], favorite: true }],
+      });
+      expect(missingFavorite).toMatchObject({ code: "invalid_request" });
       expect(yield* Ref.get(updates)).toBe(0);
     }).pipe(Effect.provide(groupsLayer(settings, updates)));
   }),

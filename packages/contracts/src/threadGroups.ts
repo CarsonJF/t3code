@@ -42,6 +42,8 @@ export const ThreadGroupsState = Schema.Struct({
   threadOverrides: Schema.Record(ThreadId, Schema.NullOr(ThreadGroupId)).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
+  // Shown above the groups in new-thread project pickers.
+  favoriteProjectIds: Schema.Array(ProjectId).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 });
 export type ThreadGroupsState = typeof ThreadGroupsState.Type;
 
@@ -49,6 +51,7 @@ export const EMPTY_THREAD_GROUPS_STATE: ThreadGroupsState = {
   groups: [],
   projectDefaults: {},
   threadOverrides: {},
+  favoriteProjectIds: [],
 };
 
 /** Applied in order under the settings write lock; ops naming a missing group are dropped. */
@@ -78,6 +81,11 @@ export const ThreadGroupOp = Schema.Union([
     type: Schema.Literal("setThreadGroup"),
     threadId: ThreadId,
     groupId: Schema.NullOr(ThreadGroupId),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("setProjectFavorite"),
+    projectIds: Schema.Array(ProjectId),
+    favorite: Schema.Boolean,
   }),
   /** One-time upload of client-local groups; adds only groups, projects and threads not yet set. */
   Schema.Struct({ type: Schema.Literal("import"), state: ThreadGroupsState }),

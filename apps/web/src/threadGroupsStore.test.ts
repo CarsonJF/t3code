@@ -39,6 +39,7 @@ describe("legacyThreadGroupsImport", () => {
         [ProjectId.make("project-1")]: [{ groupId: "xn", since: "2026-10-26T10:00:00.000Z" }],
       },
       threadOverrides: { [ThreadId.make("thread-1")]: null },
+      favoriteProjectIds: [],
     });
     expect(legacyThreadGroupsImport(legacy, LAPTOP)).toEqual({
       groups: [{ id: "xn", name: "xnproductions", color: "violet" }],
@@ -46,6 +47,7 @@ describe("legacyThreadGroupsImport", () => {
         [ProjectId.make("project-2")]: [{ groupId: null, since: "2026-10-26T11:00:00.000Z" }],
       },
       threadOverrides: { [ThreadId.make("thread-2")]: "xn" },
+      favoriteProjectIds: [],
     });
   });
 });

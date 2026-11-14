@@ -5,6 +5,7 @@ import {
   environmentsWithThreadGroup,
   mergeThreadGroups,
   moveThreadGroup,
+  projectFavoriteOps,
   splitThreadsByGroup as splitThreadsByEnvironmentGroup,
   withThreadGroup,
   type ThreadGroupsByEnvironment,
@@ -196,6 +197,11 @@ export const threadGroupActions = {
       );
     }
   },
+  setProjectFavorite: (projectRefs: ReadonlyArray<ScopedProjectRef>, favorite: boolean) => {
+    for (const [environmentId, ops] of projectFavoriteOps(projectRefs, favorite)) {
+      void sendThreadGroupOps(environmentId, ops);
+    }
+  },
   setThreadGroup: (
     thread: { readonly environmentId: EnvironmentId; readonly id: ThreadId },
     group: ThreadGroup | null,
@@ -238,6 +244,7 @@ export function legacyThreadGroupsImport(
     }),
     projectDefaults,
     threadOverrides,
+    favoriteProjectIds: [],
   };
 }
 

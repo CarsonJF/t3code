@@ -13,6 +13,10 @@ import { SymbolView } from "../../components/ui/AppSymbol";
 import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operations/projects";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import {
+  buildProjectPickerSections,
+  isProjectFavorite,
+} from "@t3tools/client-runtime/thread-groups";
+import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
@@ -36,6 +40,8 @@ import { useWorkspaceState } from "../../state/workspace";
 import { useIncomingShare } from "../sharing/IncomingShareProvider";
 import { useNewTaskFlow } from "./new-task-flow-provider";
 import { filterProjectScopes, getProjectScopeSelectionTarget } from "./new-task-project-selection";
+import type { HomeProjectScope } from "../home/homeThreadList";
+import { threadGroupActions, useThreadGroupsView } from "../../state/thread-groups";
 import { useSelectWorkspaceDetail } from "../workspace/useSelectWorkspaceDetail";
 
 type NewTaskRouteParams = {
@@ -248,6 +254,125 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
     });
   }
 
+  const threadGroupsView = useThreadGroupsView();
+  const projectSections =
+    searchText.trim().length > 0
+      ? [{ key: "search", label: null, projects: visibleScopes }]
+      : buildProjectPickerSections({
+          projects: listScopes,
+          // Scopes arrive most recently active first.
+          mostRecent: listScopes.length > 1 ? listScopes[0]! : null,
+          projectRefs: (scope) => scope.projectRefs,
+          byEnvironment: threadGroupsView.byEnvironment,
+          groups: threadGroupsView.groups,
+        });
+
+  function renderFavoriteToggle(scope: HomeProjectScope) {
+    if (
+      !scope.projectRefs.every((ref) =>
+        threadGroupsView.writableEnvironmentIds.has(ref.environmentId),
+      )
+    ) {
+      return null;
+    }
+    const favorite = isProjectFavorite(threadGroupsView.byEnvironment, scope.projectRefs);
+    return (
+      <Pressable
+        accessibilityLabel={`${favorite ? "Remove from" : "Add to"} favorites: ${scope.title}`}
+        accessibilityRole="button"
+        accessibilityState={{ selected: favorite }}
+        className="min-h-11 min-w-11 items-center justify-center"
+        onPress={() => threadGroupActions.setProjectFavorite(scope.projectRefs, !favorite)}
+      >
+        <SymbolView
+          name={favorite ? "star.fill" : "star"}
+          size={18}
+          tintColorClassName={favorite ? "accent-icon" : "accent-icon-subtle"}
+          type="monochrome"
+        />
+      </Pressable>
+    );
+  }
+
+  function renderScopeRow(scope: HomeProjectScope, scopeIndex: number) {
+    const hasMultipleProjects = scope.projects.length > 1;
+    const selectionTarget = getProjectScopeSelectionTarget(
+      scope,
+      selectedEnvironmentId,
+      connectedEnvironmentIds,
+    );
+    if (Platform.OS === "android") {
+      return (
+        <NavigationRow
+          className="bg-grouped-card"
+          key={scope.key}
+          title={scope.title}
+          subtitle={
+            hasMultipleProjects
+              ? `${scope.projects.length} workspaces`
+              : selectionTarget.workspaceRoot
+          }
+          subtitleNumberOfLines={1}
+          subtitleEllipsizeMode="middle"
+          disabled={reservedDestinationProject !== null}
+          onPress={() => void selectProject(selectionTarget)}
+          leading={
+            <ProjectFavicon
+              environmentId={scope.representative.environmentId}
+              faviconPath={scope.representative.faviconPath}
+              projectIcon={scope.representative.projectIcon}
+              size={24}
+              projectTitle={scope.title}
+              workspaceRoot={scope.representative.workspaceRoot}
+            />
+          }
+          trailing={renderFavoriteToggle(scope) ?? undefined}
+        />
+      );
+    }
+    return (
+      <View key={scope.key} className={cn(scopeIndex > 0 && "border-t border-border-subtle")}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={scope.title}
+          disabled={reservedDestinationProject !== null}
+          onPress={() => void selectProject(selectionTarget)}
+          className="flex-row items-center gap-3 bg-grouped-card py-3.5 pl-4 pr-2"
+        >
+          <View className="h-7 w-7 items-center justify-center">
+            <ProjectFavicon
+              environmentId={scope.representative.environmentId}
+              faviconPath={scope.representative.faviconPath}
+              projectIcon={scope.representative.projectIcon}
+              size={20}
+              projectTitle={scope.title}
+              workspaceRoot={scope.representative.workspaceRoot}
+            />
+          </View>
+          <View className="min-w-0 flex-1">
+            <Text className={cn("text-base leading-snug", "font-t3-bold")}>{scope.title}</Text>
+            <Text
+              className="text-xs leading-snug text-foreground-muted"
+              ellipsizeMode="middle"
+              numberOfLines={1}
+            >
+              {hasMultipleProjects
+                ? `${scope.projects.length} workspaces`
+                : selectionTarget.workspaceRoot}
+            </Text>
+          </View>
+          {renderFavoriteToggle(scope)}
+          <SymbolView
+            name="chevron.right"
+            size={14}
+            tintColorClassName="accent-chevron"
+            type="monochrome"
+          />
+        </Pressable>
+      </View>
+    );
+  }
+
   async function startScratch(): Promise<void> {
     if (!scratchEnvironment || scratchStartInFlightRef.current) return;
     const environmentId = scratchEnvironment.environmentId;
@@ -454,96 +579,29 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
               </Text>
             </View>
           ) : (
-            <View
-              collapsable={false}
-              className={
-                Platform.OS === "android"
-                  ? "overflow-hidden rounded-[28px] bg-grouped-card"
-                  : "overflow-hidden rounded-[24px] bg-grouped-card"
-              }
-            >
-              {visibleScopes.map((scope, scopeIndex) => {
-                const hasMultipleProjects = scope.projects.length > 1;
-                const selectionTarget = getProjectScopeSelectionTarget(
-                  scope,
-                  selectedEnvironmentId,
-                  connectedEnvironmentIds,
-                );
-                if (Platform.OS === "android") {
-                  return (
-                    <NavigationRow
-                      className="bg-grouped-card"
-                      key={scope.key}
-                      title={scope.title}
-                      subtitle={
-                        hasMultipleProjects
-                          ? `${scope.projects.length} workspaces`
-                          : selectionTarget.workspaceRoot
-                      }
-                      subtitleNumberOfLines={1}
-                      subtitleEllipsizeMode="middle"
-                      disabled={reservedDestinationProject !== null}
-                      onPress={() => void selectProject(selectionTarget)}
-                      leading={
-                        <ProjectFavicon
-                          environmentId={scope.representative.environmentId}
-                          faviconPath={scope.representative.faviconPath}
-                          projectIcon={scope.representative.projectIcon}
-                          size={24}
-                          projectTitle={scope.title}
-                          workspaceRoot={scope.representative.workspaceRoot}
-                        />
-                      }
-                    />
-                  );
-                }
-                return (
-                  <View
-                    key={scope.key}
-                    className={cn(scopeIndex > 0 && "border-t border-border-subtle")}
+            projectSections.map((section) => (
+              <View key={section.key} collapsable={false} className="gap-1.5">
+                {section.label ? (
+                  <Text
+                    textRole="footnote"
+                    className="px-2 font-t3-medium text-foreground-muted"
+                    numberOfLines={1}
                   >
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={scope.title}
-                      disabled={reservedDestinationProject !== null}
-                      onPress={() => void selectProject(selectionTarget)}
-                      className="flex-row items-center gap-3 bg-grouped-card px-4 py-3.5"
-                    >
-                      <View className="h-7 w-7 items-center justify-center">
-                        <ProjectFavicon
-                          environmentId={scope.representative.environmentId}
-                          faviconPath={scope.representative.faviconPath}
-                          projectIcon={scope.representative.projectIcon}
-                          size={20}
-                          projectTitle={scope.title}
-                          workspaceRoot={scope.representative.workspaceRoot}
-                        />
-                      </View>
-                      <View className="min-w-0 flex-1">
-                        <Text className={cn("text-base leading-snug", "font-t3-bold")}>
-                          {scope.title}
-                        </Text>
-                        <Text
-                          className="text-xs leading-snug text-foreground-muted"
-                          ellipsizeMode="middle"
-                          numberOfLines={1}
-                        >
-                          {hasMultipleProjects
-                            ? `${scope.projects.length} workspaces`
-                            : selectionTarget.workspaceRoot}
-                        </Text>
-                      </View>
-                      <SymbolView
-                        name="chevron.right"
-                        size={14}
-                        tintColorClassName="accent-chevron"
-                        type="monochrome"
-                      />
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
+                    {section.label}
+                  </Text>
+                ) : null}
+                <View
+                  collapsable={false}
+                  className={
+                    Platform.OS === "android"
+                      ? "overflow-hidden rounded-[28px] bg-grouped-card"
+                      : "overflow-hidden rounded-[24px] bg-grouped-card"
+                  }
+                >
+                  {section.projects.map((scope, scopeIndex) => renderScopeRow(scope, scopeIndex))}
+                </View>
+              </View>
+            ))
           )}
         </ScrollView>
       </ScreenContent>

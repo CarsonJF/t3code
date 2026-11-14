@@ -119,6 +119,7 @@ it.layer(NodeServices.layer)("server thread groups", (it) => {
         groups: [],
         projectDefaults: {},
         threadOverrides: {},
+        favoriteProjectIds: [],
       });
     }).pipe(Effect.provide(layerServerSettings())),
   );

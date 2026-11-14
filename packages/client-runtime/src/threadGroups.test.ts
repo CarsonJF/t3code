@@ -2,6 +2,7 @@ import { EnvironmentId, ProjectId, ThreadId, type ThreadGroupsState } from "@t3t
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  buildProjectPickerSections,
   gradientWashStop,
   projectColorStop,
   environmentsWithThreadGroup,
@@ -39,6 +40,7 @@ const state: ThreadGroupsState = {
     [ThreadId.make("pinned-out")]: null,
     [ThreadId.make("stale")]: "deleted",
   },
+  favoriteProjectIds: [],
 };
 
 describe("resolveThreadGroupId", () => {
@@ -63,6 +65,7 @@ describe("splitThreadsByGroup", () => {
       groups: [{ id: "xn", name: "xn (laptop copy)" }],
       projectDefaults: {},
       threadOverrides: { [ThreadId.make("remote")]: "xn" },
+      favoriteProjectIds: [],
     };
     const byEnvironment = new Map([
       [DESKTOP, state],
@@ -84,6 +87,46 @@ describe("splitThreadsByGroup", () => {
     ]);
     expect(split.ungrouped).toEqual([threads[2], threads[3]]);
     expect(environmentsWithThreadGroup(byEnvironment, "xn")).toEqual([DESKTOP, LAPTOP]);
+  });
+});
+
+describe("buildProjectPickerSections", () => {
+  it("puts the most recent first, then favorites, groups in order, and the rest", () => {
+    const ref = (id: string, environmentId = DESKTOP) => ({
+      environmentId,
+      projectId: ProjectId.make(id),
+    });
+    const desktop: ThreadGroupsState = {
+      ...state,
+      projectDefaults: {
+        [ProjectId.make("grouped")]: [{ groupId: "other", since: "2026-10-26T10:00:00.000Z" }],
+        [ProjectId.make("starred")]: [{ groupId: "xn", since: "2026-10-26T10:00:00.000Z" }],
+      },
+      favoriteProjectIds: [],
+    };
+    // A favorite on any checkout makes the whole logical project a favorite.
+    const laptop: ThreadGroupsState = {
+      ...desktop,
+      favoriteProjectIds: [ProjectId.make("starred")],
+    };
+    const projects = [[ref("loose")], [ref("grouped")], [ref("starred"), ref("starred", LAPTOP)]];
+
+    const sections = buildProjectPickerSections({
+      projects,
+      mostRecent: projects[0]!,
+      projectRefs: (refs) => refs,
+      byEnvironment: new Map([
+        [DESKTOP, desktop],
+        [LAPTOP, laptop],
+      ]),
+    });
+
+    expect(sections.map((section) => [section.label, section.projects])).toEqual([
+      ["Most recent", [projects[0]]],
+      ["Favorites", [projects[2]]],
+      ["other", [projects[1]]],
+      ["Other projects", [projects[0]]],
+    ]);
   });
 });
 

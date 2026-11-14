@@ -51,6 +51,7 @@ const state: ThreadGroupsState = {
     [ThreadId.make("pinned")]: "work",
     [ThreadId.make("settled")]: "work",
   },
+  favoriteProjectIds: [],
 };
 
 function build(overrides: Partial<Parameters<typeof withThreadGroupSections>[0]> = {}) {

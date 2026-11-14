@@ -99,6 +99,21 @@ describe("applyThreadGroupOps", () => {
     ]);
   });
 
+  it("favorites projects once and keeps them through group deletes", () => {
+    const other = ProjectId.make("project-2");
+    const state = applyThreadGroupOps(withGroups("xn"), [
+      { type: "setProjectFavorite", projectIds: [PROJECT, other], favorite: true },
+      { type: "setProjectFavorite", projectIds: [PROJECT], favorite: true },
+      { type: "deleteGroup", groupId: "xn" },
+    ]);
+    expect(state.favoriteProjectIds).toEqual([PROJECT, other]);
+
+    const removed = applyThreadGroupOps(state, [
+      { type: "setProjectFavorite", projectIds: [other], favorite: false },
+    ]);
+    expect(removed.favoriteProjectIds).toEqual([PROJECT]);
+  });
+
   it("imports legacy groups without overwriting what the server already has", () => {
     const server = applyThreadGroupOps(withGroups("xn"), [
       { type: "updateGroup", groupId: "xn", name: "Server name" },
@@ -114,6 +129,7 @@ describe("applyThreadGroupOps", () => {
         [ProjectId.make("gone")]: [{ groupId: "missing", since: "2026-10-26T10:00:00.000Z" }],
       },
       threadOverrides: { [THREAD]: "phone", [ThreadId.make("thread-2")]: "phone" },
+      favoriteProjectIds: [],
     };
 
     const state = applyThreadGroupOps(server, [{ type: "import", state: legacy }]);
@@ -128,6 +144,7 @@ describe("applyThreadGroupOps", () => {
         [ProjectId.make("gone")]: [],
       },
       threadOverrides: { [THREAD]: null, [ThreadId.make("thread-2")]: "phone" },
+      favoriteProjectIds: [],
     });
     expect(applyThreadGroupOps(state, [{ type: "import", state: legacy }])).toEqual(state);
   });

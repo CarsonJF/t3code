@@ -3,7 +3,11 @@ import { composerDraftHasUserContent, useComposerDraftStore } from "~/composerDr
 import { resolveEnvironmentMachineKind, type ScopedProjectRef } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
-import { FolderPlusIcon } from "lucide-react";
+import {
+  buildProjectPickerSections,
+  isProjectFavorite,
+} from "@t3tools/client-runtime/thread-groups";
+import { FolderPlusIcon, StarIcon } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
 import { useRef, useState } from "react";
 
@@ -25,6 +29,7 @@ import {
   projectGroupsSpanEnvironments,
 } from "~/sidebarProjectGrouping";
 import { useProjects, useThreadShells } from "~/state/entities";
+import { canEditThreadGroups, threadGroupActions, useThreadGroupsStore } from "~/threadGroupsStore";
 import {
   useEnvironments,
   usePrimaryEnvironmentId,
@@ -35,7 +40,10 @@ import { ProjectFavicon } from "../ProjectFavicon";
 import { sortLogicalProjectsForSidebar } from "../Sidebar.logic";
 import {
   Combobox,
+  ComboboxCollection,
   ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxGroupLabel,
   ComboboxItem,
   ComboboxList,
   ComboboxPopup,
@@ -44,7 +52,7 @@ import {
   useComboboxFilter,
 } from "../ui/combobox";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { InlineButton } from "../ui/button";
+import { Button, InlineButton } from "../ui/button";
 import { DraftProjectName } from "./DraftProjectName";
 import { DraftHeroProjectHeading } from "./DraftHeroProjectHeading";
 import { TriageDraftHero } from "./TriageDraftHero";
@@ -57,6 +65,13 @@ const ADD_PROJECT_VALUE = "add-project";
 interface PickerItem {
   readonly value: string;
   readonly label: string;
+  readonly projectKey: string | null;
+}
+
+interface PickerGroup {
+  readonly value: string;
+  readonly label: string | null;
+  readonly items: readonly PickerItem[];
 }
 
 interface DraftHeroHeadlineProps {
@@ -94,6 +109,7 @@ export function DraftHeroHeadline({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const pickerFilter = useComboboxFilter();
+  const threadGroups = useThreadGroupsStore();
 
   const environmentLabelById = new Map(
     environments.map((environment) => [environment.environmentId, environment.label] as const),
@@ -156,20 +172,55 @@ export function DraftHeroHeadline({
     activeProject !== null &&
     isScratchProject(activeProject, scratchWorkspaceRootFor(activeProject.environmentId));
 
-  const pickerItems: readonly PickerItem[] = [
-    ...menuEntries.map(({ group }) => ({ value: group.projectKey, label: group.displayName })),
-    { value: ADD_PROJECT_VALUE, label: "Add project" },
+  const menuKeys = new Set(menuEntries.map(({ group }) => group.projectKey));
+  // Sections follow the sidebar order; the picker entries move the current project first.
+  const menuGroups = projectGroups.filter((group) => menuKeys.has(group.projectKey));
+  const mostRecentGroup =
+    menuGroups.length < 2
+      ? null
+      : (projectSortOrder === "updated_at"
+          ? menuGroups
+          : sortLogicalProjectsForSidebar(menuGroups, threads, "updated_at"))[0]!;
+  const projectItem = (group: (typeof projectGroups)[number], value = group.projectKey) => ({
+    value,
+    label: group.displayName,
+    projectKey: group.projectKey,
+  });
+  const addProjectItem: PickerItem = {
+    value: ADD_PROJECT_VALUE,
+    label: "Add project",
+    projectKey: null,
+  };
+  const pickerGroups: readonly PickerGroup[] = [
+    ...buildProjectPickerSections({
+      projects: menuGroups,
+      mostRecent: mostRecentGroup,
+      projectRefs: (group) => group.memberProjectRefs,
+      byEnvironment: threadGroups.byEnvironment,
+      groups: threadGroups.groups,
+    }).map((section) => ({
+      value: section.key,
+      label: section.label,
+      items: section.projects.map((group) =>
+        projectItem(group, section.key === "recent" ? `recent:${group.projectKey}` : undefined),
+      ),
+    })),
+    { value: "actions", label: null, items: [addProjectItem] },
   ];
   const pickerSearch = pickerQuery.trim();
-  const filteredPickerItems =
+  const matchingItems = menuGroups
+    .map((group) => projectItem(group))
+    .filter((item) => pickerFilter.contains(item, pickerSearch, (candidate) => candidate.label));
+  const filteredPickerGroups: readonly PickerGroup[] =
     pickerSearch.length === 0
-      ? pickerItems
-      : pickerItems.filter(
-          (item) =>
-            item.value !== ADD_PROJECT_VALUE &&
-            pickerFilter.contains(item, pickerSearch, (candidate) => candidate.label),
-        );
-  const selectedPickerItem = pickerItems.find((item) => item.value === activeProjectKey) ?? null;
+      ? pickerGroups
+      : matchingItems.length === 0
+        ? []
+        : [{ value: "search", label: null, items: matchingItems }];
+  const selectedPickerItem =
+    activeProjectKey === "" || !menuKeys.has(activeProjectKey)
+      ? null
+      : projectItem(projectEntryByKey.get(activeProjectKey)!.group);
 
   // The picker can change the draft's target while the no-project home is
   // still being opened; a stale continuation must not retarget it again. Picking
@@ -250,10 +301,65 @@ export function DraftHeroHeadline({
     return true;
   };
 
+  const renderPickerItem = (item: PickerItem) => {
+    const entry = item.projectKey === null ? null : projectEntryByKey.get(item.projectKey);
+    const favorite =
+      entry !== null &&
+      entry !== undefined &&
+      isProjectFavorite(threadGroups.byEnvironment, entry.group.memberProjectRefs);
+    return (
+      <ComboboxItem key={item.value} hideIndicator value={item}>
+        {item.value === ADD_PROJECT_VALUE ? (
+          <FolderPlusIcon className="size-4 shrink-0" />
+        ) : entry ? (
+          <ProjectFavicon project={entry.group} className="size-4 shrink-0" />
+        ) : null}
+        <Tooltip>
+          <TooltipTrigger render={<span className="min-w-0 flex-1 text-sm" />}>
+            <DraftProjectName value={item.label} />
+          </TooltipTrigger>
+          <TooltipPopup side="top">{item.label}</TooltipPopup>
+        </Tooltip>
+        {entry && showProjectEnvironments ? (
+          <ProjectEnvironmentBadge
+            group={entry.group}
+            primaryEnvironmentId={primaryEnvironmentId}
+            machineByEnvironmentId={environmentMachineById}
+          />
+        ) : null}
+        {entry &&
+        entry.group.memberProjectRefs.every((ref) => canEditThreadGroups(ref.environmentId)) ? (
+          <span
+            className={
+              favorite ? "flex shrink-0" : "flex shrink-0 opacity-0 in-data-highlighted:opacity-100"
+            }
+          >
+            <Button
+              size="icon-xs"
+              variant="ghost-muted"
+              tabIndex={-1}
+              aria-pressed={favorite}
+              aria-label={`${favorite ? "Unfavorite" : "Favorite"} ${item.label}`}
+              title={favorite ? "Remove from favorites" : "Add to favorites"}
+              // The item commits its selection on click.
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                threadGroupActions.setProjectFavorite(entry.group.memberProjectRefs, !favorite);
+              }}
+            >
+              <StarIcon className={favorite ? "size-3.5 fill-current" : "size-3.5"} />
+            </Button>
+          </span>
+        ) : null}
+      </ComboboxItem>
+    );
+  };
+
   const projectSelector = shouldShowProjectMenu ? (
     <Combobox
-      items={pickerItems}
-      filteredItems={filteredPickerItems}
+      items={pickerGroups}
+      filteredItems={filteredPickerGroups}
       autoHighlight
       itemToStringLabel={(item) => item.label}
       isItemEqualToValue={(a, b) => a.value === b.value}
@@ -270,8 +376,8 @@ export function DraftHeroHeadline({
           openAddProject();
           return;
         }
-        const entry = projectEntryByKey.get(item.value);
-        if (!entry || item.value === activeProjectKey) {
+        const entry = item.projectKey === null ? null : projectEntryByKey.get(item.projectKey);
+        if (!entry || item.projectKey === activeProjectKey) {
           return;
         }
         selectProject(entry.targetProject, entry.group.projectKey);
@@ -305,31 +411,12 @@ export function DraftHeroHeadline({
         />
         <ComboboxEmpty>No matching projects.</ComboboxEmpty>
         <ComboboxList>
-          {(item: PickerItem) => {
-            const entry = projectEntryByKey.get(item.value);
-            return (
-              <ComboboxItem key={item.value} hideIndicator value={item}>
-                {item.value === ADD_PROJECT_VALUE ? (
-                  <FolderPlusIcon className="size-4 shrink-0" />
-                ) : entry ? (
-                  <ProjectFavicon project={entry.group} className="size-4 shrink-0" />
-                ) : null}
-                <Tooltip>
-                  <TooltipTrigger render={<span className="min-w-0 flex-1 text-sm" />}>
-                    <DraftProjectName value={item.label} />
-                  </TooltipTrigger>
-                  <TooltipPopup side="top">{item.label}</TooltipPopup>
-                </Tooltip>
-                {entry && showProjectEnvironments ? (
-                  <ProjectEnvironmentBadge
-                    group={entry.group}
-                    primaryEnvironmentId={primaryEnvironmentId}
-                    machineByEnvironmentId={environmentMachineById}
-                  />
-                ) : null}
-              </ComboboxItem>
-            );
-          }}
+          {(group: PickerGroup) => (
+            <ComboboxGroup key={group.value} items={group.items}>
+              {group.label ? <ComboboxGroupLabel>{group.label}</ComboboxGroupLabel> : null}
+              <ComboboxCollection>{renderPickerItem}</ComboboxCollection>
+            </ComboboxGroup>
+          )}
         </ComboboxList>
       </ComboboxPopup>
     </Combobox>

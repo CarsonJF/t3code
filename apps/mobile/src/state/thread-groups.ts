@@ -7,6 +7,7 @@ import {
 import {
   environmentsWithThreadGroup,
   mergeThreadGroups,
+  projectFavoriteOps,
   withThreadGroup,
   type ThreadGroupsByEnvironment,
 } from "@t3tools/client-runtime/thread-groups";
@@ -151,6 +152,17 @@ export const threadGroupActions = {
           since,
         }),
       );
+    }
+  },
+  setProjectFavorite: (
+    projectRefs: ReadonlyArray<{
+      readonly environmentId: EnvironmentId;
+      readonly projectId: ProjectId;
+    }>,
+    favorite: boolean,
+  ) => {
+    for (const [environmentId, ops] of projectFavoriteOps(projectRefs, favorite)) {
+      void sendThreadGroupOps(environmentId, ops);
     }
   },
   setThreadGroup: (

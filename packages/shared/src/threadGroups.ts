@@ -45,6 +45,7 @@ function applyThreadGroupOp(state: ThreadGroupsState, op: ThreadGroupOp): Thread
     case "deleteGroup":
       if (!hasGroup(state, op.groupId)) return state;
       return {
+        ...state,
         groups: state.groups.filter((group) => group.id !== op.groupId),
         projectDefaults: Object.fromEntries(
           Object.entries(state.projectDefaults).map(([projectId, entries]) => [
@@ -80,6 +81,13 @@ function applyThreadGroupOp(state: ThreadGroupsState, op: ThreadGroupOp): Thread
       return hasGroup(state, op.groupId)
         ? { ...state, threadOverrides: { ...state.threadOverrides, [op.threadId]: op.groupId } }
         : state;
+    case "setProjectFavorite": {
+      const projectIds = new Set(op.projectIds);
+      const favoriteProjectIds = op.favorite
+        ? [...new Set([...state.favoriteProjectIds, ...op.projectIds])]
+        : state.favoriteProjectIds.filter((projectId) => !projectIds.has(projectId));
+      return { ...state, favoriteProjectIds };
+    }
     case "import": {
       const groups = [
         ...state.groups,
@@ -106,6 +114,9 @@ function applyThreadGroupOp(state: ThreadGroupsState, op: ThreadGroupOp): Thread
           ),
           ...state.threadOverrides,
         },
+        favoriteProjectIds: [
+          ...new Set([...state.favoriteProjectIds, ...op.state.favoriteProjectIds]),
+        ],
       };
     }
   }

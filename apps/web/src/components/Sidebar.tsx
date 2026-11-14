@@ -111,7 +111,14 @@ import {
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
 import { resolveProjectExpanded, useUiStateStore } from "../uiStateStore";
-import { splitThreadsByGroup, useThreadGroupsStore } from "../threadGroupsStore";
+import { isProjectFavorite } from "@t3tools/client-runtime/thread-groups";
+import {
+  canEditThreadGroups,
+  readThreadGroupsView,
+  splitThreadsByGroup,
+  threadGroupActions,
+  useThreadGroupsStore,
+} from "../threadGroupsStore";
 import {
   getThreadKeysToDeselectAfterDelete,
   useThreadSelectionStore,
@@ -1236,12 +1243,22 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     (group: SidebarProjectSnapshot, position: { x: number; y: number }) => {
       const api = readLocalApi();
       if (!api) return;
+      const favorite = isProjectFavorite(
+        readThreadGroupsView().byEnvironment,
+        group.memberProjectRefs,
+      );
+      const canFavorite = group.memberProjectRefs.every((ref) =>
+        canEditThreadGroups(ref.environmentId),
+      );
       void (async () => {
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             [
               { id: "new-thread", label: "New thread" },
               { id: "copy-path", label: "Copy path" },
+              ...(canFavorite
+                ? [{ id: "favorite" as const, label: favorite ? "Unfavorite" : "Favorite" }]
+                : []),
               { id: "project-settings", label: "Project settings", icon: "settings" },
             ],
             position,
@@ -1254,6 +1271,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             return;
           case "copy-path":
             copyPathToClipboard(group.workspaceRoot, { path: group.workspaceRoot });
+            return;
+          case "favorite":
+            threadGroupActions.setProjectFavorite(group.memberProjectRefs, !favorite);
             return;
           case "project-settings":
             openProjectSettings(group);

@@ -48,6 +48,7 @@ function threadGroups(state: ThreadGroupsState) {
         ? [{ projectId: ProjectId.make(projectId), groupId }]
         : [];
     }),
+    favoriteProjectIds: state.favoriteProjectIds,
   };
 }
 const invalid = (message: string) =>
@@ -131,6 +132,12 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
           if (op.type === "reorderGroups") {
             const unknown = op.groupIds.find((groupId) => !groups.has(groupId));
             if (unknown !== undefined) return yield* invalid(`No thread group has id ${unknown}.`);
+            threadGroupOps.push(op);
+            continue;
+          }
+          if (op.type === "setProjectFavorite") {
+            const missing = op.projectIds.find((projectId) => !liveProjects.has(projectId));
+            if (missing !== undefined) return yield* invalid(`No project has id ${missing}.`);
             threadGroupOps.push(op);
             continue;
           }

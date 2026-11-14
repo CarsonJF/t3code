@@ -80,6 +80,102 @@ export function splitThreadsByGroup<T extends GroupableThread>(
   };
 }
 
+interface ProjectRefLike {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
+}
+
+/** A project spanning environments is a favorite when any of its checkouts is. */
+export function isProjectFavorite(
+  byEnvironment: ThreadGroupsByEnvironment,
+  projectRefs: ReadonlyArray<ProjectRefLike>,
+): boolean {
+  return projectRefs.some((ref) =>
+    byEnvironment.get(ref.environmentId)?.favoriteProjectIds.includes(ref.projectId),
+  );
+}
+
+export function projectFavoriteOps(
+  projectRefs: ReadonlyArray<ProjectRefLike>,
+  favorite: boolean,
+): Map<EnvironmentId, ThreadGroupOp[]> {
+  const projectIdsByEnvironment = new Map<EnvironmentId, ProjectId[]>();
+  for (const ref of projectRefs) {
+    projectIdsByEnvironment.set(ref.environmentId, [
+      ...(projectIdsByEnvironment.get(ref.environmentId) ?? []),
+      ref.projectId,
+    ]);
+  }
+  return new Map(
+    [...projectIdsByEnvironment].map(([environmentId, projectIds]) => [
+      environmentId,
+      [{ type: "setProjectFavorite", projectIds, favorite }],
+    ]),
+  );
+}
+
+export interface ProjectPickerSection<T> {
+  readonly key: string;
+  readonly label: string;
+  readonly group: ThreadGroup | null;
+  readonly projects: readonly T[];
+}
+
+/**
+ * Most recent first, then favorites, then each group in its sidebar order, then the rest.
+ * The most recent project also keeps its place below; favorites appear only once.
+ */
+export function buildProjectPickerSections<T>(input: {
+  readonly projects: readonly T[];
+  readonly mostRecent: T | null;
+  readonly projectRefs: (project: T) => ReadonlyArray<ProjectRefLike>;
+  readonly byEnvironment: ThreadGroupsByEnvironment;
+  readonly groups?: ReadonlyArray<ThreadGroup>;
+}): ProjectPickerSection<T>[] {
+  const groups = input.groups ?? mergeThreadGroups(input.byEnvironment);
+  const favorites: T[] = [];
+  const byGroupId = new Map(groups.map((group) => [group.id, [] as T[]]));
+  const ungrouped: T[] = [];
+  for (const project of input.projects) {
+    const refs = input.projectRefs(project);
+    if (isProjectFavorite(input.byEnvironment, refs)) {
+      favorites.push(project);
+      continue;
+    }
+    const groupId = refs.reduce<string | null>((found, ref) => {
+      if (found !== null) return found;
+      const state = input.byEnvironment.get(ref.environmentId);
+      return state ? projectDefaultGroupId(state, ref.projectId) : null;
+    }, null);
+    ((groupId === null ? undefined : byGroupId.get(groupId)) ?? ungrouped).push(project);
+  }
+  const groupSections = groups.flatMap((group): ProjectPickerSection<T>[] => {
+    const projects = byGroupId.get(group.id)!;
+    return projects.length === 0
+      ? []
+      : [{ key: `group:${group.id}`, label: group.name, group, projects }];
+  });
+  return [
+    ...(input.mostRecent === null
+      ? []
+      : [{ key: "recent", label: "Most recent", group: null, projects: [input.mostRecent] }]),
+    ...(favorites.length === 0
+      ? []
+      : [{ key: "favorites", label: "Favorites", group: null, projects: favorites }]),
+    ...groupSections,
+    ...(ungrouped.length === 0
+      ? []
+      : [
+          {
+            key: "other",
+            label: groupSections.length > 0 || favorites.length > 0 ? "Other projects" : "Projects",
+            group: null,
+            projects: ungrouped,
+          },
+        ]),
+  ];
+}
+
 /** Prefixes `createGroup` when `group` is new to the environment, so the ops apply atomically. */
 export function withThreadGroup(
   state: ThreadGroupsState | undefined,
