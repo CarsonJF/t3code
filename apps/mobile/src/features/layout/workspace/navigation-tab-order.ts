@@ -1,6 +1,6 @@
 import { msg } from "gt-react-native";
 
-export const NAVIGATION_TAB_ORDER = ["threads", "pullRequests", "issues", "usage"] as const;
+export const NAVIGATION_TAB_ORDER = ["threads", "tots", "pullRequests", "issues", "usage"] as const;
 export type NavigationTab = (typeof NAVIGATION_TAB_ORDER)[number];
 
 const SHARED_SLOT_TABS = ["pullRequests", "issues"] as const;
@@ -27,10 +27,15 @@ export function navigationCustomizationAvailable(
 
 export const NAVIGATION_TAB_LABELS: Readonly<Record<NavigationTab, string>> = {
   threads: msg("Threads", { $context: "navigation tab, list of chat threads" }),
+  tots: msg("Tots", { $context: "navigation tab, list of Tots" }),
   pullRequests: msg("Pulls", { $context: "navigation tab, pull requests" }),
   issues: msg("Issues", { $context: "navigation tab, issues from an issue tracker" }),
   usage: msg("Usage", { $context: "navigation tab, provider usage limits" }),
 };
+
+/** Sections that are one page, with no list and detail columns. */
+export const isPageTab = (tab: string): tab is "usage" | "tots" =>
+  tab === "usage" || tab === "tots";
 
 function isNavigationTab(value: unknown): value is NavigationTab {
   return NAVIGATION_TAB_ORDER.some((tab) => tab === value);
