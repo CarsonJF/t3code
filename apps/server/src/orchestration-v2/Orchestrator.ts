@@ -83,6 +83,7 @@ import {
   TurnItemId,
   TrimmedNonEmptyString,
   managedRuntimeModeCeilingMessage,
+  parseTotThreadId,
 } from "@t3tools/contracts";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
@@ -7599,6 +7600,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       !hasTitleSetBeforeFirstMessage(projection.thread, command.titleSeed);
     if (
       !isNativeMaintenanceCommand(command) &&
+      // A Tot's thread is named for the Tot; its first message does not retitle it.
+      parseTotThreadId(command.threadId) === null &&
       (seedsUntitledThread ||
         (command.createdBy === "user" &&
           // A draft opened by `/compact` is titled after it, so only a chosen title stays here.
