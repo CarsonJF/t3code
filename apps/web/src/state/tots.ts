@@ -13,10 +13,10 @@ import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentSummaries } from "./presentation";
 import { serverEnvironment } from "./server";
 
-/** Every Tot on every connected environment, Home first. */
+/** Every Tot on every known environment, Home first; kept through a reconnect like its threads. */
 const totsAtom = Atom.make((get): ReadonlyArray<EnvironmentTot> => {
   const settingsByEnvironment = new Map<EnvironmentId, ServerSettings>();
-  for (const environmentId of get(environmentSummaries.connectedEnvironmentIdsAtom)) {
+  for (const environmentId of get(environmentSummaries.environmentIdsAtom)) {
     const settings = get(serverEnvironment.settingsValueAtom(environmentId));
     if (settings !== null) settingsByEnvironment.set(environmentId, settings);
   }
