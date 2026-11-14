@@ -99,6 +99,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.totsEnable]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsDisable]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsStartFresh]: AuthOrchestrationOperateScope,
+  [WS_METHODS.totsReadMemory]: AuthOrchestrationOperateScope,
+  [WS_METHODS.totsWriteMemory]: AuthOrchestrationOperateScope,
   [WS_METHODS.serverSearchAcpRegistry]: AuthOrchestrationReadScope,
   [WS_METHODS.serverPrepareAcpRegistryAgent]: AuthProvidersManageScope,
   [WS_METHODS.serverUninstallAcpRegistryManagedBinary]: AuthProvidersManageScope,
