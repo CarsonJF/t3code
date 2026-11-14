@@ -371,6 +371,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["latex tex katex equations formulas markdown"],
   },
   {
+    id: "animate-tot-avatars",
+    title: "Animate Tot avatars",
+    to: "/settings/appearance",
+    searchTerms: ["tots faces motion animation boopface avatar"],
+  },
+  {
     id: "panel-animations",
     title: "Panel animations",
     to: "/settings/appearance",
@@ -418,12 +424,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
     searchTerms: ["typography text grayscale anti aliasing macos thin"],
     macOnly: true,
-  },
-  {
-    id: "animate-tot-avatars",
-    title: "Animate Tot avatars",
-    to: "/settings/appearance",
-    searchTerms: ["tots faces motion animation boopface avatar"],
   },
   {
     id: "word-wrap",

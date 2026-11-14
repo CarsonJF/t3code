@@ -348,6 +348,27 @@ export function AppearanceSettingsPanel() {
             />
           }
         />
+        <SettingsRow
+          {...searchableSetting("animate-tot-avatars")}
+          description="Tot faces move in a Tot's own thread and when you hover them. Off keeps them still."
+          resetAction={
+            settings.animateTotAvatars !== DEFAULT_UNIFIED_SETTINGS.animateTotAvatars ? (
+              <SettingResetButton
+                label="Tot avatar animation"
+                onClick={() =>
+                  updateSettings({ animateTotAvatars: DEFAULT_UNIFIED_SETTINGS.animateTotAvatars })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.animateTotAvatars}
+              onCheckedChange={(checked) => updateSettings({ animateTotAvatars: Boolean(checked) })}
+              aria-label="Animate Tot avatars"
+            />
+          }
+        />
         <AdvancedSettings
           targetIds={[
             searchableSetting("panel-animations").id,
