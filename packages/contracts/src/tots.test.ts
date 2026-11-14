@@ -16,6 +16,8 @@ import {
 } from "./tots.ts";
 
 const yui = TotId.make("yui");
+const decodeServerSettings = Schema.decodeSync(ServerSettings);
+const decodeClientSettings = Schema.decodeSync(ClientSettingsSchema);
 
 describe("totSlug", () => {
   it("turns a name into a stable id", () => {
@@ -54,12 +56,12 @@ describe("TOT_FACE_ACTION", () => {
 
 describe("Tot settings", () => {
   it("starts with Home and keeps Tots out of client settings patches", () => {
-    expect(Schema.decodeSync(ServerSettings)({}).tots).toEqual([DEFAULT_HOME_TOT]);
+    expect(decodeServerSettings({}).tots).toEqual([DEFAULT_HOME_TOT]);
     expect("tots" in ServerSettingsPatch.fields).toBe(false);
   });
 
   it("animates Tot avatars by default on each client", () => {
-    expect(Schema.decodeSync(ClientSettingsSchema)({}).animateTotAvatars).toBe(true);
+    expect(decodeClientSettings({}).animateTotAvatars).toBe(true);
   });
 });
 
@@ -80,6 +82,7 @@ describe("isQuietTotThread", () => {
 
   it("quiets any Tot-launched thread on a server that does not host Tots", () => {
     expect(isQuietTotThread("tot-launched:yui:c", null)).toBe(true);
+    expect(isQuietTotThread("tot-launched:yui:c", [DEFAULT_HOME_TOT])).toBe(true);
     expect(isQuietTotThread("thread:x", null)).toBe(false);
   });
 });

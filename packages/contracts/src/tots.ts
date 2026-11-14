@@ -124,15 +124,15 @@ export const parseTotLaunchedThreadId = (threadId: string): TotId | null =>
   parsePrefixed(TOT_LAUNCHED_THREAD_ID_PREFIX, threadId);
 
 /**
- * Whether a thread a Tot launched should stay quiet. `tots` is null where no
- * Tot settings name its owner (a linked environment): the host decides there,
- * and a launched thread only exists while its Tot was on.
+ * Whether a thread a Tot launched should stay quiet. Where no Tot settings
+ * name its owner (a linked environment, or `tots` null), the Tot lives on
+ * another host: a launched thread only exists while its Tot was on.
  */
 export const isQuietTotThread = (threadId: string, tots: ReadonlyArray<Tot> | null): boolean => {
   const owner = parseTotLaunchedThreadId(threadId);
   if (owner === null) return false;
-  if (tots === null) return true;
-  return tots.some((tot) => tot.id === owner && tot.threadId !== null);
+  const tot = tots?.find((candidate) => candidate.id === owner);
+  return tot === undefined || tot.threadId !== null;
 };
 
 export const TotFaceState = Schema.Literals([
