@@ -1785,6 +1785,42 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
+    createTot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:create",
+      tag: WS_METHODS.totsCreate,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
+    updateTot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:update",
+      tag: WS_METHODS.totsUpdate,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
+    removeTot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:remove",
+      tag: WS_METHODS.totsRemove,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
+    enableTot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:enable",
+      tag: WS_METHODS.totsEnable,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
+    disableTot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:disable",
+      tag: WS_METHODS.totsDisable,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
+    startFreshTot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:start-fresh",
+      tag: WS_METHODS.totsStartFresh,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
     createGuestShare: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:guest-share:create",
       tag: WS_METHODS.guestShareCreate,
