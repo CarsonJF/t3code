@@ -180,6 +180,8 @@ export interface ThreadManagementWaitInput {
    * completion delivery will wake it again, as a delegated task's result does.
    */
   readonly untilDelegatedWorkSettled?: boolean;
+  /** Also return when the run stops to wait on a question or an approval. */
+  readonly untilAttention?: boolean;
 }
 
 export interface ThreadManagementWaitResult {
@@ -188,6 +190,8 @@ export interface ThreadManagementWaitResult {
   readonly timedOut: boolean;
   /** With `untilDelegatedWorkSettled`, once settled: the run with the thread's final answer. */
   readonly resultRun?: OrchestrationV2Run;
+  /** With `untilAttention`: what the waiting run asks for. */
+  readonly attention?: "question" | "approval";
 }
 
 export interface ThreadManagementInterruptInput {
@@ -1050,17 +1054,25 @@ const make = Effect.gen(function* () {
       runs: ReadonlyArray<OrchestrationV2Run>,
     ) {
       const current = yield* outcome(runs);
+      if (input.untilAttention === true && current.run.status === "waiting") {
+        const { runtimeRequests } = yield* getProjectThreadRecords(input, ["runtimeRequests"]);
+        const asked = runtimeRequests.find((request) => request.status === "pending");
+        const attention: "question" | "approval" | undefined =
+          asked === undefined ? undefined : asked.kind === "user_input" ? "question" : "approval";
+        return { ...current, settled: true, resultRun: undefined, attention };
+      }
       if (!current.settled || !untilDelegatedWorkSettled) {
-        return { ...current, resultRun: undefined };
+        return { ...current, resultRun: undefined, attention: undefined };
       }
       const resultRun = yield* delegatedWorkResult;
-      return { ...current, settled: resultRun !== undefined, resultRun };
+      return { ...current, settled: resultRun !== undefined, resultRun, attention: undefined };
     });
     const settledResult = (current: Effect.Success<ReturnType<typeof evaluate>>) => ({
       threadId: input.threadId,
       run: current.run,
       timedOut: !current.settled,
       ...(current.resultRun === undefined ? {} : { resultRun: current.resultRun }),
+      ...(current.attention === undefined ? {} : { attention: current.attention }),
     });
     const initial = yield* evaluate(target.runs);
     if (initial.settled) return settledResult(initial);
