@@ -31,6 +31,7 @@ export function useLocalDispatchState(input: {
 
   const serverAcknowledgedLocalDispatch = hasServerAcknowledgedLocalDispatch({
     localDispatch,
+    threadId: input.activeThread?.id,
     phase: input.phase,
     latestRun: input.activeLatestRun,
     latestUserMessageId: input.latestUserMessageId,
