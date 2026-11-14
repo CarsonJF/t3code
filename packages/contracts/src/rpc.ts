@@ -497,6 +497,7 @@ import {
 import {
   Tot,
   TotCreateInput,
+  TotDesignAvatarInput,
   TotEnableInput,
   TotError,
   TotIdInput,
@@ -642,6 +643,7 @@ export const WS_METHODS = {
   totsDisable: "tots.disable",
   totsStartFresh: "tots.startFresh",
   totsReadMemory: "tots.readMemory",
+  totsDesignAvatar: "tots.designAvatar",
   groupChatsCreate: "groupChats.create",
   groupChatsUpdate: "groupChats.update",
   groupChatsRemove: "groupChats.remove",
@@ -1118,6 +1120,10 @@ const WsGroupChatsUpdateRpc = Rpc.make(WS_METHODS.groupChatsUpdate, {
 const WsGroupChatsRemoveRpc = Rpc.make(WS_METHODS.groupChatsRemove, {
   payload: GroupChatIdInput,
   error: groupChatError,
+});
+const WsTotsDesignAvatarRpc = Rpc.make(WS_METHODS.totsDesignAvatar, {
+  payload: TotDesignAvatarInput,
+  error: totError,
 });
 const WsTotsReadMemoryRpc = Rpc.make(WS_METHODS.totsReadMemory, {
   payload: TotMemoryReadInput,
@@ -2639,6 +2645,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsTotsDisableRpc,
   WsTotsStartFreshRpc,
   WsTotsReadMemoryRpc,
+  WsTotsDesignAvatarRpc,
   WsGroupChatsCreateRpc,
   WsGroupChatsUpdateRpc,
   WsGroupChatsRemoveRpc,
