@@ -131,6 +131,7 @@ import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as NpmRelease from "./cloud/npmRelease.ts";
+import * as GroupChatService from "./tots/GroupChatService.ts";
 import * as TotService from "./tots/TotService.ts";
 import * as SessionStore from "./auth/SessionStore.ts";
 import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
@@ -814,6 +815,7 @@ it.effect("shell snapshots omit idle children and older settled threads only on 
 const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(DocumentText.DocumentText)({}),
   Layer.mock(TotService.TotService)({}),
+  Layer.mock(GroupChatService.GroupChatService)({}),
   Layer.mock(ServerSecretStore.ServerSecretStore)({}),
   Layer.mock(SecretCheck.SecretCheck)({}),
   Layer.mock(WorkspacePaths.WorkspacePaths)({}),
