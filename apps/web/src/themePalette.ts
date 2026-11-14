@@ -1672,6 +1672,24 @@ export function applyThemeColorPreview(
   setThemePreviewAppearance(appearance);
 }
 
+/**
+ * The CSS variables that paint a theme in one appearance, for painting part of the app. Null for
+ * the standard light, dark and system themes and for ids that do not resolve.
+ */
+export function getThemeVariables(
+  theme: ThemePreference,
+  appearance: ThemeAppearance,
+): Readonly<Record<string, string>> | null {
+  const palette = getThemeDefinition(theme);
+  if (palette === null) return null;
+  const colors = getThemeColorsForMode(palette, appearance) ?? palette.colors;
+  const variables: Record<string, string> = {};
+  for (const [role, value] of Object.entries(colors) as Array<[ThemeColorRole, string]>) {
+    if (isThemeColor(value)) variables[APP_THEME_VARIABLES[role]] = value;
+  }
+  return { ...variables, ...contextChipVariables(colors) };
+}
+
 export function applyThemePalette(theme: ThemePreference, appearance?: ThemeAppearance): void {
   if (typeof document === "undefined") return;
 
