@@ -1,4 +1,5 @@
 import type { AgentAwarenessThread } from "../orchestration-v2/ProjectionStore.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import {
   isListedThreadLineage,
   type EnvironmentId,
@@ -7,6 +8,7 @@ import {
   type Project,
   type RuntimeRequestId,
   type ThreadId,
+  isQuietTotThread,
 } from "@t3tools/contracts";
 import {
   RelayApi,
@@ -408,6 +410,7 @@ export const make = Effect.gen(function* () {
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
   const threads = yield* ThreadManagement.ThreadManagementService;
+  const serverSettings = yield* ServerSettings.ServerSettingsService;
   const projects = yield* ProjectService.ProjectService;
   const random = yield* SecureRandom.SecureRandom;
   const signingKey = yield* EnvironmentSigningKey;
@@ -484,6 +487,12 @@ export const make = Effect.gen(function* () {
   });
 
   const publishThreadUnsafe = Effect.fn("publishThreadUnsafe")(function* (threadId: ThreadId) {
+    // A Tot hears about the threads it launched; the phone does not.
+    const tots = yield* serverSettings.getSettings.pipe(
+      Effect.map((settings) => settings.tots),
+      Effect.orElseSucceed(() => null),
+    );
+    if (isQuietTotThread(threadId, tots)) return;
     const publishAgentActivity = yield* readPublishAgentActivityEnabled;
     if (!publishAgentActivity) {
       yield* cancelPublishRetries;

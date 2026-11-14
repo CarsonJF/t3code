@@ -6,7 +6,12 @@ import {
 import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
 import type { AnyRouter } from "@tanstack/react-router";
 import { threadKey } from "@t3tools/client-runtime/state/entities";
-import type { EnvironmentId, OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
+import {
+  type EnvironmentId,
+  isQuietTotThread,
+  type OrchestrationV2ThreadShell,
+  type ThreadId,
+} from "@t3tools/contracts";
 import { monitorHoldsWakeCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import type { ClientSettings } from "@t3tools/contracts/settings";
 import * as Option from "effect/Option";
@@ -22,6 +27,7 @@ import { getClientSettings, subscribeClientSettings } from "../hooks/useSettings
 import { isWindowsPlatform } from "../lib/utils";
 import { environmentSummaries } from "../state/presentation";
 import { environmentShell } from "../state/shell";
+import { serverEnvironment } from "../state/server";
 import { environmentThreadShells } from "../state/threads";
 import {
   hasDesktopNotifications,
@@ -139,6 +145,9 @@ export function startThreadNotifications(
         .has(threadKey({ environmentId, threadId: thread.id }))
     )
       return;
+    // A Tot is told about the threads it launched; the user hears it from the Tot.
+    const tots = registry.get(serverEnvironment.settingsValueAtom(environmentId))?.tots ?? null;
+    if (isQuietTotThread(thread.id, tots)) return;
     const { notificationMode: mode, inAppNotificationsEnabled } = getClientSettings();
     const active = activeThread();
     const title =
