@@ -6,6 +6,7 @@ import {
   SettingsIcon,
 } from "lucide-react";
 import { useTotHostEnvironmentId } from "../tots/totEditorStore";
+import { GroupChatEditorHost } from "../tots/GroupChatEditorDialog";
 import { TotEditorHost } from "../tots/TotEditorDialog";
 import { TotMemoryHost } from "../tots/TotMemoryDialog";
 import type { ReactNode } from "react";
@@ -340,6 +341,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <SidebarUtilityMenu />
       <TotEditorHost />
       <TotMemoryHost />
+      <GroupChatEditorHost />
     </SidebarFooter>
   );
 });
