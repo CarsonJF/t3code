@@ -1,5 +1,6 @@
 import {
   AuthOrchestrationOperateScope,
+  isGroupChatThreadId,
   parseTotThreadId,
   type EnvironmentId,
   type ScopedThreadRef,
@@ -84,7 +85,8 @@ export const ChatHeader = memo(function ChatHeader({
   onFindInThread,
 }: ChatHeaderProps) {
   // A Tot's thread is the Tot: no project, no title (the hero names it), renamed with the Tot.
-  const isTotThread = parseTotThreadId(activeThreadId) !== null;
+  const isTotThread =
+    parseTotThreadId(activeThreadId) !== null || isGroupChatThreadId(activeThreadId);
   const activeProjectName = activeProject?.isScratch ? "No project" : activeProject?.title;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const interfaceFont = useClientSettings((settings) => settings.fontFamilySans);
