@@ -17,6 +17,15 @@ export interface TotFaceInput {
   readonly completedUnseen: boolean;
 }
 
+export const TOT_FACE_STATE_LABELS: Record<TotFaceState, string> = {
+  idle: "Idle",
+  working: "Working",
+  "needs-you": "Needs you",
+  success: "Done",
+  failure: "Failed",
+  sleep: "Off",
+};
+
 /** The face a Tot shows: its status light, most urgent first. */
 export function totFaceState(input: TotFaceInput): TotFaceState {
   if (!input.enabled) return "sleep";
@@ -103,3 +112,19 @@ export function selectTots(
 
 export const isTotProject = (projectId: ProjectId, tots: ReadonlyArray<Tot>): boolean =>
   tots.some((tot) => tot.projectId === projectId);
+
+/** The projects a user may pick for new work: a Tot's project holds only its own thread. */
+export function withoutTotProjects<
+  T extends { readonly environmentId: EnvironmentId; readonly id: ProjectId },
+>(projects: ReadonlyArray<T>, tots: ReadonlyArray<EnvironmentTot>): ReadonlyArray<T> {
+  const owned = new Set(
+    tots.flatMap(({ environmentId, tot }) =>
+      tot.projectId === null ? [] : [`${environmentId}\u0000${tot.projectId}`],
+    ),
+  );
+  if (owned.size === 0) return projects;
+  const kept = projects.filter(
+    (project) => !owned.has(`${project.environmentId}\u0000${project.id}`),
+  );
+  return kept.length === projects.length ? projects : kept;
+}
