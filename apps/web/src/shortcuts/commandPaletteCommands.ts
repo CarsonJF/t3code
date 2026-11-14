@@ -1,5 +1,7 @@
 import type { AnyRouter } from "@tanstack/react-router";
 
+import { readHomeTotThread } from "../state/tots";
+import { buildThreadRouteParams } from "../threadRoutes";
 import {
   dispatchCommandPalette,
   isCommandPaletteMounted,
@@ -91,6 +93,17 @@ export function installCommandPaletteCommands(
         consume(event);
         dispatchCommandPalette({ _tag: "SetOpen", open: false });
         void router.navigate({ to: "/usage" });
+      },
+      "tots.openHome": (event) => {
+        consume(event);
+        dispatchCommandPalette({ _tag: "SetOpen", open: false });
+        const home = readHomeTotThread();
+        void (home === null
+          ? router.navigate({ to: "/settings/tots" })
+          : router.navigate({
+              to: "/$environmentId/$threadId",
+              params: buildThreadRouteParams(home),
+            }));
       },
       "commandPalette.toggle": toggleOverlay("commandPalette.toggle"),
       "filePicker.toggle": toggleOverlay("filePicker.toggle"),
