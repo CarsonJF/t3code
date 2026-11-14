@@ -40,3 +40,4 @@ async function generateWebViewScript(feature: string, name: string) {
 
 export const generateDeviceStreamScript = () => generateWebViewScript("devices", "Device");
 export const generatePreviewStreamScript = () => generateWebViewScript("browser", "Preview");
+export const generateTotFaceScript = () => generateWebViewScript("tots", "TotFace");
