@@ -516,6 +516,7 @@ export const ClientSettingsSchema = Schema.Struct({
 
   fontSmoothing: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   animateTotAvatars: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  totToasts: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   // Older installs also decode to null; onboarding must additionally require an empty workspace.
   onboardingCompletedAt: Schema.NullOr(Schema.String).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
@@ -2143,6 +2144,7 @@ export const ClientSettingsPatch = Schema.Struct({
   fontFamilyTerminal: Schema.optionalKey(FontFamilyPreference),
   fontSmoothing: Schema.optionalKey(Schema.Boolean),
   animateTotAvatars: Schema.optionalKey(Schema.Boolean),
+  totToasts: Schema.optionalKey(Schema.Boolean),
   persistComposerContextStrip: Schema.optionalKey(Schema.Boolean),
   favorites: Schema.optionalKey(ModelFavorites),
   providerModelPreferences: Schema.optionalKey(ProviderModelPreferences),
