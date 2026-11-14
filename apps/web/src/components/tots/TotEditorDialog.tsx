@@ -7,6 +7,7 @@ import { validateTotDraft, type TotDraftErrors } from "@t3tools/client-runtime/t
 import { TOT_SKIN_SERIES, totSkinSeriesOf, totSkinsIn } from "@t3tools/client-runtime/tots/skins";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
+  HOME_TOT_ID,
   TOT_SHAPES,
   type EnvironmentId,
   type ProjectId,
@@ -74,7 +75,8 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const { target } = props;
   const editing = target.mode === "edit" ? target.tot : null;
   const [chosenHost, setChosenHost] = useState(target.environmentId);
-  const environmentId = editing === null ? chosenHost : target.environmentId;
+  const environmentId = chosenHost;
+  const moving = editing !== null && chosenHost !== target.environmentId;
   const hosts = useTotHosts();
   const navigate = useNavigate();
   const tots = useTots();
@@ -85,6 +87,9 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const createTot = useAtomCommand(serverEnvironment.createTot, { reportFailure: false });
   const updateTot = useAtomCommand(serverEnvironment.updateTot, { reportFailure: false });
   const enableTot = useAtomCommand(serverEnvironment.enableTot, { reportFailure: false });
+  const removeTot = useAtomCommand(serverEnvironment.removeTot, { reportFailure: false });
+  const readTotMemory = useAtomCommand(serverEnvironment.readTotMemory, { reportFailure: false });
+  const writeTotMemory = useAtomCommand(serverEnvironment.writeTotMemory, { reportFailure: false });
 
   const [name, setName] = useState(editing?.name ?? "");
   const [color, setColor] = useState(editing?.avatar.color ?? COLOR_CHOICES[0]!);
@@ -133,7 +138,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
     const checked = validateTotDraft(
       { name, color, skin, shape, antenna, scope, instructions, modelSelection: model.selection },
       environmentTots.map((tot) => tot.id),
-      editing?.id ?? null,
+      moving ? null : (editing?.id ?? null),
     );
     if (!checked.ok) {
       setErrors(checked.errors);
@@ -142,6 +147,45 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
     setErrors({});
     setFailure(null);
     setPending(true);
+    if (editing !== null && moving) {
+      // A Tot lives on one machine, so a move makes it anew on the other, brings its memory
+      // along, and removes the original last so a failure leaves it where it was.
+      const memory = await readTotMemory({
+        environmentId: target.environmentId,
+        input: { id: editing.id },
+      });
+      const created = await createTot({ environmentId, input: checked.value });
+      if (created._tag === "Failure") {
+        setPending(false);
+        if (!isAtomCommandInterrupted(created)) {
+          setFailure(String(squashAtomCommandFailure(created)));
+        }
+        return;
+      }
+      if (memory._tag === "Success" && memory.value.files.length > 0) {
+        await writeTotMemory({
+          environmentId,
+          input: { id: created.value.id, files: memory.value.files },
+        });
+      }
+      const enabled =
+        editing.threadId === null
+          ? null
+          : await enableTot({
+              environmentId,
+              input: { id: created.value.id, modelSelection: checked.value.modelSelection },
+            });
+      await removeTot({ environmentId: target.environmentId, input: { id: editing.id } });
+      setPending(false);
+      closeTotEditor();
+      if (enabled?._tag === "Success") {
+        void navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(scopeThreadRef(environmentId, enabled.value.threadId)),
+        });
+      }
+      return;
+    }
     if (editing !== null) {
       const result = await updateTot({
         environmentId,
@@ -225,7 +269,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                 </div>
               </div>
 
-              {editing === null && hosts.length > 1 ? (
+              {hosts.length > 1 && editing?.id !== HOME_TOT_ID ? (
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-sm">Lives on</span>
                   <Select
@@ -249,6 +293,12 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                     </SelectPopup>
                   </Select>
                 </div>
+              ) : null}
+              {moving ? (
+                <p className="text-muted-foreground text-xs">
+                  Moving starts a new thread on the other machine. Its memory comes along; projects
+                  in its scope and its model are chosen again there.
+                </p>
               ) : null}
 
               <fieldset className="flex flex-col gap-1.5">
