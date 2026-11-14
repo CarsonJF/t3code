@@ -1,4 +1,5 @@
 import type { TotAnimation } from "@t3tools/client-runtime/tots";
+import { applyTotHeadShape } from "@t3tools/client-runtime/tots/shapes";
 import {
   TOT_FACE_ACTION,
   type TotAvatar as TotAvatarValue,
@@ -48,6 +49,13 @@ export function TotAvatar(props: {
     face.setPointerFollow(false);
     face.play(TOT_FACE_ACTION[props.state]);
   }, [defined, props.state]);
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- writes the outline into the boop-face element
+  useEffect(() => {
+    const face = ref.current;
+    if (!defined || face === null) return;
+    applyTotHeadShape(face, props.avatar.shape);
+  }, [defined, props.avatar.shape]);
 
   return (
     <boop-face
