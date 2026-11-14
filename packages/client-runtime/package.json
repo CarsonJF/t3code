@@ -311,6 +311,14 @@
       "types": "./src/tots/totEditor.ts",
       "default": "./src/tots/totEditor.ts"
     },
+    "./tots/shapes": {
+      "types": "./src/tots/shapes.ts",
+      "default": "./src/tots/shapes.ts"
+    },
+    "./tots/skins": {
+      "types": "./src/tots/skins.ts",
+      "default": "./src/tots/skins.ts"
+    },
     "./state/outdatedServerUpdate": {
       "types": "./src/state/outdatedServerUpdate.ts",
       "default": "./src/state/outdatedServerUpdate.ts"

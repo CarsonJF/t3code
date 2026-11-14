@@ -36,4 +36,6 @@ Each Tot has its own folder. **Settings → Tots → Instructions** opens its `A
 
 ## Faces
 
+Pick a face's color, shape and skin when you create or edit a Tot. Skins come in series, such as Jelly, Metal or Wood; pick a series to see its skins. On mobile you can change the color and shape; a skin set on desktop shows there too.
+
 Faces move in a Tot's own thread, in the Tots tab, and when you hover them in the sidebar. To keep them still, turn off **Animate Tot avatars** in Appearance settings, on each device.

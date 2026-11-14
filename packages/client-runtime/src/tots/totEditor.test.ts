@@ -57,15 +57,19 @@ describe("validateTotDraft", () => {
   });
 
   it("trims the name and returns what the create call takes", () => {
-    expect(validateTotDraft(draft({ name: "  Yui  ", skin: 301 }), [], null)).toEqual({
+    expect(
+      validateTotDraft(draft({ name: "  Yui  ", skin: 301, shape: "flower" }), [], null),
+    ).toEqual({
       ok: true,
       value: {
         name: "Yui",
-        avatar: { color: "#0A7EA4", skin: 301 },
+        avatar: { color: "#0A7EA4", skin: 301, shape: "flower" },
         scope: "all",
         instructions: "Be warm.",
         modelSelection: { instanceId: "codex", model: "gpt-5" },
       },
     });
+    const round = validateTotDraft(draft({ shape: "round" }), [], null);
+    expect(round.ok && round.value.avatar).toEqual({ color: "#0A7EA4" });
   });
 });

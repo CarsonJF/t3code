@@ -7,7 +7,14 @@ import { WebView } from "react-native-webview";
 import { TotStillFace } from "./TotStillFace";
 
 const faceMessage = (avatar: TotAvatar, state: TotFaceState, size: number) =>
-  JSON.stringify({ action: TOT_FACE_ACTION[state], color: avatar.color, size, motion: "auto" });
+  JSON.stringify({
+    action: TOT_FACE_ACTION[state],
+    color: avatar.color,
+    skin: avatar.skin,
+    shape: avatar.shape,
+    size,
+    motion: "auto",
+  });
 
 const faceDocument = (initial: string) => {
   const safeInitial = initial.replace(/</g, "\\u003c");
