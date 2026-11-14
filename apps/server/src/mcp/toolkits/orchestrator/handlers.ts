@@ -1,4 +1,9 @@
-import { OrchestratorMcpFailure } from "@t3tools/contracts";
+import {
+  type EnvironmentId,
+  OrchestratorMcpFailure,
+  type RunId,
+  type ThreadId,
+} from "@t3tools/contracts";
 import { readTotCaller, refuseTots } from "../../totCaller.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import { OrchestratorToolkit } from "./tools.ts";
@@ -186,22 +191,8 @@ const handlers = {
           const scope = yield* McpInvocationContext.McpInvocationContext;
           const service = yield* OrchestratorMcpService.OrchestratorMcpService;
           const sent = yield* service.sendToThread(scope, input);
-          // A Tot handing work to another Tot hears when that run ends.
-          const tot = yield* readTotCaller();
-          if (Option.isSome(tot) && tot.value.via === "local") {
-            const tots = yield* TotService.TotService;
-            const target = yield* tots.totForThread(input.threadId);
-            if (Option.isSome(target)) {
-              yield* tots
-                .addWatch(tot.value.totId, {
-                  environmentId: scope.environmentId,
-                  threadId: input.threadId,
-                  reason: "sent",
-                  runId: sent.runId,
-                })
-                .pipe(Effect.ignore);
-            }
-          }
+          // A Tot hears when the run its message started ends.
+          yield* watchSentRun(scope.environmentId, input.threadId, sent.runId);
           return sent;
         }),
     ),
@@ -210,7 +201,9 @@ const handlers = {
       Effect.gen(function* () {
         const scope = yield* McpInvocationContext.McpInvocationContext;
         const remote = yield* RemoteDelegation.RemoteDelegation;
-        return yield* remote.followUp(scope, environmentId, input, sent);
+        const followed = yield* remote.followUp(scope, environmentId, input, sent);
+        yield* watchSentRun(environmentId, input.threadId, followed.runId);
+        return followed;
       }),
   ),
   t3_thread_wait: McpToolAccess.reads((input) =>
@@ -260,5 +253,18 @@ const handlers = {
       }),
   ),
 } satisfies McpToolAccess.Handlers<typeof OrchestratorToolkit.tools>;
+
+/** Watches the run a local Tot's message started, so the Tot hears when it ends. */
+const watchSentRun = Effect.fn("mcp.watchSentRun")(function* (
+  environmentId: EnvironmentId,
+  threadId: ThreadId,
+  runId: RunId,
+) {
+  const tot = yield* readTotCaller();
+  if (Option.isNone(tot) || tot.value.via !== "local") return;
+  yield* (yield* TotService.TotService)
+    .addWatch(tot.value.totId, { environmentId, threadId, reason: "sent", runId })
+    .pipe(Effect.ignore);
+});
 
 export const layer = McpToolAccess.toLayer(OrchestratorToolkit, handlers);

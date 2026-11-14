@@ -1,6 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 
+import { ProjectId } from "./baseSchemas.ts";
+
 import { ServerSettings, ServerSettingsPatch, ClientSettingsSchema } from "./settings.ts";
 import {
   DEFAULT_HOME_TOT,
@@ -71,6 +73,7 @@ describe("isQuietTotThread", () => {
       ...DEFAULT_HOME_TOT,
       id: yui,
       name: "Yui",
+      projectId: ProjectId.make("project:yui"),
       threadId: enabled ? totThreadId(yui, "n") : null,
     },
   ];
@@ -83,6 +86,7 @@ describe("isQuietTotThread", () => {
   it("quiets any Tot-launched thread on a server that does not host Tots", () => {
     expect(isQuietTotThread("tot-launched:yui:c", null)).toBe(true);
     expect(isQuietTotThread("tot-launched:yui:c", [DEFAULT_HOME_TOT])).toBe(true);
+    expect(isQuietTotThread("tot-launched:home:c", [DEFAULT_HOME_TOT])).toBe(true);
     expect(isQuietTotThread("thread:x", null)).toBe(false);
   });
 });

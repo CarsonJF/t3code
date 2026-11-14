@@ -15,7 +15,7 @@ import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.t
 import * as TotService from "../tots/TotService.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import { liveThreadShell } from "./McpToolAccess.testkit.ts";
-import { readTotCaller, refuseTots, requireTotChange } from "./totCaller.ts";
+import { readTotCaller, refuseTots, requireTotChange, senderForForwarding } from "./totCaller.ts";
 
 const environmentId = EnvironmentId.make("environment:tot-caller");
 const homeThread = ThreadId.make("tot:home:current");
@@ -154,5 +154,22 @@ it.effect("refuses a Tot what Tots may never do, and lets anyone else through", 
     );
     expect(linked.code).toBe("capability_denied");
     yield* run(refuseTots("A Tot cannot delete projects."), threadScope(ThreadId.make("thread:x")));
+  }),
+);
+
+it.effect("forwards a Tot's identity only from its current thread", () =>
+  Effect.gen(function* () {
+    const sender = (threadId: string) =>
+      run(
+        senderForForwarding(environmentId, { id: ThreadId.make(threadId), title: "Home" }),
+        threadScope(homeThread),
+      );
+    expect(yield* sender("tot:home:current")).toEqual({
+      environmentId,
+      threadId: "tot:home:current",
+      title: "Home",
+    });
+    expect(yield* sender("tot:home:former")).toBeUndefined();
+    expect(yield* sender("thread:ordinary")).toMatchObject({ threadId: "thread:ordinary" });
   }),
 );
