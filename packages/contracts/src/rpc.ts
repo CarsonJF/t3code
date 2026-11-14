@@ -443,6 +443,9 @@ import {
   TotEnableInput,
   TotError,
   TotIdInput,
+  TotMemory,
+  TotMemoryReadInput,
+  TotMemoryWriteInput,
   TotThreadResult,
   TotUpdateInput,
 } from "./tots.ts";
@@ -566,6 +569,8 @@ export const WS_METHODS = {
   totsEnable: "tots.enable",
   totsDisable: "tots.disable",
   totsStartFresh: "tots.startFresh",
+  totsReadMemory: "tots.readMemory",
+  totsWriteMemory: "tots.writeMemory",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverCheckSecretSource: "server.checkSecretSource",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
@@ -959,6 +964,16 @@ const WsTotsDisableRpc = Rpc.make(WS_METHODS.totsDisable, { payload: TotIdInput,
 const WsTotsStartFreshRpc = Rpc.make(WS_METHODS.totsStartFresh, {
   payload: TotIdInput,
   success: TotThreadResult,
+  error: totError,
+});
+
+const WsTotsReadMemoryRpc = Rpc.make(WS_METHODS.totsReadMemory, {
+  payload: TotMemoryReadInput,
+  success: TotMemory,
+  error: totError,
+});
+const WsTotsWriteMemoryRpc = Rpc.make(WS_METHODS.totsWriteMemory, {
+  payload: TotMemoryWriteInput,
   error: totError,
 });
 
@@ -2350,6 +2365,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsTotsEnableRpc,
   WsTotsDisableRpc,
   WsTotsStartFreshRpc,
+  WsTotsReadMemoryRpc,
+  WsTotsWriteMemoryRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerCheckSecretSourceRpc,
   WsServerSearchAcpRegistryRpc,
