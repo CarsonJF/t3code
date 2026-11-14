@@ -18,6 +18,7 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useClientSettings, useEnvironmentSettings } from "../../hooks/useSettings";
 import { useProject, useThreadShell } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
+import { useTotHosts, useTots } from "../../state/tots";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { TotAvatar } from "../tots/TotAvatar";
@@ -41,20 +42,48 @@ function reportFailure(title: string, error: unknown) {
 
 export function TotsSettings() {
   const environmentId = useTotHostEnvironmentId();
+  const hosts = useTotHosts();
+  const tots = useTots();
+  // The default machine, plus every other machine already running Tots.
+  const machines = hosts.filter(
+    (host) =>
+      host.environmentId === environmentId ||
+      tots.some((entry) => entry.environmentId === host.environmentId),
+  );
   return (
     <SettingsPageContainer>
       <SettingsSection title="Tots">
         {environmentId === null ? (
           <SettingsRow {...searchableSetting("tots")} description="Connect to a T3 server first." />
         ) : (
-          <TotsRows environmentId={environmentId} />
+          <>
+            <SettingsRow
+              {...searchableSetting("tots")}
+              description={TOTS_DESCRIPTION}
+              control={
+                <Button size="sm" onClick={() => openTotEditor({ mode: "create", environmentId })}>
+                  New Tot
+                </Button>
+              }
+            />
+            {machines.map((host) => (
+              <TotsRows
+                key={host.environmentId}
+                environmentId={host.environmentId}
+                machine={machines.length > 1 ? host.label : null}
+              />
+            ))}
+          </>
         )}
       </SettingsSection>
     </SettingsPageContainer>
   );
 }
 
-function TotsRows(props: { readonly environmentId: EnvironmentId }) {
+function TotsRows(props: {
+  readonly environmentId: EnvironmentId;
+  readonly machine: string | null;
+}) {
   const { environmentId } = props;
   const tots = useEnvironmentSettings(environmentId, (settings) => settings.tots);
   const linksOn = useEnvironmentSettings(
@@ -63,15 +92,7 @@ function TotsRows(props: { readonly environmentId: EnvironmentId }) {
   );
   return (
     <>
-      <SettingsRow
-        {...searchableSetting("tots")}
-        description={TOTS_DESCRIPTION}
-        control={
-          <Button size="sm" onClick={() => openTotEditor({ mode: "create", environmentId })}>
-            New Tot
-          </Button>
-        }
-      />
+      {props.machine === null ? null : <SettingsRow title={`On ${props.machine}`} />}
       {linksOn ? null : (
         <SettingsRow
           title="Other machines"
