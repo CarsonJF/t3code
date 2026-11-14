@@ -14,6 +14,7 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
@@ -39,6 +40,7 @@ const harness = (callerThread: ThreadId) => {
       issuedAt: 0,
       capabilities: new Set(["orchestration" as const]),
     }),
+    Layer.mock(GroupChatService.GroupChatService)({}),
     Layer.mock(TotService.TotService)({
       list: Effect.succeed([{ ...DEFAULT_HOME_TOT, threadId: homeThread }]),
       totForThread: (threadId) =>
