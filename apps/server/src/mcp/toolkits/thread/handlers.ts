@@ -7,6 +7,7 @@ import {
   OrchestratorMcpFailure,
   type OrchestrationV2Command,
   type OrchestrationV2RuntimeRequest,
+  parseTotLaunchedThreadId,
   ProviderRequestKind,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -26,6 +27,7 @@ import {
 import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
 import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
 import { queuedRunsInDeliveryOrder } from "../../../orchestration-v2/QueuedRunOrder.ts";
+import * as TotService from "../../../tots/TotService.ts";
 import { readTotCaller, requireTotChange } from "../../totCaller.ts";
 import { ThreadToolkit } from "./tools.ts";
 
@@ -313,7 +315,27 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
               code: "capability_denied",
               message: "Only a Tot can approve permission requests.",
             });
-          yield* requireTotChange();
+          const tot = yield* requireTotChange();
+          // A Tot answers for the user only in work it started or was asked to watch.
+          const scope = yield* McpInvocationContext.McpInvocationContext;
+          const managed =
+            input.threadId !== undefined &&
+            (parseTotLaunchedThreadId(input.threadId) === tot.totId ||
+              (tot.via === "local" &&
+                (yield* (yield* TotService.TotService).list).some(
+                  (candidate) =>
+                    candidate.id === tot.totId &&
+                    candidate.watches.some(
+                      (watch) =>
+                        watch.environmentId === scope.environmentId &&
+                        watch.threadId === input.threadId,
+                    ),
+                )));
+          if (!managed)
+            return yield* new OrchestratorMcpFailure({
+              code: "capability_denied",
+              message: "A Tot approves requests only in threads it launched or watches.",
+            });
           const { threads, projection } = yield* readApproval({
             threadId: input.threadId,
             requestId,
