@@ -3729,6 +3729,9 @@ const make = Effect.gen(function* () {
               resultRun: { runId: result.resultRun.id, status: runOutcome(result.resultRun) },
             }),
         ...(result.attention === undefined ? {} : { attention: result.attention }),
+        ...(result.attentionRequestId === undefined
+          ? {}
+          : { attentionRequestId: result.attentionRequestId }),
       } satisfies OrchestratorMcpThreadWaitResult;
     }),
     interruptThread: Effect.fn("OrchestratorMcpService.interruptThread")(function* (scope, input) {
