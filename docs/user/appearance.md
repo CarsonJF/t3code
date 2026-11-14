@@ -89,3 +89,7 @@ Place a JPEG, PNG, or WebP file (up to 16 MB) next to a published theme file wit
 ```
 
 Delete the image file to remove it.
+
+## Themes for part of the app
+
+A Tot, a project or a thread group can use its own theme in place of the app's. See [Tots](./tots.md#themes). The standard light and dark themes cannot be assigned; pick a named theme.
