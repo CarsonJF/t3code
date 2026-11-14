@@ -37,6 +37,8 @@ export const TotAvatar = Schema.Struct({
   skin: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9999 }))),
   /** The head outline; BoopFace's own rounded head when absent. */
   shape: Schema.optional(TotShape),
+  /** BoopFace's antenna dot; hidden when absent. */
+  antenna: Schema.optional(Schema.Boolean),
 });
 export type TotAvatar = typeof TotAvatar.Type;
 

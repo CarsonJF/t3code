@@ -71,5 +71,7 @@ describe("validateTotDraft", () => {
     });
     const round = validateTotDraft(draft({ shape: "round" }), [], null);
     expect(round.ok && round.value.avatar).toEqual({ color: "#0A7EA4" });
+    const antenna = validateTotDraft(draft({ antenna: true }), [], null);
+    expect(antenna.ok && antenna.value.avatar).toEqual({ color: "#0A7EA4", antenna: true });
   });
 });
