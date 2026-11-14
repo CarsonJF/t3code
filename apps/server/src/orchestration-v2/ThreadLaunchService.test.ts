@@ -665,6 +665,43 @@ it.effect.each([" /COMPACT "])(
     }),
 );
 
+it.effect("keeps a Tot thread's name when the user first writes to it", () =>
+  Effect.gen(function* () {
+    const harness = makeHarness();
+    yield* Effect.gen(function* () {
+      const launches = yield* ThreadLaunch.ThreadLaunchService;
+      const threads = yield* ThreadManagement.ThreadManagementService;
+      const outbox = yield* EffectOutbox.EffectOutboxV2;
+      const launched = yield* launches.launch({
+        ...launchInput({ command: "tot-title", thread: "tot:home:title" }),
+        title: "Home",
+      });
+      const commandId = CommandId.make("tot-title-first-message");
+      yield* threads.dispatch({
+        type: "message.dispatch",
+        commandId,
+        threadId: launched.threadId,
+        messageId: MessageId.make("tot-title-first-message-id"),
+        createdBy: "user",
+        creationSource: "web",
+        text: "Launch a test thread on the other machine",
+        attachments: [],
+        // The web composer seeds a title with a thread's first message.
+        titleSeed: "Launch a test thread",
+        dispatchMode: { type: "defer_start" },
+      });
+      const { thread } = yield* threads.getThreadProjection(launched.threadId);
+      assert.equal(thread.title, "Home");
+      assert.isNotOk(thread.titleRegeneration);
+      assert.isFalse(
+        (yield* outbox.listByCommandId(commandId)).some(
+          (effect) => effect.request.type === "thread-title.generate",
+        ),
+      );
+    }).pipe(Effect.provide(harness.layer));
+  }),
+);
+
 it.effect("keeps native maintenance commands out of steering and restart messages", () =>
   Effect.gen(function* () {
     const harness = makeHarness();
