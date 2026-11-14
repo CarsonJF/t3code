@@ -6,7 +6,6 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { contextMenuSourceOf } from "~/contextMenuSource";
-import { useTotForThread } from "../tots/TotThreadHero";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
@@ -76,7 +75,7 @@ function resolveRenameCommit(input: {
 export const ChatHeader = memo(function ChatHeader({
   activeThreadEnvironmentId,
   activeThreadId,
-  activeThreadTitle: threadTitle,
+  activeThreadTitle,
   activeThreadLinkOrigin,
   isServerThread,
   activeProject,
@@ -88,10 +87,8 @@ export const ChatHeader = memo(function ChatHeader({
   onFindInThread,
 }: ChatHeaderProps) {
   const gt = useGT();
-  // A Tot's thread is the Tot: it shows the Tot's name, not a project, and renames with the Tot.
+  // A Tot's thread is the Tot: no project, no title (the hero names it), renamed with the Tot.
   const isTotThread = parseTotThreadId(activeThreadId) !== null;
-  const activeThreadTitle =
-    useTotForThread(activeThreadEnvironmentId, activeThreadId)?.tot.name ?? threadTitle;
   const activeProjectName = activeProject?.isScratch ? gt("No project") : activeProject?.title;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const interfaceFont = useClientSettings((settings) => settings.fontFamilySans);
@@ -338,6 +335,8 @@ export const ChatHeader = memo(function ChatHeader({
             </WorkspaceBreadcrumbSeparator>
           </>
         ) : null}
+        {/* A Tot's thread names the Tot in its hero, below. */}
+        {isTotThread ? null : (
         <WorkspaceBreadcrumbItem current className="min-w-10 flex-1">
           {renamingTitle !== null ? (
             <input
@@ -415,6 +414,7 @@ export const ChatHeader = memo(function ChatHeader({
             </SharedTooltipTrigger>
           ) : null}
         </WorkspaceBreadcrumbItem>
+        )}
       </WorkspaceBreadcrumb>
       {isServerThread ? <GuestShareIndicator threadRef={activeThreadRef} /> : null}
     </div>
