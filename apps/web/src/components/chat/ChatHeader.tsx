@@ -1,10 +1,11 @@
 import {
   AuthOrchestrationOperateScope,
+  parseTotThreadId,
   type EnvironmentId,
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
-import { TotThreadFace } from "../tots/TotThreadFace";
+import { useTotForThread } from "../tots/TotThreadHero";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
@@ -73,7 +74,7 @@ function resolveRenameCommit(input: {
 export const ChatHeader = memo(function ChatHeader({
   activeThreadEnvironmentId,
   activeThreadId,
-  activeThreadTitle,
+  activeThreadTitle: threadTitle,
   activeThreadLinkOrigin,
   isServerThread,
   activeProject,
@@ -84,6 +85,10 @@ export const ChatHeader = memo(function ChatHeader({
   onOpenProjectSettings,
   onFindInThread,
 }: ChatHeaderProps) {
+  // A Tot's thread is the Tot: it shows the Tot's name, not a project, and renames with the Tot.
+  const isTotThread = parseTotThreadId(activeThreadId) !== null;
+  const activeThreadTitle =
+    useTotForThread(activeThreadEnvironmentId, activeThreadId)?.tot.name ?? threadTitle;
   const activeProjectName = activeProject?.isScratch ? "No project" : activeProject?.title;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const interfaceFont = useClientSettings((settings) => settings.fontFamilySans);
@@ -162,6 +167,7 @@ export const ChatHeader = memo(function ChatHeader({
   const startRename = () => {
     if (
       !isServerThread ||
+      isTotThread ||
       !readEnvironmentScope(activeThreadEnvironmentId, AuthOrchestrationOperateScope)
     )
       return;
@@ -260,7 +266,7 @@ export const ChatHeader = memo(function ChatHeader({
         ariaLabel="Thread breadcrumb"
         className="flex-1 overflow-clip [overflow-clip-margin:2px]"
       >
-        {activeProject ? (
+        {activeProject && !isTotThread ? (
           <>
             <WorkspaceBreadcrumbItem className="shrink">
               <Tooltip>
@@ -360,10 +366,6 @@ export const ChatHeader = memo(function ChatHeader({
                   />
                 }
               >
-                <TotThreadFace
-                  environmentId={activeThreadEnvironmentId}
-                  threadId={activeThreadId}
-                />
                 <h2 className="min-w-0" dir={textDirection(activeThreadTitle)}>
                   <WorkspaceBreadcrumbText>{activeThreadTitle}</WorkspaceBreadcrumbText>
                 </h2>
