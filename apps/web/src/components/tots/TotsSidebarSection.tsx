@@ -37,7 +37,7 @@ const TotRow = memo(function TotRow(props: { readonly entry: EnvironmentTot }) {
   const state = totFaceState(totFaceInputFromShell(tot, shell));
   const open = () => {
     if (ref === null) {
-      void navigate({ to: "/settings" });
+      void navigate({ to: "/settings/tots" });
       return;
     }
     void navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(ref) });
