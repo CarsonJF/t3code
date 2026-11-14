@@ -17,10 +17,26 @@ export type TotId = typeof TotId.Type;
 
 export const HOME_TOT_ID = TotId.make("home");
 
+export const TOT_SHAPES = [
+  "round",
+  "squircle",
+  "blob",
+  "flower",
+  "clover",
+  "burst",
+  "cloud",
+  "drop",
+  "gem",
+] as const;
+export const TotShape = Schema.Literals(TOT_SHAPES);
+export type TotShape = typeof TotShape.Type;
+
 export const TotAvatar = Schema.Struct({
   color: Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
   /** A BoopFace skin number; the flat color when absent. */
   skin: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9999 }))),
+  /** The head outline; BoopFace's own rounded head when absent. */
+  shape: Schema.optional(TotShape),
 });
 export type TotAvatar = typeof TotAvatar.Type;
 
