@@ -1162,6 +1162,9 @@ importers:
       '@tiptap/starter-kit':
         specifier: ^3.31.3
         version: 3.31.3
+      boopface:
+        specifier: 0.8.0
+        version: 0.8.0
       canvas-confetti:
         specifier: 1.9.4
         version: 1.9.4
@@ -8133,6 +8136,9 @@ packages:
   boolean@3.2.0:
     resolution: {integrity: sha512-d0II/GO9uf9lfUHH2BQsjxzRJZBdsjgsBiW4BvhWk/3qoKwQFjIDVN19PfX8F2D/r9PCMTtLWjYVCFrpeYUzsw==}
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+
+  boopface@0.8.0:
+    resolution: {integrity: sha512-V3VI+SoCqopipRNQqNrRmMbtSFMQTY6CnvMMtYMgIa8WIAtF+6nWTyPQISVpA974un0FFKpo7lYGQ+zUTLlk4w==}
 
   bplist-creator@0.1.0:
     resolution: {integrity: sha512-sXaHZicyEEmY86WyueLTQesbeoH/mquvarJaQNbjuOQO+7gbFcDEWqKmcWA4cOTLzFlfgvkiVxolk1k5bBIpmg==}
@@ -18341,6 +18347,8 @@ snapshots:
 
   boolean@3.2.0:
     optional: true
+
+  boopface@0.8.0: {}
 
   bplist-creator@0.1.0:
     dependencies:
