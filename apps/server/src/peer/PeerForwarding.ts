@@ -19,6 +19,7 @@ import * as Schema from "effect/Schema";
 import type * as Tool from "effect/ai/Tool";
 
 import { assertNotLinked } from "../mcp/linkOrigin.ts";
+import { senderForForwarding } from "../mcp/totCaller.ts";
 import * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
 import { readCaller, unavailable } from "../mcp/threadAccess.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
@@ -147,13 +148,7 @@ const make = Effect.gen(function* () {
     }
     // So a message sent there names the thread that sent it, even to a client that cannot reach here.
     const sender =
-      caller === undefined
-        ? undefined
-        : {
-            environmentId: scope.environmentId,
-            threadId: caller.id,
-            title: caller.title,
-          };
+      caller === undefined ? undefined : yield* senderForForwarding(scope.environmentId, caller);
     return yield* peers.call({
       environmentId,
       tool: toolName,
