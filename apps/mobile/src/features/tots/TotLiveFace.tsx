@@ -12,6 +12,7 @@ const faceMessage = (avatar: TotAvatar, state: TotFaceState, size: number) =>
     color: avatar.color,
     skin: avatar.skin,
     shape: avatar.shape,
+    antenna: avatar.antenna,
     size,
     motion: "auto",
   });
