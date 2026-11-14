@@ -1,6 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { selectTots, withoutTotProjects, type EnvironmentTot } from "@t3tools/client-runtime/tots";
+import {
+  selectTots,
+  totHostOrder,
+  withoutTotProjects,
+  type EnvironmentTot,
+} from "@t3tools/client-runtime/tots";
 import {
   HOME_TOT_ID,
   type EnvironmentId,
@@ -11,7 +16,7 @@ import { Atom } from "effect/reactivity";
 
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { useProjects } from "./entities";
-import { environmentSummaries } from "./presentation";
+import { environmentPresentations, environmentSummaries } from "./presentation";
 import { serverEnvironment } from "./server";
 
 /** Every Tot on every known environment, Home first; kept through a reconnect like its threads. */
@@ -26,6 +31,21 @@ const totsAtom = Atom.make((get): ReadonlyArray<EnvironmentTot> => {
 
 export function useTots(): ReadonlyArray<EnvironmentTot> {
   return useAtomValue(totsAtom);
+}
+
+export interface TotHost {
+  readonly environmentId: EnvironmentId;
+  readonly label: string;
+}
+
+/** Connected machines a Tot can live on, the one already hosting Tots first. */
+export function useTotHosts(): ReadonlyArray<TotHost> {
+  const connected = useAtomValue(environmentSummaries.connectedEnvironmentIdsAtom);
+  const presentations = useAtomValue(environmentPresentations.presentationsAtom);
+  return totHostOrder(connected, useTots()).map((environmentId) => ({
+    environmentId,
+    label: presentations.get(environmentId)?.entry.target.label ?? "This machine",
+  }));
 }
 
 /** Projects offered for new work: everything but the Tots' own projects. */
