@@ -3,8 +3,10 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   CommandId,
+  DEFAULT_HOME_TOT,
   ProjectId,
   ThreadId,
+  TotId,
   VcsProcessSpawnError,
   VcsProcessTimeoutError,
 } from "@t3tools/contracts";
@@ -654,4 +656,33 @@ it.effect("removes the folder when the create is cancelled before the project ex
       },
     );
   }),
+);
+
+it.effect("keeps one project per Tot and refreshes its AGENTS.md", () =>
+  withScratch(({ baseDir }) =>
+    Effect.gen(function* () {
+      const folders = yield* ManagedProjectFolders.ManagedProjectFolders;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const yui = { ...DEFAULT_HOME_TOT, id: TotId.make("yui"), name: "Yui" };
+      const first = yield* folders.ensureTotProject(yui, [yui]);
+      assert.equal(first.workspaceRoot, path.resolve(baseDir, "tots", "yui"));
+      assert.isTrue(yield* fileSystem.exists(path.join(first.workspaceRoot, ".git")));
+      assert.equal(
+        yield* fileSystem.readFileString(path.join(first.workspaceRoot, "CLAUDE.md")),
+        "@AGENTS.md\n",
+      );
+      const agentsPath = path.join(first.workspaceRoot, "AGENTS.md");
+      yield* fileSystem.writeFileString(
+        agentsPath,
+        `${yield* fileSystem.readFileString(agentsPath)}\nkeep me\n`,
+      );
+
+      const again = yield* folders.ensureTotProject({ ...yui, instructions: "Be brief." }, [yui]);
+      assert.equal(again.projectId, first.projectId);
+      const agents = yield* fileSystem.readFileString(agentsPath);
+      assert.include(agents, "Be brief.");
+      assert.include(agents, "keep me");
+    }),
+  ),
 );
