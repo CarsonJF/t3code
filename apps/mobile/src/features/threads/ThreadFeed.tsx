@@ -344,6 +344,8 @@ import {
   THREAD_FEED_MAINTAIN_SCROLL_AT_END_THRESHOLD,
 } from "./threadFeedEndFollow";
 import { useMessageTimeFormatter } from "./useMessageTimeFormatter";
+import { useAnimateTotAvatars, useTots } from "../../state/tots";
+import { TotLiveFace } from "../tots/TotLiveFace";
 
 const linkedThreadEnvironmentIds = (markdown: string, environmentId: EnvironmentId) =>
   hasThreadLinks(markdown)
@@ -2940,6 +2942,7 @@ function ThreadFeedPlaceholder(props: {
   readonly horizontalPadding: number;
   readonly title: string;
   readonly topInset: number;
+  readonly visual?: ReactNode;
 }) {
   return (
     <View
@@ -2954,6 +2957,7 @@ function ThreadFeedPlaceholder(props: {
       }}
     >
       <View className="max-w-[320px] items-center gap-2">
+        {props.visual}
         <Text className="text-center font-t3-bold text-lg text-foreground">{props.title}</Text>
         <Text className="text-center text-sm leading-normal text-foreground-secondary">
           {props.detail}
@@ -3090,6 +3094,10 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const m = useMessages();
   const formatMessageTime = useMessageTimeFormatter();
   const { listRef, onIsAtEndChange, onHeaderMaterialVisibilityChange } = props;
+  const tot = useTots().find(
+    (entry) => entry.environmentId === props.environmentId && entry.tot.threadId === props.threadId,
+  );
+  const animateTot = useAnimateTotAvatars();
   const workflowOpening = useWorkflowOpening(props.detailRef);
   const guestShare = useThreadGuestShare(props.detailRef);
   const deviceType = useDeviceType();
@@ -4415,10 +4423,27 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             style={[StyleSheet.absoluteFill, { left: contentLeftInset, right: contentRightInset }]}
           >
             <ThreadFeedPlaceholder
-              title={gt("No conversation yet")}
-              detail={gt(
-                "Ask the agent to inspect the repo, run a command, or continue the active thread.",
-              )}
+              {...(tot === undefined
+                ? {
+                    title: gt("No conversation yet"),
+                    detail: gt(
+                      "Ask the agent to inspect the repo, run a command, or continue the active thread.",
+                    ),
+                  }
+                : {
+                    title: tot.tot.name,
+                    detail: gt(
+                      "Tell it what you want done. It starts, watches and answers the threads in its scope for you.",
+                    ),
+                    visual: (
+                      <TotLiveFace
+                        avatar={tot.tot.avatar}
+                        state="idle"
+                        size={112}
+                        animate={animateTot}
+                      />
+                    ),
+                  })}
               topInset={topContentInset}
               bottomInset={bottomContentInset}
               horizontalPadding={horizontalPadding}
