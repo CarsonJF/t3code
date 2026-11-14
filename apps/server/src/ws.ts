@@ -190,6 +190,7 @@ import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import * as ServerSettings from "./serverSettings.ts";
 import { invalidateSettingsSecrets } from "./sourceControl/sourceControlHostSecrets.ts";
+import * as GroupChatService from "./tots/GroupChatService.ts";
 import * as TotService from "./tots/TotService.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
@@ -1559,6 +1560,7 @@ export const layerWsRpc = (
       const peerLinks = yield* PeerLinks.PeerLinks;
       const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
       const tots = yield* TotService.TotService;
+      const groupChats = yield* GroupChatService.GroupChatService;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
@@ -2729,6 +2731,9 @@ export const layerWsRpc = (
         [WS_METHODS.totsDisable]: (input) => tots.disable(input.id),
         [WS_METHODS.totsStartFresh]: (input) => tots.startFresh(input.id),
         [WS_METHODS.totsReadMemory]: (input) => tots.readMemory(input.id),
+        [WS_METHODS.groupChatsCreate]: (input) => groupChats.create(input),
+        [WS_METHODS.groupChatsUpdate]: (input) => groupChats.update(input),
+        [WS_METHODS.groupChatsRemove]: (input) => groupChats.remove(input.id),
         [WS_METHODS.totsWriteMemory]: (input) => tots.writeMemory(input.id, input.files),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
         [WS_METHODS.serverCheckSecretSource]: (input) => secretCheck.check(input.source),
@@ -3613,6 +3618,7 @@ export const layer = Layer.unwrap(
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const npmRelease = yield* NpmRelease.NpmRelease;
     const totService = yield* TotService.TotService;
+    const groupChatService = yield* GroupChatService.GroupChatService;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const issues = yield* IssueService.IssueService;
     const threadIssues = yield* ThreadIssueService.ThreadIssueService;
@@ -3705,6 +3711,7 @@ export const layer = Layer.unwrap(
               Layer.provide(Layer.succeed(NpmRelease.NpmRelease, npmRelease)),
               Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
               Layer.provide(Layer.succeed(TotService.TotService, totService)),
+              Layer.provide(Layer.succeed(GroupChatService.GroupChatService, groupChatService)),
               // Share server-lifetime PR caches so WS mutations invalidate every client's HTTP diffs.
               Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),
               Layer.provide(Layer.succeed(IssueService.IssueService, issues)),
