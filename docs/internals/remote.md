@@ -103,6 +103,9 @@ Unlinking on the linking side only forgets the token.
   [`linkRequestTarget`](../../packages/client-runtime/src/linkRequest.ts) names
   a machine for it only when the client already reaches exactly one machine
   there. An address alone never moves an unexpired link to another address.
+- **A full-access link's sender thread can mark a Tot.** The receiving side treats
+  a call as a [Tot](./tots.md)'s when its `T3-Sender-Thread` id starts with `tot:`
+  and the link is full access; a narrower link's sender is never trusted that way.
 - **All callers on one side share the link's single session on the other**,
   so idempotency keys are hashed with the caller's namespace before they
   leave. Without that, two agents reusing a key would collide on the far side.
