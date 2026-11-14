@@ -80,6 +80,63 @@ export function splitThreadsByGroup<T extends GroupableThread>(
   };
 }
 
+export interface ProjectPickerSection<T> {
+  readonly key: string;
+  readonly label: string;
+  readonly projects: readonly T[];
+}
+
+/**
+ * Most recent first, then pinned projects, then each group in sidebar order, then the rest.
+ * The most recent project also keeps its own place below; pinned projects appear only once.
+ */
+export function buildProjectPickerSections<T>(input: {
+  readonly projects: readonly T[];
+  readonly mostRecent: T | null;
+  readonly isPinned: (project: T) => boolean;
+  readonly projectRefs: (
+    project: T,
+  ) => ReadonlyArray<{ readonly environmentId: EnvironmentId; readonly projectId: ProjectId }>;
+  readonly byEnvironment: ThreadGroupsByEnvironment;
+  readonly groups?: ReadonlyArray<ThreadGroup>;
+}): ProjectPickerSection<T>[] {
+  const groups = input.groups ?? mergeThreadGroups(input.byEnvironment);
+  const pinned: T[] = [];
+  const byGroupId = new Map(groups.map((group) => [group.id, [] as T[]]));
+  const ungrouped: T[] = [];
+  for (const project of input.projects) {
+    if (input.isPinned(project)) {
+      pinned.push(project);
+      continue;
+    }
+    let groupId: string | null = null;
+    for (const ref of input.projectRefs(project)) {
+      const state = input.byEnvironment.get(ref.environmentId);
+      groupId = state ? projectDefaultGroupId(state, ref.projectId) : null;
+      if (groupId !== null) break;
+    }
+    ((groupId === null ? undefined : byGroupId.get(groupId)) ?? ungrouped).push(project);
+  }
+  const groupSections = groups.flatMap((group) => {
+    const projects = byGroupId.get(group.id)!;
+    return projects.length === 0 ? [] : [{ key: `group:${group.id}`, label: group.name, projects }];
+  });
+  const sections: ProjectPickerSection<T>[] = [];
+  if (input.mostRecent !== null) {
+    sections.push({ key: "recent", label: "Most recent", projects: [input.mostRecent] });
+  }
+  if (pinned.length > 0) sections.push({ key: "pinned", label: "Pinned", projects: pinned });
+  sections.push(...groupSections);
+  if (ungrouped.length > 0) {
+    sections.push({
+      key: "other",
+      label: groupSections.length > 0 || pinned.length > 0 ? "Other projects" : "Projects",
+      projects: ungrouped,
+    });
+  }
+  return sections;
+}
+
 /** Prefixes `createGroup` when `group` is new to the environment, so the ops apply atomically. */
 export function withThreadGroup(
   state: ThreadGroupsState | undefined,
