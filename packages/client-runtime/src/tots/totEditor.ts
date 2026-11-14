@@ -14,6 +14,7 @@ export interface TotDraft {
   readonly color: string;
   readonly skin: number | null;
   readonly shape?: TotShape;
+  readonly antenna?: boolean;
   readonly scope: TotScope;
   readonly instructions: string;
   readonly modelSelection: ModelSelection;
@@ -51,6 +52,7 @@ export function validateTotDraft(
     color: draft.color,
     ...(draft.skin === null ? {} : { skin: draft.skin }),
     ...(draft.shape === undefined || draft.shape === "round" ? {} : { shape: draft.shape }),
+    ...(draft.antenna === true ? { antenna: true } : {}),
   };
   return {
     ok: true,
