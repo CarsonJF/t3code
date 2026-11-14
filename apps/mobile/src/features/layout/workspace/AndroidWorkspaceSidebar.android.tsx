@@ -1,3 +1,4 @@
+import { isPageTab } from "./navigation-tab-order";
 import { useAndroidFloatingTabs } from "../../settings/appearance/AppearancePreferencesProvider";
 import { WorkspaceNoTabs } from "./WorkspaceNoTabs";
 import { useEnabledNavigationTabs } from "./navigation-tabs";
@@ -51,7 +52,7 @@ export function AndroidWorkspaceSidebar() {
             <AndroidHomeFabLayout sidebar disabled={coveredByPage} onStartNewTask={startNewTask}>
               <WorkspaceThreadSidebar />
             </AndroidHomeFabLayout>
-          ) : tab === "usage" || tab === "workflows" ? (
+          ) : isPageTab(tab) ? (
             <View className="flex-1 bg-screen" />
           ) : tab === "issues" ? (
             <WorkspaceTabsContext value={context}>
