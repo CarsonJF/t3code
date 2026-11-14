@@ -3,6 +3,7 @@ import { InlineAudioPreview } from "../files/InlineAudioPreview";
 import { filePreviewKind } from "@t3tools/shared/filePreview";
 import {
   CHAT_USER_MARKDOWN_REMARK_PLUGINS,
+  shouldPreserveAssistantLineBreaks,
   remarkEnableOrderedListNumbers,
 } from "@t3tools/shared/markdownPipeline";
 import { findRevealRef } from "./markdownFindContext";
@@ -33,6 +34,7 @@ import {
   isVideoAttachment,
 } from "../../types";
 import ChatMarkdown from "../ChatMarkdown";
+import { TotMessageBubble, useRoomSpeaker } from "../tots/TotMessageBubble";
 import {
   CalendarClockIcon,
   ChevronDownIcon,
@@ -255,6 +257,31 @@ function UserVideoAttachment({
 
 export function UserMessageRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
+  const roomSpeaker = useRoomSpeaker(ctx.threadRef, row.message);
+  if (roomSpeaker?.kind === "notice") {
+    return (
+      <div className="px-1 py-1 text-center text-muted-foreground text-xs">{row.message.text}</div>
+    );
+  }
+  if (roomSpeaker?.kind === "tot") {
+    return (
+      <div className="min-w-0 px-1 py-0.5">
+        <TotMessageBubble speaker={roomSpeaker.entry}>
+          <ChatMarkdown
+            text={row.message.text}
+            cwd={ctx.markdownCwd}
+            threadRef={ctx.threadRef ?? undefined}
+            lineBreaks={shouldPreserveAssistantLineBreaks(row.message.text)}
+            skills={ctx.skills}
+            headingLevelOffset={MESSAGE_HEADING_LEVEL}
+            onUseArtifactTemplate={ctx.onUseArtifactTemplate}
+            onRunShellCommand={ctx.onRunShellCommand}
+            onImageExpand={ctx.onImageExpand}
+          />
+        </TotMessageBubble>
+      </div>
+    );
+  }
   const item = row.projectedItem?.item;
   const modelSwitch = item?.type === "user_message" ? item.modelSwitch : undefined;
   return (

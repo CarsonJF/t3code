@@ -1,5 +1,10 @@
-import type { ScopedThreadRef } from "@t3tools/contracts";
-import { parseTotThreadId } from "@t3tools/contracts";
+import {
+  isGroupChatThreadId,
+  parseTotThreadId,
+  type OrchestrationV2Actor,
+  type ScopedThreadRef,
+  type ThreadId,
+} from "@t3tools/contracts";
 import type { EnvironmentTot } from "@t3tools/client-runtime/tots";
 import type { ReactNode } from "react";
 
@@ -15,6 +20,34 @@ export function useTotThreadSpeaker(threadRef: ScopedThreadRef | null): Environm
   return tots.find(
     (entry) => entry.environmentId === threadRef.environmentId && entry.tot.id === totId,
   );
+}
+
+export type RoomSpeakerView =
+  | { readonly kind: "tot"; readonly entry: EnvironmentTot }
+  | { readonly kind: "notice" };
+
+/**
+ * Who spoke a message in a group chat: the Tot whose thread sent it, or a notice from T3 Code.
+ * Undefined outside a room and for the user's own messages, which keep their usual look.
+ */
+export function useRoomSpeaker(
+  threadRef: ScopedThreadRef | null,
+  message: {
+    readonly senderThreadId?: ThreadId | undefined;
+    readonly createdBy?: OrchestrationV2Actor | undefined;
+  },
+): RoomSpeakerView | undefined {
+  const tots = useTots();
+  if (threadRef === null || !isGroupChatThreadId(threadRef.threadId)) return undefined;
+  if (message.createdBy === "system") return { kind: "notice" };
+  const totId =
+    message.senderThreadId === undefined ? null : parseTotThreadId(message.senderThreadId);
+  if (totId === null) return undefined;
+  const entry = tots.find(
+    (candidate) =>
+      candidate.environmentId === threadRef.environmentId && candidate.tot.id === totId,
+  );
+  return entry === undefined ? undefined : { kind: "tot", entry };
 }
 
 /** A reply in the speaking Tot's color, with its face and name beside it. */
