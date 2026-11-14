@@ -1,27 +1,32 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
+  TOT_FACE_STATE_LABELS as STATE_LABELS,
   totFaceInputFromShell,
   totFaceState,
   type EnvironmentTot,
 } from "@t3tools/client-runtime/tots";
-import type { TotFaceState } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
-import type { ServerSettings } from "@t3tools/contracts";
+import { HOME_TOT_ID, type ServerSettings } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 import { useNavigation } from "@react-navigation/native";
-import { View } from "react-native";
+import { useState } from "react";
+import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useResolveClassNames } from "uniwind";
 
 import { AppText } from "../../components/ui/AppText";
+import { IconButton } from "../../components/ui/IconButton";
 import { ListActionRow } from "../../components/ui/ListActionRow";
-import { ListRow } from "../../components/ui/ListRow";
+import { ListRowLayout } from "../../components/ui/ListRowLayout";
 import { ListSection } from "../../components/ui/ListSection";
+import { RowPressable } from "../../components/ui/RowPressable";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useThreadShell } from "../../state/entities";
-import { connectedEnvironmentIdsAtom } from "../../state/presentation";
 import { serverEnvironment } from "../../state/server";
-import { useAnimateTotAvatars, useTots } from "../../state/tots";
+import { useAnimateTotAvatars, useTotHosts, useTots, type TotHost } from "../../state/tots";
+import { useWorkspaceSettledContentWidth } from "../layout/workspace-content-width";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
+import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { TotLiveFace } from "./TotLiveFace";
 import { TotStillFace } from "./TotStillFace";
 
@@ -29,14 +34,8 @@ const NO_SETTINGS_ATOM = Atom.make<ServerSettings | null>(null).pipe(
   Atom.withLabel("mobile-tots-no-host"),
 );
 
-const STATE_LABELS: Record<TotFaceState, string> = {
-  idle: "Idle",
-  working: "Working",
-  "needs-you": "Needs you",
-  success: "Done",
-  failure: "Failed",
-  sleep: "Off",
-};
+// The unfolded Fold and tablets: hero beside the list, as wide as a desktop settings column.
+const WIDE_LAYOUT_MIN_WIDTH = 600;
 
 function useTotFace(entry: EnvironmentTot) {
   const ref =
@@ -45,25 +44,45 @@ function useTotFace(entry: EnvironmentTot) {
   return totFaceState(totFaceInputFromShell(entry.tot, shell));
 }
 
-function TotListRow(props: { readonly entry: EnvironmentTot }) {
+/** Opens the Tot's thread, or its editor while it is off, like the desktop sidebar row. */
+function TotListRow(props: { readonly entry: EnvironmentTot; readonly machine: string | null }) {
   const { environmentId, tot } = props.entry;
   const state = useTotFace(props.entry);
   const navigation = useNavigation();
   const selectDetail = useSelectWorkspaceDetail();
+  const rippleStyle = useResolveClassNames("bg-subtle-strong");
+  const edit = () => navigation.navigate("TotEditor", { environmentId, totId: tot.id });
   const open = () => {
     if (tot.threadId === null) {
-      navigation.navigate("TotEditor", { environmentId, totId: tot.id });
+      edit();
       return;
     }
     selectDetail({ name: "Thread", params: { environmentId, threadId: tot.threadId } });
   };
+  const description =
+    props.machine === null ? STATE_LABELS[state] : `${STATE_LABELS[state]} · ${props.machine}`;
   return (
-    <ListRow
-      leading={<TotStillFace avatar={tot.avatar} state={state} size={30} />}
-      label={tot.name}
-      description={STATE_LABELS[state]}
+    <RowPressable
+      accessibilityRole="button"
+      accessibilityLabel={`${tot.name}, ${description}`}
       onPress={open}
-    />
+      android_ripple={{ color: rippleStyle.backgroundColor }}
+      unstable_pressDelay={Platform.OS === "android" ? 50 : undefined}
+      className="bg-grouped-card"
+    >
+      <ListRowLayout
+        leading={<TotStillFace avatar={tot.avatar} state={state} size={30} />}
+        label={tot.name}
+        description={description}
+        accessory={
+          <IconButton
+            icon="slider.horizontal.3"
+            accessibilityLabel={`Edit ${tot.name}`}
+            onPress={edit}
+          />
+        }
+      />
+    </RowPressable>
   );
 }
 
@@ -79,61 +98,87 @@ function TotHero(props: { readonly entry: EnvironmentTot }) {
   );
 }
 
-/** The Tots tab: each Tot's face and state; the first one moves. */
+function machineLabel(hosts: ReadonlyArray<TotHost>, entry: EnvironmentTot): string | null {
+  if (hosts.length < 2) return null;
+  return hosts.find((host) => host.environmentId === entry.environmentId)?.label ?? null;
+}
+
+/** The Tots tab: every Tot on every machine, then a way to make one. */
 export function TotsTabScreen() {
   const insets = useSafeAreaInsets();
+  const [measuredWidth, setMeasuredWidth] = useState(0);
+  // A workspace pane knows its width in the render that resizes it; measuring lags a frame.
+  const width = useWorkspaceSettledContentWidth() ?? measuredWidth;
   const tots = useTots();
+  const hosts = useTotHosts();
   const navigation = useNavigation();
-  const connected = useAtomValue(connectedEnvironmentIdsAtom);
-  const hostEnvironmentId = tots[0]?.environmentId ?? connected[0] ?? null;
-  const hero = tots.find((entry) => entry.tot.threadId !== null);
-  // Every Tot on the host, a Home never turned on included, so each can be managed here.
+  const host = hosts[0]?.environmentId ?? null;
   const hostSettings = useAtomValue(
-    hostEnvironmentId === null
-      ? NO_SETTINGS_ATOM
-      : serverEnvironment.settingsValueAtom(hostEnvironmentId),
+    host === null ? NO_SETTINGS_ATOM : serverEnvironment.settingsValueAtom(host),
   );
-  return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      showsVerticalScrollIndicator={false}
-      className="flex-1"
-      contentContainerClassName="gap-6 px-5 pt-4"
-      contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
-    >
-      {hero === undefined ? null : <TotHero entry={hero} />}
-      <ListSection
-        title="Tots"
-        footer="A Tot is an agent you talk to in one thread. It starts, watches and answers the threads in its scope for you."
-      >
-        {tots.map((entry) => (
-          <TotListRow key={`${entry.environmentId}:${entry.tot.id}`} entry={entry} />
+  // Lists skip a Home never turned on; show the default machine's so it can be turned on here.
+  const offHome =
+    host === null || tots.some((entry) => entry.tot.id === HOME_TOT_ID)
+      ? null
+      : (hostSettings?.tots.find((tot) => tot.id === HOME_TOT_ID) ?? null);
+  const rows: ReadonlyArray<EnvironmentTot> =
+    offHome === null || host === null ? tots : [{ environmentId: host, tot: offHome }, ...tots];
+  const hero = tots.find((entry) => entry.tot.threadId !== null);
+  const wide = width >= WIDE_LAYOUT_MIN_WIDTH;
+
+  const list = (
+    <View className="gap-6" style={wide ? { flex: 1, maxWidth: 560 } : undefined}>
+      <ListSection footer="A Tot is an agent you talk to in one thread. It starts, watches and answers the threads in its scope for you.">
+        {rows.map((entry) => (
+          <TotListRow
+            key={`${entry.environmentId}:${entry.tot.id}`}
+            entry={entry}
+            machine={machineLabel(hosts, entry)}
+          />
         ))}
-        {hostEnvironmentId === null ? null : (
+        {host === null ? null : (
           <ListActionRow
             icon="plus"
             label="New Tot"
-            onPress={() => navigation.navigate("TotEditor", { environmentId: hostEnvironmentId })}
+            onPress={() => navigation.navigate("TotEditor", { environmentId: host })}
           />
         )}
       </ListSection>
-      {hostEnvironmentId === null || hostSettings === null ? null : (
-        <ListSection title="Manage">
-          {hostSettings.tots.map((tot) => (
-            <ListActionRow
-              key={tot.id}
-              icon="slider.horizontal.3"
-              label={tot.threadId === null ? `Turn on or edit ${tot.name}` : `Edit ${tot.name}`}
-              onPress={() =>
-                navigation.navigate("TotEditor", {
-                  environmentId: hostEnvironmentId,
-                  totId: tot.id,
-                })
-              }
-            />
-          ))}
-        </ListSection>
+      {hostSettings === null || hostSettings.linkedEnvironmentsEnabled ? null : (
+        <AppText className="px-1 text-sm text-foreground-muted">
+          Turn on Linked environments in Labs, on each machine, so Tots can reach your other
+          machines.
+        </AppText>
       )}
-    </ScrollView>
+    </View>
+  );
+
+  return (
+    <SettingsScreen title="Tots" workspaceRoot>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+        className="flex-1"
+        contentContainerClassName="px-5 pt-4"
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
+        onLayout={(event) => setMeasuredWidth(event.nativeEvent.layout.width)}
+      >
+        {wide ? (
+          <View className="flex-row items-start justify-center gap-8">
+            {hero === undefined ? null : (
+              <View className="w-56 pt-2">
+                <TotHero entry={hero} />
+              </View>
+            )}
+            {list}
+          </View>
+        ) : (
+          <View className="gap-6">
+            {hero === undefined ? null : <TotHero entry={hero} />}
+            {list}
+          </View>
+        )}
+      </ScrollView>
+    </SettingsScreen>
   );
 }
