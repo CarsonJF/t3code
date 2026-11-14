@@ -206,6 +206,28 @@ export type TotEnableInput = typeof TotEnableInput.Type;
 export const TotThreadResult = Schema.Struct({ threadId: ThreadId });
 export type TotThreadResult = typeof TotThreadResult.Type;
 
+/** A text file in a Tot's memory, by path under its folder: `MEMORY.md` or `memory/...`. */
+export const TotMemoryFile = Schema.Struct({
+  path: Schema.String.check(Schema.isMaxLength(200)),
+  content: Schema.String.check(Schema.isMaxLength(262_144)),
+});
+export type TotMemoryFile = typeof TotMemoryFile.Type;
+
+/** `id: null` reads the memory every Tot shares. */
+export const TotMemoryReadInput = Schema.Struct({ id: Schema.NullOr(TotId) });
+export type TotMemoryReadInput = typeof TotMemoryReadInput.Type;
+
+export const TotMemory = Schema.Struct({ files: Schema.Array(TotMemoryFile) });
+export type TotMemory = typeof TotMemory.Type;
+
+export const TOT_MEMORY_MAX_FILES = 200;
+
+export const TotMemoryWriteInput = Schema.Struct({
+  id: TotId,
+  files: Schema.Array(TotMemoryFile).check(Schema.isMaxLength(TOT_MEMORY_MAX_FILES)),
+});
+export type TotMemoryWriteInput = typeof TotMemoryWriteInput.Type;
+
 export class TotError extends Schema.TaggedError<TotError>()("TotError", {
   message: Schema.String,
 }) {}
