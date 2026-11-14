@@ -100,6 +100,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.totsDisable]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsStartFresh]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsReadMemory]: AuthOrchestrationOperateScope,
+  [WS_METHODS.totsDesignAvatar]: AuthOrchestrationOperateScope,
   [WS_METHODS.groupChatsCreate]: AuthOrchestrationOperateScope,
   [WS_METHODS.groupChatsUpdate]: AuthOrchestrationOperateScope,
   [WS_METHODS.groupChatsRemove]: AuthOrchestrationOperateScope,
