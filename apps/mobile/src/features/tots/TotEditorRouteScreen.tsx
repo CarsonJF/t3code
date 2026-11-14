@@ -20,14 +20,18 @@ import { useNavigation, type StaticScreenProps } from "@react-navigation/native"
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useResolveClassNames } from "uniwind";
 
 import { AppText, AppTextInput } from "../../components/ui/AppText";
 import { ListActionRow } from "../../components/ui/ListActionRow";
-import { ListRow } from "../../components/ui/ListRow";
+import { ListChoiceRow } from "../../components/ui/ListChoiceRow";
 import { ListSection } from "../../components/ui/ListSection";
+import { ListToggleRow } from "../../components/ui/ListToggleRow";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { SelectionRow } from "../../components/ui/SelectionRow";
 import { useProjects } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
+import { useTotHosts, type TotHost } from "../../state/tots";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
@@ -35,11 +39,19 @@ import { TotStillFace } from "./TotStillFace";
 
 const COLOR_CHOICES = ["#0A7EA4", "#7C3AED", "#DB2777", "#EA580C", "#16A34A", "#475569"];
 
+// The unfolded Fold and tablets: face on the left, the rest on the right.
+const WIDE_LAYOUT_MIN_WIDTH = 600;
+
 type TotEditorRouteParams = { readonly environmentId: string; readonly totId?: string };
 
-/** Creates or edits a Tot on one environment, as the desktop editor does. */
+/** Creates or edits a Tot, as the desktop editor does; a new one can live on any machine. */
 export function TotEditorRouteScreen({ route }: StaticScreenProps<TotEditorRouteParams>) {
-  const environmentId = EnvironmentId.make(route.params.environmentId);
+  const hosts = useTotHosts();
+  const [chosenHost, setChosenHost] = useState(() =>
+    EnvironmentId.make(route.params.environmentId),
+  );
+  const creating = route.params.totId === undefined;
+  const environmentId = creating ? chosenHost : EnvironmentId.make(route.params.environmentId);
   const settings = useAtomValue(serverEnvironment.settingsValueAtom(environmentId));
   const providers = useAtomValue(serverEnvironment.providersValueAtom(environmentId));
   const editing = settings?.tots.find((tot) => tot.id === route.params.totId) ?? null;
@@ -49,6 +61,8 @@ export function TotEditorRouteScreen({ route }: StaticScreenProps<TotEditorRoute
         <TotEditorForm
           key={editing?.id ?? "new"}
           environmentId={environmentId}
+          hosts={creating && hosts.length > 1 ? hosts : []}
+          onHostChange={setChosenHost}
           tots={settings.tots}
           editingId={editing?.id ?? null}
           defaultModel={
@@ -77,6 +91,9 @@ function firstProviderModel(
 
 function TotEditorForm(props: {
   readonly environmentId: EnvironmentId;
+  /** Machines a new Tot may live on; empty when there is no choice to make. */
+  readonly hosts: ReadonlyArray<TotHost>;
+  readonly onHostChange: (environmentId: EnvironmentId) => void;
   readonly tots: ReadonlyArray<Tot>;
   readonly editingId: TotId | null;
   readonly defaultModel: ModelSelection | null;
@@ -84,6 +101,8 @@ function TotEditorForm(props: {
   const { environmentId, tots, editingId, defaultModel } = props;
   const editing = tots.find((tot) => tot.id === editingId) ?? null;
   const insets = useSafeAreaInsets();
+  const ringColor = useResolveClassNames("bg-foreground").backgroundColor;
+  const [width, setWidth] = useState(0);
   const navigation = useNavigation();
   const selectDetail = useSelectWorkspaceDetail();
   const projects = useProjects();
@@ -116,6 +135,12 @@ function TotEditorForm(props: {
       ? current.filter((entry) => entry.projectId !== projectId)
       : [...current, { environmentId, projectId }];
     setScope({ projects: next, groups: scope === "all" ? [] : scope.groups });
+  };
+  // Picked projects belong to the old machine, so a move starts the list over.
+  const moveTo = (host: EnvironmentId) => {
+    if (host === environmentId) return;
+    setScope((current) => (current === "all" ? "all" : { projects: [], groups: [] }));
+    props.onHostChange(host);
   };
 
   const openThread = (threadId: string) =>
@@ -187,17 +212,29 @@ function TotEditorForm(props: {
     return result;
   };
 
-  return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardShouldPersistTaps="handled"
-      className="flex-1"
-      contentContainerClassName="gap-6 px-5 pt-4"
-      contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
-    >
-      <View className="items-center gap-3">
-        <TotStillFace avatar={{ color, shape }} state="idle" size={88} />
-        <View className="flex-row gap-2">
+  // Like the desktop dialog: the face and its name together, then where it lives and what it owns.
+  const face = (
+    <ListSection title="Face" {...(errors.color ? { footer: errors.color } : {})}>
+      <View className="gap-4 px-4 py-4">
+        <View className="flex-row items-center gap-4">
+          <TotStillFace avatar={{ color, shape }} state="idle" size={72} />
+          <View className="min-w-0 flex-1 gap-1">
+            <AppText textRole="footnote" className="font-t3-medium text-foreground-muted">
+              Name
+            </AppText>
+            <AppTextInput
+              className="rounded-xl bg-subtle px-3 py-2.5 text-base"
+              value={name}
+              placeholder="Yui"
+              onChangeText={setName}
+              accessibilityLabel="Name"
+            />
+            {errors.name ? (
+              <AppText className="text-xs text-destructive">{errors.name}</AppText>
+            ) : null}
+          </View>
+        </View>
+        <View className="flex-row flex-wrap gap-2.5">
           {COLOR_CHOICES.map((choice) => (
             <Pressable
               key={choice}
@@ -206,17 +243,17 @@ function TotEditorForm(props: {
               accessibilityState={{ selected: color === choice }}
               onPress={() => setColor(choice)}
               style={{
-                width: 28,
-                height: 28,
-                borderRadius: 14,
+                width: 32,
+                height: 32,
+                borderRadius: 16,
                 backgroundColor: choice,
                 borderWidth: color === choice ? 3 : 0,
-                borderColor: "#F8FAFC",
+                borderColor: ringColor,
               }}
             />
           ))}
         </View>
-        <View className="flex-row flex-wrap justify-center gap-1.5">
+        <View className="flex-row flex-wrap gap-1.5">
           {TOT_SHAPES.map((choice) => (
             <Pressable
               key={choice}
@@ -225,41 +262,52 @@ function TotEditorForm(props: {
               accessibilityState={{ selected: shape === choice }}
               onPress={() => setShape(choice)}
               style={{
-                padding: 2,
-                borderRadius: 10,
+                padding: 3,
+                borderRadius: 12,
                 borderWidth: 2,
-                borderColor: shape === choice ? "#F8FAFC" : "transparent",
+                borderColor: shape === choice ? color : "transparent",
               }}
             >
-              <TotStillFace avatar={{ color, shape: choice }} state="idle" size={34} />
+              <TotStillFace avatar={{ color, shape: choice }} state="idle" size={36} />
             </Pressable>
           ))}
         </View>
       </View>
+    </ListSection>
+  );
 
-      <ListSection title="Name" {...(errors.name ? { footer: errors.name } : {})}>
-        <AppTextInput
-          className="px-4 py-3 text-base"
-          value={name}
-          placeholder="Yui"
-          onChangeText={setName}
-          accessibilityLabel="Name"
-        />
-      </ListSection>
+  const details = (
+    <>
+      {props.hosts.length === 0 ? null : (
+        <ListSection
+          title="Lives on"
+          footer="It reaches your other machines through linked environments."
+        >
+          {props.hosts.map((host) => (
+            <ListChoiceRow
+              key={host.environmentId}
+              label={host.label}
+              selected={host.environmentId === environmentId}
+              onPress={() => moveTo(host.environmentId)}
+            />
+          ))}
+        </ListSection>
+      )}
 
       <ListSection title="Scope" {...(errors.scope ? { footer: errors.scope } : {})}>
-        <ListRow
+        <ListToggleRow
           label="Everything"
           description="Every project on every machine"
-          selected={scope === "all"}
-          onPress={() => setScope(scope === "all" ? { projects: [], groups: [] } : "all")}
+          value={scope === "all"}
+          onValueChange={(all) => setScope(all ? "all" : { projects: [], groups: [] })}
         />
         {scope === "all"
           ? null
           : scopeProjects.map((project) => (
-              <ListRow
+              <SelectionRow
                 key={project.id}
-                label={project.title}
+                role="checkbox"
+                title={project.title}
                 selected={selected.has(project.id)}
                 onPress={() => toggleProject(project.id)}
               />
@@ -335,6 +383,29 @@ function TotEditorForm(props: {
           />
         )}
       </ListSection>
+    </>
+  );
+
+  return (
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      keyboardShouldPersistTaps="handled"
+      className="flex-1"
+      contentContainerClassName="px-5 pt-4"
+      contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+    >
+      {width >= WIDE_LAYOUT_MIN_WIDTH ? (
+        <View className="flex-row items-start gap-6">
+          <View className="flex-1 gap-6">{face}</View>
+          <View className="flex-1 gap-6">{details}</View>
+        </View>
+      ) : (
+        <View className="gap-6">
+          {face}
+          {details}
+        </View>
+      )}
     </ScrollView>
   );
 }
