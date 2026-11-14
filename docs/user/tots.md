@@ -50,6 +50,17 @@ Turn on **Tot toasts** in Appearance settings to get a toast when a Tot replies,
 
 A Tot's replies are drawn in its color, with its face and name beside them.
 
+## Group chats
+
+A group chat is one shared thread you and several Tots talk in. Create one from **Settings → Tots → New group chat**, the command palette, or its entry in the Tots list. Pick two to eight Tots on the same machine and a moderator.
+
+- Write a message and the moderator answers. Name a Tot with `@Name` (or `@all`) and that Tot answers instead.
+- A Tot can name another Tot in its reply, and that Tot answers in turn. After **Replies in a row** Tot-to-Tot replies (4 by default, set per group chat) the room pauses until you write again or name a Tot.
+- Each Tot answers from its own thread, with its own model and memory; the room itself never runs an agent. A Tot that is off is skipped, with a notice.
+- Each Tot's replies use its color, with its name above them.
+
+Deleting a group chat deletes its thread. Deleting a Tot removes it from its group chats; a group chat left with one Tot closes.
+
 ## Instructions and fresh starts
 
 **Settings → Tots → Instructions** opens a Tot's `AGENTS.md`; the editor's instructions are kept there.
