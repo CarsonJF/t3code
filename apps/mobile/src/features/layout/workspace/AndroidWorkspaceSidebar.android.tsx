@@ -1,3 +1,4 @@
+import { isPageTab } from "./navigation-tab-order";
 import { useAndroidFloatingTabs } from "../../settings/appearance/AppearancePreferencesProvider";
 import { WorkspaceNoTabs } from "./WorkspaceNoTabs";
 import { useEnabledNavigationTabs } from "./navigation-tabs";
@@ -33,7 +34,7 @@ export function AndroidWorkspaceSidebar() {
   const selectedIssue = useNavigationState(selectedIssueKey);
   // Settings and Usage cover the sidebar.
   const coveredByPage =
-    (useAndroidWorkspaceRoot()?.settingsOpen ?? false) || workspace.state.selectedTab === "usage";
+    (useAndroidWorkspaceRoot()?.settingsOpen ?? false) || isPageTab(workspace.state.selectedTab);
   const bottomClearance = floatingTabsEnabled
     ? insets.bottom + FLOATING_TABS.bottom + FLOATING_TABS.edge + fabSize
     : 16;
@@ -49,7 +50,7 @@ export function AndroidWorkspaceSidebar() {
             <AndroidHomeFabLayout sidebar disabled={coveredByPage} onStartNewTask={startNewTask}>
               <WorkspaceThreadSidebar />
             </AndroidHomeFabLayout>
-          ) : tab === "usage" ? (
+          ) : isPageTab(tab) ? (
             <View className="flex-1 bg-screen" />
           ) : tab === "issues" ? (
             <WorkspaceTabsContext value={context}>
