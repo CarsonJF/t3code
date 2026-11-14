@@ -1,4 +1,5 @@
 import {
+  isPageTab,
   NAVIGATION_TAB_ORDER,
   navigationCustomizationAvailable,
   resolveNavigationTabOrder,
@@ -16,9 +17,9 @@ export type WorkspaceTab = NavigationTab;
 export type WorkspaceSearchTab = WorkspaceTab | "settings";
 export type WorkspaceSearchMode = "resting" | "active" | "expanded";
 
-/** Settings, Chats, pull requests and issues pair a list with a detail column; Usage is one page. */
+/** Settings, Chats, pull requests and issues pair a list with a detail column; Usage and Tots are one page. */
 export function workspaceUsesColumns(tab: WorkspaceTab, settingsOpen = false) {
-  return settingsOpen || tab !== "usage";
+  return settingsOpen || !isPageTab(tab);
 }
 
 export interface WorkspaceTabState {
@@ -53,6 +54,7 @@ export function initialWorkspaceTabsState(
     tabs: {
       threads: emptyTab(),
       pullRequests: emptyTab(),
+      tots: emptyTab(),
       issues: emptyTab(),
       usage: emptyTab(),
       settings: emptyTab(),
