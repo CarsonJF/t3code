@@ -71,6 +71,8 @@ export const TotWatch = Schema.Struct({
 });
 export type TotWatch = typeof TotWatch.Type;
 
+export const TOT_MAX_DESIGNS = 12;
+
 export const Tot = Schema.Struct({
   id: TotId,
   name: TrimmedNonEmptyString.check(Schema.isMaxLength(40)),
@@ -84,6 +86,8 @@ export const Tot = Schema.Struct({
   modelSelection: Schema.NullOr(ModelSelection),
   watchAll: Schema.Boolean,
   watches: Schema.Array(TotWatch),
+  /** Faces the Tot designed for itself, newest first, kept as options. */
+  designs: Schema.optional(Schema.Array(TotAvatar).check(Schema.isMaxLength(TOT_MAX_DESIGNS))),
 });
 export type Tot = typeof Tot.Type;
 
@@ -192,6 +196,12 @@ export const TotUpdateInput = Schema.Struct({
   modelSelection: Schema.optional(ModelSelection),
 });
 export type TotUpdateInput = typeof TotUpdateInput.Type;
+
+export const TotDesignAvatarInput = Schema.Struct({
+  id: TotId,
+  prompt: TrimmedNonEmptyString.check(Schema.isMaxLength(500)),
+});
+export type TotDesignAvatarInput = typeof TotDesignAvatarInput.Type;
 
 export const TotIdInput = Schema.Struct({ id: TotId });
 export type TotIdInput = typeof TotIdInput.Type;
