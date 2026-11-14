@@ -55,5 +55,7 @@ export function useTotModelChoice(environmentId: EnvironmentId, initial: ModelSe
     providers,
     pick: (instanceId: ModelSelection["instanceId"], model: string) =>
       setPicked(createModelSelection(instanceId, model)),
+    /** Back to the environment's default, for when the Tot moves to another machine. */
+    reset: () => setPicked(null),
   };
 }
