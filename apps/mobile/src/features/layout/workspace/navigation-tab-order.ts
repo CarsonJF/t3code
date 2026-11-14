@@ -1,4 +1,4 @@
-export const NAVIGATION_TAB_ORDER = ["threads", "pullRequests", "usage"] as const;
+export const NAVIGATION_TAB_ORDER = ["threads", "tots", "pullRequests", "usage"] as const;
 export type NavigationTab = (typeof NAVIGATION_TAB_ORDER)[number];
 
 export function navigationCustomizationAvailable(
@@ -9,9 +9,14 @@ export function navigationCustomizationAvailable(
 
 export const NAVIGATION_TAB_LABELS: Readonly<Record<NavigationTab, string>> = {
   threads: "Threads",
+  tots: "Tots",
   pullRequests: "Pulls",
   usage: "Usage",
 };
+
+/** Sections that are one page, with no list and detail columns. */
+export const isPageTab = (tab: string): tab is "usage" | "tots" =>
+  tab === "usage" || tab === "tots";
 
 function isNavigationTab(value: unknown): value is NavigationTab {
   return NAVIGATION_TAB_ORDER.some((tab) => tab === value);
