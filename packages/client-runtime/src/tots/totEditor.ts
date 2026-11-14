@@ -1,8 +1,10 @@
 import {
   type ModelSelection,
+  type TotAvatar,
   type TotCreateInput,
   type TotId,
   type TotScope,
+  type TotShape,
   totSlug,
 } from "@t3tools/contracts";
 
@@ -11,6 +13,7 @@ export interface TotDraft {
   readonly name: string;
   readonly color: string;
   readonly skin: number | null;
+  readonly shape?: TotShape;
   readonly scope: TotScope;
   readonly instructions: string;
   readonly modelSelection: ModelSelection;
@@ -44,12 +47,16 @@ export function validateTotDraft(
     errors.scope = "Pick at least one project, or Everything.";
   }
   if (Object.keys(errors).length > 0) return { ok: false, errors };
+  const avatar: TotAvatar = {
+    color: draft.color,
+    ...(draft.skin === null ? {} : { skin: draft.skin }),
+    ...(draft.shape === undefined || draft.shape === "round" ? {} : { shape: draft.shape }),
+  };
   return {
     ok: true,
     value: {
       name,
-      avatar:
-        draft.skin === null ? { color: draft.color } : { color: draft.color, skin: draft.skin },
+      avatar,
       scope: draft.scope,
       instructions: draft.instructions,
       modelSelection: draft.modelSelection,
