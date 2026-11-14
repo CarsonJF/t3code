@@ -139,6 +139,7 @@ import { SettingsProjectGroupingRouteScreen } from "./features/settings/Settings
 import { SettingsProjectOverviewRouteScreen } from "./features/settings/SettingsProjectOverviewRouteScreen";
 import { UsageLimitAccountScreen } from "./features/usage/UsageLimitsPooled";
 import { UsageRouteScreen } from "./features/usage/UsageRouteScreen";
+import { TotEditorRouteScreen } from "./features/tots/TotEditorRouteScreen";
 import { WorkflowRunRouteScreen } from "./features/workflows/WorkflowRunRouteScreen";
 import { WorkflowStepSheet } from "./features/workflows/WorkflowStepSheet";
 import { SettingsAboutRouteScreen } from "./features/settings/SettingsAboutRouteScreen";
@@ -658,6 +659,11 @@ const RootStackConfig = createWorkspaceStackNavigator({
       screen: ThreadRouteScreen,
       linking: { path: "threads/:environmentId?/:threadId?", alias: ["new/draft"] },
       options: pageRoute({ duoMinimize: "onScrollUp" }),
+    }),
+    TotEditor: createNativeStackScreen({
+      screen: TotEditorRouteScreen,
+      linking: "tots/edit/:environmentId/:totId?",
+      options: pageRoute({ title: "Tot" }),
     }),
     NewTaskProject: createNativeStackScreen({
       screen: NewTaskRouteScreen,
