@@ -226,34 +226,6 @@ function TerminalFontRow() {
   );
 }
 
-function AnimateTotAvatarsRow() {
-  const settings = useScopedSettings();
-  const updateSettings = useUpdateScopedSettings();
-  return (
-    <SettingsRow
-      {...searchableSetting("animate-tot-avatars")}
-      description="Tot faces move in a Tot's own thread and when you hover them. Off keeps them still."
-      resetAction={
-        settings.animateTotAvatars !== DEFAULT_UNIFIED_SETTINGS.animateTotAvatars ? (
-          <SettingResetButton
-            label="Tot avatar animation"
-            onClick={() =>
-              updateSettings({ animateTotAvatars: DEFAULT_UNIFIED_SETTINGS.animateTotAvatars })
-            }
-          />
-        ) : null
-      }
-      control={
-        <Switch
-          checked={settings.animateTotAvatars}
-          onCheckedChange={(checked) => updateSettings({ animateTotAvatars: Boolean(checked) })}
-          aria-label="Animate Tot avatars"
-        />
-      }
-    />
-  );
-}
-
 function FontSmoothingRow() {
   const gt = useGT();
   const searchableSetting = useSearchableSetting();
@@ -409,7 +381,6 @@ export function TypographySection() {
       >
         <SeparateFontsRow checked={showAdvanced} onCheckedChange={setAdvanced} />
         <FontSmoothingRow />
-        <AnimateTotAvatarsRow />
       </AdvancedSettings>
     </SettingsSection>
   );
