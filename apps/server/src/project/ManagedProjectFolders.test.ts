@@ -638,12 +638,16 @@ it.effect("keeps one project per Tot and refreshes its AGENTS.md", () =>
         agentsPath,
         `${yield* fileSystem.readFileString(agentsPath)}\nkeep me\n`,
       );
+      const memoryPath = path.join(first.workspaceRoot, "MEMORY.md");
+      assert.include(yield* fileSystem.readFileString(memoryPath), "# Memory");
+      yield* fileSystem.writeFileString(memoryPath, "# Memory\n\n- Carson's host is Asuna.\n");
 
       const again = yield* folders.ensureTotProject({ ...yui, instructions: "Be brief." }, [yui]);
       assert.equal(again.projectId, first.projectId);
       const agents = yield* fileSystem.readFileString(agentsPath);
       assert.include(agents, "Be brief.");
       assert.include(agents, "keep me");
+      assert.include(yield* fileSystem.readFileString(memoryPath), "Carson's host is Asuna.");
     }),
   ),
 );

@@ -111,6 +111,13 @@ const make = Effect.gen(function* () {
       .pipe(Effect.mapError((error) => fail(error.message)));
   });
 
+  /** Rewrites every set-up Tot's instructions, so each knows its current fellow Tots. */
+  const refreshFolders = Effect.fn("TotService.refreshFolders")(function* () {
+    for (const tot of yield* list) {
+      if (tot.projectId !== null) yield* ensureProject(tot).pipe(Effect.ignore);
+    }
+  });
+
   const launchTot = Effect.fn("TotService.launchTot")(function* (
     tot: Tot,
     modelSelection: ModelSelection,
@@ -210,6 +217,7 @@ const make = Effect.gen(function* () {
       watches: [],
     };
     yield* writeTots((current) => [...current, tot]);
+    yield* refreshFolders();
     return tot;
   }, locked);
 
@@ -248,6 +256,7 @@ const make = Effect.gen(function* () {
     yield* replace(next);
     if (next.projectId !== null) yield* ensureProject(next);
     if (next.name !== tot.name) yield* rename(next);
+    if (next.name !== tot.name || next.scope !== tot.scope) yield* refreshFolders();
     return next;
   }, locked);
 
@@ -255,6 +264,7 @@ const make = Effect.gen(function* () {
     if (id === HOME_TOT_ID) return yield* fail("Home cannot be deleted. Turn it off instead.");
     yield* disableUnlocked(id);
     yield* writeTots((tots) => tots.filter((tot) => tot.id !== id));
+    yield* refreshFolders();
   }, locked);
 
   const startFresh = Effect.fn("TotService.startFresh")(function* (id: TotId) {
@@ -332,9 +342,7 @@ const make = Effect.gen(function* () {
 
   // Instructions follow the app version, so an update reaches each Tot's
   // next provider session, not only after a fresh start.
-  for (const tot of yield* list) {
-    if (tot.threadId !== null) yield* ensureProject(tot).pipe(Effect.ignore);
-  }
+  yield* refreshFolders();
 
   return TotService.of({
     list,

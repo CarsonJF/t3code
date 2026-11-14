@@ -20,6 +20,7 @@ import {
   type RuntimeMode,
   type ScheduledTaskId,
   ThreadId,
+  parseTotThreadId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -1070,6 +1071,25 @@ const make = Effect.gen(function* () {
           input,
           "update-thread",
         )("Reusing an existing thread requires a thread id.");
+      }
+      // A Tot's project holds that Tot's one thread; other threads start elsewhere.
+      if (input.reuseExistingThread !== true) {
+        const tots = yield* serverSettings.getSettings.pipe(
+          Effect.map((settings) => settings.tots),
+          Effect.orElseSucceed(() => []),
+        );
+        const owner = tots.find((tot) => tot.projectId === input.projectId);
+        if (
+          owner !== undefined &&
+          (input.threadId === undefined || parseTotThreadId(input.threadId) !== owner.id)
+        ) {
+          return yield* mapError(
+            input,
+            "resolve-project",
+          )(
+            `This project is ${owner.name}'s. Talk to ${owner.name} in its thread, or start the thread in another project.`,
+          );
+        }
       }
 
       const launchReceipt = yield* readReceipt(input, input.commandId);
