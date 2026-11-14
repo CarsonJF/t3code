@@ -1,10 +1,11 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import type {
-  EnvironmentId,
-  ModelSelection,
-  ProjectId,
-  ScopedProjectRef,
+import {
+  parseTotThreadId,
+  type EnvironmentId,
+  type ModelSelection,
+  type ProjectId,
+  type ScopedProjectRef,
 } from "@t3tools/contracts";
 import type { ComposerThreadDraftState, DraftThreadEnvMode } from "../composerDraftStore";
 
@@ -14,6 +15,7 @@ type ComposerModelSelectionState = Pick<
 >;
 
 interface ThreadContextLike {
+  id?: string;
   environmentId: EnvironmentId;
   projectId: ProjectId;
 }
@@ -89,9 +91,11 @@ export function draftModelSelectionApplies(
 export function resolveThreadActionProjectRef(
   context: ChatThreadActionContext,
 ): ScopedProjectRef | null {
-  if (context.activeThread) {
+  // A Tot's project holds only its own thread, so new work starts in the default project.
+  if (context.activeThread && parseTotThreadId(context.activeThread.id ?? "") === null) {
     return scopeProjectRef(context.activeThread.environmentId, context.activeThread.projectId);
   }
+  if (context.activeThread) return context.defaultProjectRef;
   if (context.activeDraftThread) {
     return scopeProjectRef(
       context.activeDraftThread.environmentId,
