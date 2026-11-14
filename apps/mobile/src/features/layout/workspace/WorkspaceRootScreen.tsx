@@ -1,5 +1,5 @@
-import { WorkspaceNoTabs } from "./WorkspaceNoTabs";
 import { isSharedSlotTab } from "./navigation-tab-order";
+import { WorkspaceNoTabs } from "./WorkspaceNoTabs";
 import { SharedSlotTitle } from "./SharedSlotTitle";
 import { WORKSPACE_TAB_LABELS, useEnabledNavigationTabs } from "./navigation-tabs";
 import { WorkspaceExtraTab } from "./WorkspaceExtraTab";
