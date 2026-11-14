@@ -32,6 +32,7 @@ export type SettingsPath =
   | "/settings/browser"
   | "/settings/devices"
   | "/settings/scheduled-tasks"
+  | "/settings/tots"
   | "/settings/source-control"
   | "/settings/worktrees"
   | "/settings/connections"
@@ -107,6 +108,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/browser": msg("Browser"),
   "/settings/devices": msg("Devices"),
   "/settings/scheduled-tasks": msg("Scheduled tasks"),
+  "/settings/tots": msg("Tots"),
   "/settings/source-control": msg("Source control & issues"),
   "/settings/worktrees": msg("Worktrees"),
   "/settings/connections": msg("Environments"),
@@ -155,6 +157,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
       "/settings/browser",
       "/settings/devices",
       "/settings/scheduled-tasks",
+      "/settings/tots",
     ],
   },
   {
@@ -437,6 +440,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
     searchTerms: [msg("typography text grayscale anti aliasing macos thin")],
     macOnly: true,
+  },
+  {
+    id: "animate-tot-avatars",
+    title: "Animate Tot avatars",
+    to: "/settings/appearance",
+    searchTerms: ["tots faces motion animation boopface avatar"],
   },
   {
     id: "word-wrap",
@@ -1085,6 +1094,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/scheduled-tasks",
   },
   {
+    id: "tots",
+    title: "Tots",
+    to: "/settings/tots",
+    searchTerms: [
+      "agent home coordinator avatar face scope instructions personality watch approvals",
+    ],
+  },
+  {
     id: "agent-browser-access",
     title: msg("Agent browser access"),
     to: "/settings/browser",
@@ -1505,6 +1522,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/access": "connections",
   "/settings/secrets": null,
   "/settings/scheduled-tasks": null,
+  "/settings/tots": null,
   "/settings/maintenance": null,
   "/settings/labs": null,
   "/settings/about": null,
