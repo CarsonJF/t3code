@@ -44,3 +44,14 @@ export function useOrderWhileOpen<T>(
   if (nextOrder !== order) setOrder(nextOrder);
   return ordered;
 }
+
+/** `value` as it was when the list opened, so a pin does not move a row into another section. */
+export function useValueWhileOpen<T>(value: T, open: boolean): T {
+  const [held, setHeld] = useState<{ readonly value: T } | null>(null);
+  if (!open) {
+    if (held !== null) setHeld(null);
+    return value;
+  }
+  if (held === null) setHeld({ value });
+  return held?.value ?? value;
+}
