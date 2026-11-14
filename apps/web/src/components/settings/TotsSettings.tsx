@@ -1,44 +1,23 @@
-import { useAtomValue } from "@effect/atom-react";
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   resolveTotAnimation,
   totFaceInputFromShell,
   totFaceState,
 } from "@t3tools/client-runtime/tots";
 import { HOME_TOT_ID, type EnvironmentId, type Tot } from "@t3tools/contracts";
-import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-
-import { useOpenInPreferredEditor } from "../../editorPreferences";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useClientSettings, useEnvironmentSettings } from "../../hooks/useSettings";
-import { useProject, useThreadShell } from "../../state/entities";
-import { serverEnvironment } from "../../state/server";
+import { useThreadShell } from "../../state/entities";
 import { useTotHosts, useTots } from "../../state/tots";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { buildThreadRouteParams } from "../../threadRoutes";
 import { TotAvatar } from "../tots/TotAvatar";
 import { openTotEditor, useTotHostEnvironmentId } from "../tots/totEditorStore";
-import { useTotModelChoice } from "../tots/useTotModelChoice";
+import { useTotActions } from "../tots/useTotActions";
 import { Button } from "../ui/button";
-import { toastManager } from "../ui/toast";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 
 const TOTS_DESCRIPTION =
   "Agents you talk to in one thread each. A Tot starts, watches and answers threads in its scope, on every machine it can reach.";
-
-function reportFailure(title: string, error: unknown) {
-  toastManager.add({
-    type: "error",
-    title,
-    description: error instanceof Error ? error.message : String(error),
-  });
-}
 
 export function TotsSettings() {
   const environmentId = useTotHostEnvironmentId();
@@ -108,69 +87,11 @@ function TotsRows(props: {
 
 function TotRow(props: { readonly environmentId: EnvironmentId; readonly tot: Tot }) {
   const { environmentId, tot } = props;
-  const navigate = useNavigate();
   const animate = useClientSettings((settings) => settings.animateTotAvatars);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const ref = tot.threadId === null ? null : scopeThreadRef(environmentId, tot.threadId);
   const shell = useThreadShell(ref);
-  const project = useProject(
-    tot.projectId === null ? null : scopeProjectRef(environmentId, tot.projectId),
-  );
-  const model = useTotModelChoice(environmentId, tot.modelSelection);
-  const availableEditors = useAtomValue(
-    serverEnvironment.configValueAtom(environmentId),
-    (config) => config?.availableEditors ?? [],
-  );
-  const openInEditor = useOpenInPreferredEditor(environmentId, availableEditors);
-  const enableTot = useAtomCommand(serverEnvironment.enableTot, { reportFailure: false });
-  const disableTot = useAtomCommand(serverEnvironment.disableTot, { reportFailure: false });
-  const startFreshTot = useAtomCommand(serverEnvironment.startFreshTot, { reportFailure: false });
-  const removeTot = useAtomCommand(serverEnvironment.removeTot, { reportFailure: false });
-  const [pending, setPending] = useState(false);
-
-  const openThread = (threadId: NonNullable<Tot["threadId"]>) =>
-    navigate({
-      to: "/$environmentId/$threadId",
-      params: buildThreadRouteParams(scopeThreadRef(environmentId, threadId)),
-    });
-  const run = async <A,>(
-    title: string,
-    action: () => Promise<
-      { readonly _tag: "Success"; readonly value: A } | { readonly _tag: "Failure" }
-    >,
-  ) => {
-    setPending(true);
-    const result = await action();
-    setPending(false);
-    if (result._tag === "Failure") {
-      if (!isAtomCommandInterrupted(result as never)) {
-        reportFailure(title, squashAtomCommandFailure(result as never));
-      }
-      return null;
-    }
-    return result.value;
-  };
-  const turnOn = async () => {
-    const started = await run(`Could not turn on ${tot.name}`, () =>
-      enableTot({
-        environmentId,
-        input: {
-          id: tot.id,
-          ...(model.selection === null ? {} : { modelSelection: model.selection }),
-        },
-      }),
-    );
-    if (started !== null) await openThread(started.threadId);
-  };
-  const editInstructions = async () => {
-    if (project === null) return;
-    const root = project.workspaceRoot.replace(/[\\/]+$/, "");
-    const separator = root.includes("\\") && !root.includes("/") ? "\\" : "/";
-    const result = await openInEditor(`${root}${separator}AGENTS.md`);
-    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      reportFailure("Could not open instructions", squashAtomCommandFailure(result));
-    }
-  };
+  const actions = useTotActions(environmentId, tot);
 
   return (
     <SettingsRow
@@ -189,49 +110,41 @@ function TotRow(props: { readonly environmentId: EnvironmentId; readonly tot: To
       control={
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           {tot.threadId === null ? (
-            <Button size="sm" disabled={pending} onClick={() => void turnOn()}>
+            <Button size="sm" disabled={actions.pending} onClick={() => void actions.turnOn()}>
               Turn on
             </Button>
           ) : (
-            <Button size="sm" variant="outline" onClick={() => void openThread(tot.threadId!)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void actions.openThread(tot.threadId!)}
+            >
               Open
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => openTotEditor({ mode: "edit", environmentId, tot })}
-          >
+          <Button size="sm" variant="outline" onClick={actions.edit}>
             Edit
           </Button>
-          {project === null ? null : (
-            <Button size="sm" variant="outline" onClick={() => void editInstructions()}>
+          {actions.hasInstructionsFile ? (
+            <Button size="sm" variant="outline" onClick={() => void actions.editInstructions()}>
               Instructions
             </Button>
-          )}
+          ) : null}
           {tot.threadId === null ? null : (
             <>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={pending}
-                onClick={() =>
-                  void run(`Could not start ${tot.name} fresh`, () =>
-                    startFreshTot({ environmentId, input: { id: tot.id } }),
-                  ).then((fresh) => (fresh === null ? undefined : openThread(fresh.threadId)))
-                }
+                disabled={actions.pending}
+                onClick={() => void actions.startFresh()}
               >
                 Start fresh
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={pending}
-                onClick={() =>
-                  void run(`Could not turn off ${tot.name}`, () =>
-                    disableTot({ environmentId, input: { id: tot.id } }),
-                  )
-                }
+                disabled={actions.pending}
+                onClick={() => void actions.turnOff()}
               >
                 Turn off
               </Button>
@@ -241,12 +154,8 @@ function TotRow(props: { readonly environmentId: EnvironmentId; readonly tot: To
             <Button
               size="sm"
               variant="destructive-outline"
-              disabled={pending}
-              onClick={() =>
-                void run(`Could not delete ${tot.name}`, () =>
-                  removeTot({ environmentId, input: { id: tot.id } }),
-                )
-              }
+              disabled={actions.pending}
+              onClick={() => void actions.remove()}
             >
               Delete
             </Button>
