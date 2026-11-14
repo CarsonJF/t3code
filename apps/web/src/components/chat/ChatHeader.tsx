@@ -5,6 +5,7 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { contextMenuSourceOf } from "~/contextMenuSource";
+import { TotThreadFace } from "../tots/TotThreadFace";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
@@ -369,6 +370,10 @@ export const ChatHeader = memo(function ChatHeader({
                   />
                 }
               >
+                <TotThreadFace
+                  environmentId={activeThreadEnvironmentId}
+                  threadId={activeThreadId}
+                />
                 <h2 className="min-w-0" dir={textDirection(activeThreadTitle)}>
                   <WorkspaceBreadcrumbText>{activeThreadTitle}</WorkspaceBreadcrumbText>
                 </h2>
