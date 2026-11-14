@@ -10,6 +10,7 @@ import { useClientSettings, useEnvironmentSettings } from "../../hooks/useSettin
 import { useThreadShell } from "../../state/entities";
 import { useTotHosts, useTots } from "../../state/tots";
 import { TotAvatar } from "../tots/TotAvatar";
+import { openTotMemory } from "../tots/TotMemoryDialog";
 import { openTotEditor, useTotHostEnvironmentId } from "../tots/totEditorStore";
 import { useTotActions } from "../tots/useTotActions";
 import { Button } from "../ui/button";
@@ -40,9 +41,21 @@ export function TotsSettings() {
               {...searchableSetting("tots")}
               description={TOTS_DESCRIPTION}
               control={
-                <Button size="sm" onClick={() => openTotEditor({ mode: "create", environmentId })}>
-                  New Tot
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openTotMemory({ environmentId, tot: null })}
+                  >
+                    Shared memory
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => openTotEditor({ mode: "create", environmentId })}
+                  >
+                    New Tot
+                  </Button>
+                </div>
               }
             />
             {machines.map((host) => (
@@ -124,6 +137,9 @@ function TotRow(props: { readonly environmentId: EnvironmentId; readonly tot: To
           )}
           <Button size="sm" variant="outline" onClick={actions.edit}>
             Edit
+          </Button>
+          <Button size="sm" variant="outline" onClick={actions.openMemory}>
+            Memory
           </Button>
           {actions.hasInstructionsFile ? (
             <Button size="sm" variant="outline" onClick={() => void actions.editInstructions()}>
