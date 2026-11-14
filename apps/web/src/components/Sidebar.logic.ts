@@ -23,6 +23,7 @@ import {
   type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
   type ThreadId,
+  type Tot,
 } from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import type { AsyncResult } from "effect/reactivity";
@@ -1512,4 +1513,20 @@ export function sortScopedProjectsForSidebar<
       left.environmentId.localeCompare(right.environmentId) ||
       left.id.localeCompare(right.id),
   );
+}
+
+/** Each Tot's current thread has its own row above the threads, so the roster leaves it out. */
+export function withoutTotThreads<
+  T extends { readonly environmentId: string; readonly id: string },
+>(
+  threads: readonly T[],
+  tots: ReadonlyArray<{ readonly environmentId: string; readonly tot: Pick<Tot, "threadId"> }>,
+): readonly T[] {
+  const current = new Set(
+    tots.flatMap((entry) =>
+      entry.tot.threadId === null ? [] : [`${entry.environmentId}\u0000${entry.tot.threadId}`],
+    ),
+  );
+  if (current.size === 0) return threads;
+  return threads.filter((thread) => !current.has(`${thread.environmentId}\u0000${thread.id}`));
 }
