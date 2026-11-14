@@ -1,6 +1,7 @@
 import * as NodeFS from "node:fs";
 
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as TotTestkit from "../tots/TotTestkit.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import { ProviderInstanceId } from "@t3tools/contracts";
@@ -86,7 +87,9 @@ const toolHandlerServices = Layer.mergeAll(
   Layer.mock(ThreadManagementService)({}),
   Layer.mock(ThreadSearch)({}),
   Layer.mock(VcsStatusBroadcaster)({}),
-).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)));
+).pipe(
+  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, TotTestkit.notTotLayer)),
+);
 
 const utf8Bytes = (text: string) => Buffer.byteLength(text, "utf8");
 
