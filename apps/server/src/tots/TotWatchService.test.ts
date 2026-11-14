@@ -1,6 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import {
   DEFAULT_HOME_TOT,
+  OrchestratorMcpFailure,
+  type OrchestratorMcpThreadWaitResult,
   EnvironmentId,
   ProjectId,
   RunId,
@@ -13,14 +15,20 @@ import {
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import * as PeerForwarding from "../peer/PeerForwarding.ts";
+import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as TotService from "./TotService.ts";
 import * as TotWatchService from "./TotWatchService.ts";
 
 const environmentId = EnvironmentId.make("asuna-env");
+const promini = EnvironmentId.make("promini-env");
 const homeThread = ThreadId.make("tot:home:current");
 const yuiThread = ThreadId.make("tot:yui:current");
 
@@ -41,7 +49,13 @@ const shell = (
     settledOverride: null,
   }) as unknown as OrchestrationV2ThreadShell;
 
-const makeHarness = (initial: ReadonlyArray<Tot>) => {
+interface RemoteOptions {
+  readonly waitForThread: PeerForwarding.PeerForwarding["Service"]["waitForThread"];
+  readonly pause?: Effect.Effect<void>;
+  readonly retry?: Schedule.Schedule<unknown>;
+}
+
+const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
   const state = { tots: [...initial] };
   const shells = new Map<ThreadId, OrchestrationV2ThreadShell>();
   const reports: Array<{ totId: string; lines: ReadonlyArray<string> }> = [];
@@ -77,6 +91,18 @@ const makeHarness = (initial: ReadonlyArray<Tot>) => {
           getEnvironmentId: Effect.succeed(environmentId),
           getDescriptor: Effect.succeed({ label: "Asuna" } as never),
         }),
+        Layer.mock(PeerForwarding.PeerForwarding)({
+          waitForThread: remote?.waitForThread ?? (() => Effect.never),
+          links: () =>
+            Effect.succeed({
+              environmentId,
+              links: [{ environmentId: promini, label: "ProMini" }],
+              notListed: "",
+            } as never),
+        }),
+        Layer.mock(ServerSettings.ServerSettingsService)({ streamChanges: Stream.never }),
+        Layer.succeed(TotWatchService.TotFollowPause, remote?.pause ?? Effect.never),
+        Layer.succeed(RemoteDelegation.FollowRetrySchedule, remote?.retry ?? Schedule.forever),
       ),
     ),
   );
@@ -86,7 +112,11 @@ const makeHarness = (initial: ReadonlyArray<Tot>) => {
       yield* (yield* TotWatchService.TotWatchService).observe(next.id);
     });
   const flush = TotWatchService.TotWatchService.pipe(Effect.flatMap((service) => service.flush));
-  return { state, reports, layer, step, flush };
+  const syncFollowers = TotWatchService.TotWatchService.pipe(
+    Effect.flatMap((service) => service.syncFollowers),
+  );
+  shells.set(homeThread, shell(homeThread, "running"));
+  return { state, reports, layer, step, flush, syncFollowers };
 };
 
 const watch = (threadId: ThreadId, reason: TotWatch["reason"], runId?: string): TotWatch => ({
@@ -187,3 +217,85 @@ it.effect("a watched thread that is archived ends its watch without a report", (
     expect(state.tots[0]!.watches).toHaveLength(0);
   }).pipe(Effect.provide(layer));
 });
+
+const remoteThread = ThreadId.make("tot-launched:home:remote1");
+
+it.effect("a watched thread on another machine that asks a question reports once", () =>
+  Effect.gen(function* () {
+    const paused = yield* Queue.unbounded<void>();
+    const answers: Array<OrchestratorMcpThreadWaitResult> = [
+      {
+        threadId: remoteThread,
+        runId: RunId.make("run-1"),
+        status: "waiting",
+        timedOut: false,
+        attention: "question",
+      },
+    ];
+    const { reports, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [{ environmentId: promini, threadId: remoteThread, reason: "launched" }] })],
+      {
+        waitForThread: () => {
+          const next = answers.shift();
+          return next === undefined ? Effect.never : Effect.succeed(next);
+        },
+        pause: Queue.offer(paused, undefined).pipe(Effect.andThen(Effect.never)),
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      yield* Queue.take(paused);
+      yield* flush;
+      expect(reports).toHaveLength(1);
+      expect(reports[0]!.lines[0]).toContain("- Asks a question: ");
+      expect(reports[0]!.lines[0]).toContain(" on ProMini");
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect(
+  "an unreachable machine is retried on the backoff, and its follower stops when unwatched",
+  () =>
+    Effect.gen(function* () {
+      const failed = yield* Queue.unbounded<void>();
+      const retry = yield* Queue.unbounded<void>();
+      let attempts = 0;
+      const { state, reports, layer, flush, syncFollowers } = makeHarness(
+        [
+          home({
+            watches: [{ environmentId: promini, threadId: remoteThread, reason: "launched" }],
+          }),
+        ],
+        {
+          waitForThread: () =>
+            Effect.suspend(() => {
+              attempts += 1;
+              return Effect.fail(
+                new OrchestratorMcpFailure({
+                  code: "orchestration_error",
+                  message: "ProMini does not answer.",
+                }),
+              );
+            }),
+          retry: Schedule.forever.pipe(
+            Schedule.tap(() =>
+              Queue.offer(failed, undefined).pipe(Effect.andThen(Queue.take(retry))),
+            ),
+          ),
+        },
+      );
+      yield* Effect.gen(function* () {
+        yield* syncFollowers;
+        yield* Queue.take(failed);
+        yield* Queue.offer(retry, undefined);
+        yield* Queue.take(failed);
+        expect(attempts).toBe(2);
+        state.tots = [home({ watches: [] })];
+        yield* syncFollowers;
+        yield* Queue.offer(retry, undefined);
+        yield* flush;
+        expect(attempts).toBe(2);
+        expect(reports).toHaveLength(0);
+      }).pipe(Effect.provide(layer));
+    }),
+);
