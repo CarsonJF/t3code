@@ -174,8 +174,8 @@ export function DraftHeroHeadline({
     },
     pickerOpen,
   );
-  const projectItem = (group: (typeof menuGroups)[number], value = group.projectKey) => ({
-    value,
+  const projectItem = (group: (typeof menuGroups)[number], value?: string) => ({
+    value: value ?? group.projectKey,
     label: group.displayName,
     projectKey: group.projectKey,
   });
