@@ -1,6 +1,7 @@
 import { OrchestratorMcpFailure } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
+import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
@@ -28,6 +29,25 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
           watchAll: tot.watchAll,
         })),
       };
+    }),
+  ),
+  t3_group_chat_say: McpToolAccess.reads((input) =>
+    Effect.gen(function* () {
+      const tot = yield* requireTotChange();
+      if (tot.via !== "local")
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message: "Group chats live with the Tots here; speak from your own environment.",
+        });
+      yield* (yield* GroupChatService.GroupChatService)
+        .say(tot.totId, input.room, input.text)
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new OrchestratorMcpFailure({ code: "invalid_request", message: error.message }),
+          ),
+        );
+      return { ok: true as const };
     }),
   ),
   t3_tot_watch: McpToolAccess.reads((input) =>
