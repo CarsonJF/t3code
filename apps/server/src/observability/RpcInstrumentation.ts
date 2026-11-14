@@ -84,6 +84,8 @@ const RPC_AGGREGATES = {
   [WS_METHODS.totsEnable]: "tots",
   [WS_METHODS.totsDisable]: "tots",
   [WS_METHODS.totsStartFresh]: "tots",
+  [WS_METHODS.totsReadMemory]: "tots",
+  [WS_METHODS.totsWriteMemory]: "tots",
   [WS_METHODS.serverSearchAcpRegistry]: "server",
   [WS_METHODS.serverPrepareAcpRegistryAgent]: "server",
   [WS_METHODS.serverUninstallAcpRegistryManagedBinary]: "server",
