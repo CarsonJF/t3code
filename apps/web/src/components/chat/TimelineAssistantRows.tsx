@@ -22,6 +22,7 @@ import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../times
 import { readThreadTurnItems } from "../../state/entities";
 import { useV2ItemSupport } from "../../state/v2ItemSupport";
 import { TimelineRowCtx, TimelineRowActivityCtx, type TimelineRow } from "./timelineRowContext";
+import { TotMessageBubble, useTotThreadSpeaker } from "../tots/TotMessageBubble";
 import { MESSAGE_HEADING_LEVEL, MessageAuthorHeading } from "./TimelineRowParts";
 import { SharedTooltipTrigger } from "../ui/shared-tooltip";
 
@@ -36,11 +37,8 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
   const text = liveText ?? row.message.text;
   const messageText =
     text || (row.message.streaming || row.suppressEmptyResponse ? "" : gt("(empty response)"));
-
-  return (
-    <>
-      <div className="relative min-w-0 px-1 py-0.5">
-        <MessageAuthorHeading>T3 Code</MessageAuthorHeading>
+  const speaker = useTotThreadSpeaker(ctx.threadRef);
+  const body = (
         <div data-thread-find-text="true">
           <AssistantCitationSource
             messageId={row.message.id}
@@ -70,6 +68,17 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
             />
           </AssistantCitationSource>
         </div>
+  );
+
+  return (
+    <>
+      <div className="relative min-w-0 px-1 py-0.5">
+        <MessageAuthorHeading>{speaker?.tot.name ?? "T3 Code"}</MessageAuthorHeading>
+        {speaker === undefined ? (
+          body
+        ) : (
+          <TotMessageBubble speaker={speaker}>{body}</TotMessageBubble>
+        )}
         {!row.showAssistantMeta && row.projectedItem?.item.status === "interrupted" ? (
           <div className="mt-1.5 flex">
             <AssistantStatusBadge status="interrupted" />
@@ -77,7 +86,7 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
         ) : null}
         {row.showAssistantMeta ? (
           <AssistantMessageMeta
-            className="mt-1.5"
+            className={speaker === undefined ? "mt-1.5" : "mt-1.5 pl-9.5"}
             projectedItem={row.projectedItem}
             message={row.message}
             showCopyButton={row.showAssistantCopyButton}
