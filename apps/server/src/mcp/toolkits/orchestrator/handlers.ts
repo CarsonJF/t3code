@@ -1,4 +1,5 @@
 import { OrchestratorMcpFailure } from "@t3tools/contracts";
+import { refuseTots } from "../../totCaller.ts";
 import { OrchestratorToolkit } from "./tools.ts";
 import * as Effect from "effect/Effect";
 
@@ -145,6 +146,8 @@ const handlers = {
   ),
   create_threads: McpToolAccess.actsAsCaller((input) =>
     Effect.gen(function* () {
+      // Threads here would start in the Tot's own folder and act as that Tot.
+      yield* refuseTots("A Tot launches each thread with t3_thread_launch and a projectId.");
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const service = yield* OrchestratorMcpService.OrchestratorMcpService;
       return yield* service.createThreads(scope, input);

@@ -6,8 +6,12 @@ import {
   type RunId,
   OrchestratorMcpFailure,
   type OrchestrationV2Command,
+  type OrchestrationV2RuntimeRequest,
+  ProviderRequestKind,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { modelSelectionCommandType } from "@t3tools/shared/model";
 
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -22,6 +26,7 @@ import {
 import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
 import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
 import { queuedRunsInDeliveryOrder } from "../../../orchestration-v2/QueuedRunOrder.ts";
+import { readTotCaller, requireTotChange } from "../../totCaller.ts";
 import { ThreadToolkit } from "./tools.ts";
 
 function queueEntry(
@@ -76,6 +81,46 @@ const readQuestion = Effect.fn("mcp.readQuestion")(function* (input: {
     });
   return { ...context, request, item };
 });
+const isApprovalKind = Schema.is(ProviderRequestKind);
+const isPendingApproval = (
+  request: OrchestrationV2RuntimeRequest,
+): request is OrchestrationV2RuntimeRequest & { readonly kind: ProviderRequestKind } =>
+  request.status === "pending" && isApprovalKind(request.kind);
+
+/** A pending permission request; only a Tot reads or answers these. */
+const readApproval = Effect.fn("mcp.readApproval")(function* (input: {
+  threadId?: ThreadId | undefined;
+  requestId: RuntimeRequestId;
+}) {
+  const context = yield* readThread(input.threadId, ["runtimeRequests", "turnItems"], {
+    turnItemTypes: ["approval_request"],
+  });
+  const request = context.projection.runtimeRequests.find(
+    (candidate) => candidate.id === input.requestId,
+  );
+  if (request === undefined || !isPendingApproval(request))
+    return yield* new OrchestratorMcpFailure({
+      code: "invalid_request",
+      message: "The pending approval request was not found.",
+    });
+  const item = context.projection.turnItems.find(
+    (candidate) => candidate.type === "approval_request" && candidate.requestId === input.requestId,
+  );
+  return {
+    ...context,
+    request,
+    approval: {
+      kind: request.kind,
+      ...(item?.type === "approval_request" && item.prompt !== undefined
+        ? { prompt: item.prompt }
+        : {}),
+      ...(item?.type === "approval_request" && item.reason !== undefined
+        ? { reason: item.reason }
+        : {}),
+    },
+  };
+});
+
 /** A field the chosen action needs. `null` counts as given, as in `beforeRunId: null`. */
 const required = <A>(value: A | undefined, name: string) =>
   value === undefined
@@ -231,15 +276,30 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
     (input) => input.action !== "respond",
     McpToolAccess.reads((input) =>
       Effect.gen(function* () {
+        const tot = yield* readTotCaller();
         if (input.action === "list") {
           const { projection } = yield* readThread(input.threadId, ["runtimeRequests"]);
+          const requestIds = projection.runtimeRequests
+            .filter((request) => request.kind === "user_input" && request.status === "pending")
+            .map((request) => request.id);
+          if (Option.isNone(tot)) return { requestIds };
           return {
-            requestIds: projection.runtimeRequests
-              .filter((request) => request.kind === "user_input" && request.status === "pending")
-              .map((request) => request.id),
+            requestIds,
+            approvals: projection.runtimeRequests
+              .filter(isPendingApproval)
+              .map((request) => ({ requestId: request.id, kind: request.kind })),
           };
         }
         const requestId = yield* required(input.requestId, "requestId");
+        if (Option.isSome(tot)) {
+          const { projection } = yield* readThread(input.threadId, ["runtimeRequests"]);
+          if (
+            projection.runtimeRequests.some((r) => r.id === requestId && isApprovalKind(r.kind))
+          ) {
+            const { approval } = yield* readApproval({ threadId: input.threadId, requestId });
+            return { requestId, approval };
+          }
+        }
         const { item } = yield* readQuestion({ threadId: input.threadId, requestId });
         return { requestId, questions: item.questions };
       }),
@@ -247,6 +307,28 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
     writesThread((input) =>
       Effect.gen(function* () {
         const requestId = yield* required(input.requestId, "requestId");
+        if (input.decision !== undefined) {
+          if (Option.isNone(yield* readTotCaller()))
+            return yield* new OrchestratorMcpFailure({
+              code: "capability_denied",
+              message: "Only a Tot can approve permission requests.",
+            });
+          yield* requireTotChange();
+          const { threads, projection } = yield* readApproval({
+            threadId: input.threadId,
+            requestId,
+          });
+          const approved = yield* threads
+            .dispatch({
+              type: "runtime-request.respond",
+              threadId: projection.thread.id,
+              commandId: yield* newCommandId(),
+              requestId,
+              decision: input.decision,
+            })
+            .pipe(Effect.mapError(dispatchFailure));
+          return { sequence: approved.sequence };
+        }
         const answers = yield* required(input.answers, "answers");
         const { threads, projection } = yield* readQuestion({
           threadId: input.threadId,

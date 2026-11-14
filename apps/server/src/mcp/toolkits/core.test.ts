@@ -1,4 +1,5 @@
 import * as AssetSigner from "../../assets/AssetSigner.ts";
+import * as TotTestkit from "../../tots/TotTestkit.ts";
 import * as DocumentText from "../../provider/DocumentText.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -86,7 +87,7 @@ const decodeThreadSearchResult = Schema.decodeUnknownEffect(
 const layerThreadToolkit = McpHttpServer.layerThreadToolkit.pipe(
   Layer.provide(Layer.mock(ThreadSearch.ThreadSearch)({})),
   Layer.provide(Layer.mock(ScheduledTaskService.ScheduledTaskService)({})),
-  Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
+  Layer.provide(Layer.merge(Layer.mock(PeerForwarding.PeerForwarding)({}), TotTestkit.notTotLayer)),
   Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
   Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
 );
@@ -809,7 +810,9 @@ it.effect("search names the calling thread, so an agent can tell its own match a
           }),
         ),
         Layer.provide(Layer.mock(ScheduledTaskService.ScheduledTaskService)({})),
-        Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
+        Layer.provide(
+          Layer.merge(Layer.mock(PeerForwarding.PeerForwarding)({}), TotTestkit.notTotLayer),
+        ),
         Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
         Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
       ),
@@ -913,7 +916,9 @@ it.effect("refuses act-as-caller tools to a client caller", () =>
         Layer.provide(Layer.mock(ProviderRegistry.ProviderRegistry)({})),
         Layer.provide(Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({})),
         Layer.provide(Layer.mock(ScheduledTaskService.ScheduledTaskService)({})),
-        Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
+        Layer.provide(
+          Layer.merge(Layer.mock(PeerForwarding.PeerForwarding)({}), TotTestkit.notTotLayer),
+        ),
         Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
         Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
         Layer.provide(Layer.mock(ProjectService.ProjectService)({})),
@@ -979,7 +984,9 @@ it.effect("a caller cannot rewrite a scheduled task that runs above its own mode
         ),
         Layer.provide(Layer.mock(ProjectService.ProjectService)({})),
         Layer.provide(Layer.mock(SecretRequests.SecretRequests)({})),
-        Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
+        Layer.provide(
+          Layer.merge(Layer.mock(PeerForwarding.PeerForwarding)({}), TotTestkit.notTotLayer),
+        ),
         Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
         Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
         Layer.provide(Layer.mock(RemoteDelegation.RemoteDelegation)({})),
@@ -1034,7 +1041,9 @@ it.effect.each([
         Layer.provide(NodeCrypto.layer),
         Layer.provide(Layer.mock(ThreadManagement.ThreadManagementService)({})),
         Layer.provide(Layer.mock(ThreadSearch.ThreadSearch)({})),
-        Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
+        Layer.provide(
+          Layer.merge(Layer.mock(PeerForwarding.PeerForwarding)({}), TotTestkit.notTotLayer),
+        ),
         Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
         Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
         Layer.provide(
@@ -1128,7 +1137,9 @@ it.effect.each(["t3_thread_interrupt", "t3_workflow_stop"])(
           Layer.provide(Layer.mock(ProjectService.ProjectService)({})),
           Layer.provide(Layer.mock(SecretRequests.SecretRequests)({})),
           Layer.provide(Layer.mock(RemoteDelegation.RemoteDelegation)({})),
-          Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
+          Layer.provide(
+            Layer.merge(Layer.mock(PeerForwarding.PeerForwarding)({}), TotTestkit.notTotLayer),
+          ),
           Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
           Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
         ),
@@ -1222,7 +1233,9 @@ it.effect("discovers workflow stop targets and requires orchestration capability
         Layer.provide(Layer.mock(ProviderRegistry.ProviderRegistry)({})),
         Layer.provide(Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({})),
         Layer.provide(Layer.mock(ScheduledTaskService.ScheduledTaskService)({})),
-        Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
+        Layer.provide(
+          Layer.merge(Layer.mock(PeerForwarding.PeerForwarding)({}), TotTestkit.notTotLayer),
+        ),
         Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
         Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
         Layer.provide(Layer.mock(ProjectService.ProjectService)({})),
@@ -1351,7 +1364,9 @@ it.effect(
             }),
           ),
           Layer.provide(Layer.mock(SecretRequests.SecretRequests)({})),
-          Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
+          Layer.provide(
+            Layer.merge(Layer.mock(PeerForwarding.PeerForwarding)({}), TotTestkit.notTotLayer),
+          ),
           Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
           Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
           Layer.provide(Layer.mock(RemoteDelegation.RemoteDelegation)({})),

@@ -57,3 +57,10 @@ export const requireTotChange = Effect.fn("mcp.requireTotChange")(function* () {
   yield* assertFullAccess(context, "A Tot makes changes only in full-access/default mode.");
   return tot.value;
 });
+
+/** Refuses what no Tot may do, such as deleting projects or creating threads in its own folder. */
+export const refuseTots = Effect.fn("mcp.refuseTots")(function* (message: string) {
+  if (Option.isSome(yield* readTotCaller())) {
+    return yield* new OrchestratorMcpFailure({ code: "capability_denied", message });
+  }
+});
