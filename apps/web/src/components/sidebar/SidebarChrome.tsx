@@ -5,7 +5,7 @@ import {
   ChartNoAxesColumnIcon,
   SettingsIcon,
 } from "lucide-react";
-import { openTotEditor, useTotHostEnvironmentId } from "../tots/totEditorStore";
+import { useTotHostEnvironmentId } from "../tots/totEditorStore";
 import { TotEditorHost } from "../tots/TotEditorDialog";
 import type { ReactNode } from "react";
 import { T, useGT } from "gt-react";
@@ -316,10 +316,10 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           {totHostEnvironmentId === null ? null : (
             <SidebarUtilityItem
               icon={<BotIcon />}
-              label="New Tot"
+              label="Tots"
               onClick={() => {
                 closeMobileSidebar();
-                openTotEditor({ mode: "create", environmentId: totHostEnvironmentId });
+                void navigate({ to: "/settings/tots" });
               }}
             />
           )}
