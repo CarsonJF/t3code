@@ -4,6 +4,7 @@ import {
   type GitManagerServiceError,
   ProjectId,
   type ThreadId,
+  type Tot,
   VcsProcessSpawnError,
 } from "@t3tools/contracts";
 import { newProjectFolderName } from "@t3tools/shared/path";
@@ -25,6 +26,7 @@ import * as Schema from "effect/Schema";
 import * as ServerConfig from "../config.ts";
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
+import { renderTotAgents } from "../tots/totAgents.ts";
 import * as ProjectService from "./ProjectService.ts";
 
 export class ScratchUnavailableError extends Schema.TaggedError<ScratchUnavailableError>()(
@@ -120,6 +122,18 @@ export class ManagedProjectFolders extends Context.Service<
       readonly text: string;
     }) => Effect.Effect<Option.Option<string>, ScratchFolderError>;
     readonly namedProjectsRoot: string;
+    /**
+     * Finds or creates a Tot's project at `<baseDir>/tots/<id>`, its own Git
+     * repository, and rewrites the T3 blocks of its AGENTS.md. The rest of
+     * the file is kept, so notes survive fresh starts and edits.
+     */
+    readonly ensureTotProject: (
+      tot: Tot,
+      siblings: ReadonlyArray<Pick<Tot, "id" | "name" | "scope">>,
+    ) => Effect.Effect<
+      { readonly projectId: ProjectId; readonly workspaceRoot: string },
+      NamedProjectError
+    >;
     /** Removes failed/cancelled creations' folders only while no project owns them. */
     readonly createNamedProject: (input: { readonly name: string }) => Effect.Effect<
       {
@@ -505,12 +519,89 @@ const make = Effect.gen(function* () {
     };
   });
 
+  const ensureTotProject: ManagedProjectFolders["Service"]["ensureTotProject"] = Effect.fn(
+    "ManagedProjectFolders.ensureTotProject",
+  )(function* (tot, siblings) {
+    const workspaceRoot = path.resolve(config.baseDir, "tots", tot.id);
+    const folderError = (cause: unknown) =>
+      new NamedProjectFolderError({ folder: workspaceRoot, cause });
+    yield* fileSystem
+      .makeDirectory(workspaceRoot, { recursive: true })
+      .pipe(Effect.mapError(folderError));
+    // Its own repository, so checkpoints never reach into a parent checkout.
+    if (
+      !(yield* fileSystem
+        .exists(path.join(workspaceRoot, ".git"))
+        .pipe(Effect.mapError(folderError)))
+    ) {
+      yield* git
+        .execute({
+          operation: "ManagedProjectFolders.totInit",
+          cwd: workspaceRoot,
+          args: ["init"],
+          timeoutMs: 10_000,
+        })
+        .pipe(Effect.mapError(folderError));
+    }
+    const agentsPath = path.join(workspaceRoot, "AGENTS.md");
+    const currentAgents = yield* fileSystem.readFileString(agentsPath).pipe(
+      Effect.map((text): string | null => text),
+      Effect.catchIf(
+        (error) => error.reason._tag === "NotFound",
+        () => Effect.succeed(null),
+      ),
+      Effect.mapError(folderError),
+    );
+    const nextAgents = renderTotAgents(tot, siblings, currentAgents);
+    if (nextAgents !== currentAgents) {
+      yield* fileSystem.writeFileString(agentsPath, nextAgents).pipe(Effect.mapError(folderError));
+    }
+    // Claude reads CLAUDE.md, which imports AGENTS.md; the other providers read AGENTS.md.
+    const claudePath = path.join(workspaceRoot, "CLAUDE.md");
+    if (!(yield* fileSystem.exists(claudePath).pipe(Effect.mapError(folderError)))) {
+      yield* fileSystem
+        .writeFileString(claudePath, "@AGENTS.md\n")
+        .pipe(Effect.mapError(folderError));
+    }
+    const id = yield* crypto
+      .randomUUIDv4()
+      .pipe(Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })));
+    const bootstrapped = yield* projects
+      .bootstrap({
+        commandId: CommandId.make(`tot-project:${tot.id}:${id}`),
+        projectId: ProjectId.make(id),
+        title: tot.name,
+        workspaceRoot,
+      })
+      .pipe(
+        Effect.catchTags({
+          ProjectConflictError: (conflict) =>
+            Effect.succeed({
+              project: { id: conflict.conflictingProjectId },
+              created: false,
+            }),
+        }),
+        Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })),
+      );
+    if (bootstrapped.created) {
+      yield* projects
+        .update({
+          commandId: CommandId.make(`tot-project-icon:${tot.id}:${id}`),
+          projectId: bootstrapped.project.id,
+          projectIcon: { kind: "lucide", name: "bot", color: "gray" },
+        })
+        .pipe(Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause })));
+    }
+    return { projectId: bootstrapped.project.id, workspaceRoot };
+  });
+
   return ManagedProjectFolders.of({
     scratchRoot,
     ensureScratchProject,
     isScratchProject,
     folderForThread,
     namedProjectsRoot,
+    ensureTotProject,
     createNamedProject,
   });
 });
