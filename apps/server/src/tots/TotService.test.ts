@@ -14,10 +14,12 @@ import {
   type OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
+import * as ServerConfig from "../config.ts";
 import * as ThreadLaunch from "../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
@@ -54,6 +56,11 @@ const makeTots = (
     Layer.provideMerge(
       Layer.mergeAll(
         NodeCrypto.layer,
+        NodeServices.layer,
+        Layer.provide(
+          ServerConfig.layerTest(process.cwd(), { prefix: "t3-tot-service-" }),
+          NodeServices.layer,
+        ),
         ServerSettings.layerTest(settings),
         Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
           namedProjectsRoot: "/projects",
@@ -262,5 +269,29 @@ it.effect("watches are added once and removed", () => {
     expect((yield* home()).watches).toHaveLength(1);
     yield* tots.removeWatch(HOME_TOT_ID, watch.environmentId, watch.threadId);
     expect((yield* home()).watches).toHaveLength(0);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("keeps a Tot's memory files, and refuses paths outside its memory", () => {
+  const { layer } = makeTots({ tots: [{ ...DEFAULT_HOME_TOT, projectId: totProjectId }] });
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    yield* tots.writeMemory(HOME_TOT_ID, [
+      { path: "MEMORY.md", content: "- Likes tea" },
+      { path: "memory/projects/yui.md", content: "Yui notes" },
+    ]);
+    const memory = yield* tots.readMemory(HOME_TOT_ID);
+    expect(memory.files.map((file) => file.path).toSorted()).toEqual([
+      "MEMORY.md",
+      "memory/projects/yui.md",
+    ]);
+    const refused = yield* Effect.flip(
+      tots.writeMemory(HOME_TOT_ID, [{ path: "memory/../AGENTS.md", content: "x" }]),
+    );
+    expect(refused).toBeInstanceOf(TotError);
+    const outside = yield* Effect.flip(
+      tots.writeMemory(HOME_TOT_ID, [{ path: "AGENTS.md", content: "x" }]),
+    );
+    expect(outside).toBeInstanceOf(TotError);
   }).pipe(Effect.provide(layer));
 });
