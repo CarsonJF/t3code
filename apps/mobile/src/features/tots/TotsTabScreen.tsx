@@ -6,6 +6,8 @@ import {
 } from "@t3tools/client-runtime/tots";
 import type { TotFaceState } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
+import type { ServerSettings } from "@t3tools/contracts";
+import { Atom } from "effect/reactivity";
 import { useNavigation } from "@react-navigation/native";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,10 +19,15 @@ import { ListSection } from "../../components/ui/ListSection";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useThreadShell } from "../../state/entities";
 import { connectedEnvironmentIdsAtom } from "../../state/presentation";
+import { serverEnvironment } from "../../state/server";
 import { useAnimateTotAvatars, useTots } from "../../state/tots";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { TotLiveFace } from "./TotLiveFace";
 import { TotStillFace } from "./TotStillFace";
+
+const NO_SETTINGS_ATOM = Atom.make<ServerSettings | null>(null).pipe(
+  Atom.withLabel("mobile-tots-no-host"),
+);
 
 const STATE_LABELS: Record<TotFaceState, string> = {
   idle: "Idle",
@@ -80,6 +87,12 @@ export function TotsTabScreen() {
   const connected = useAtomValue(connectedEnvironmentIdsAtom);
   const hostEnvironmentId = tots[0]?.environmentId ?? connected[0] ?? null;
   const hero = tots.find((entry) => entry.tot.threadId !== null);
+  // Every Tot on the host, a Home never turned on included, so each can be managed here.
+  const hostSettings = useAtomValue(
+    hostEnvironmentId === null
+      ? NO_SETTINGS_ATOM
+      : serverEnvironment.settingsValueAtom(hostEnvironmentId),
+  );
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
@@ -104,6 +117,23 @@ export function TotsTabScreen() {
           />
         )}
       </ListSection>
+      {hostEnvironmentId === null || hostSettings === null ? null : (
+        <ListSection title="Manage">
+          {hostSettings.tots.map((tot) => (
+            <ListActionRow
+              key={tot.id}
+              icon="slider.horizontal.3"
+              label={tot.threadId === null ? `Turn on or edit ${tot.name}` : `Edit ${tot.name}`}
+              onPress={() =>
+                navigation.navigate("TotEditor", {
+                  environmentId: hostEnvironmentId,
+                  totId: tot.id,
+                })
+              }
+            />
+          ))}
+        </ListSection>
+      )}
     </ScrollView>
   );
 }
