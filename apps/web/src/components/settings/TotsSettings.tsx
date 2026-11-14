@@ -5,11 +5,15 @@ import {
   totFaceState,
 } from "@t3tools/client-runtime/tots";
 import { HOME_TOT_ID, type EnvironmentId, type Tot } from "@t3tools/contracts";
+import type { EnvironmentGroupChat } from "@t3tools/client-runtime/tots";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useClientSettings, useEnvironmentSettings } from "../../hooks/useSettings";
 import { useThreadShell } from "../../state/entities";
-import { useTotHosts, useTots } from "../../state/tots";
+import { useGroupChats, useTotHosts, useTots } from "../../state/tots";
+import { GroupChatAvatar, useGroupChatMembers } from "../tots/GroupChatAvatar";
+import { openGroupChatEditor } from "../tots/GroupChatEditorDialog";
 import { TotAvatar } from "../tots/TotAvatar";
+import { useGroupChatActions } from "../tots/useGroupChatActions";
 import { openTotMemory } from "../tots/TotMemoryDialog";
 import { openTotEditor, useTotHostEnvironmentId } from "../tots/totEditorStore";
 import { useTotActions } from "../tots/useTotActions";
@@ -68,7 +72,65 @@ export function TotsSettings() {
           </>
         )}
       </SettingsSection>
+      <GroupChatsSection environmentId={environmentId} />
     </SettingsPageContainer>
+  );
+}
+
+function GroupChatsSection(props: { readonly environmentId: EnvironmentId | null }) {
+  const rooms = useGroupChats();
+  const { environmentId } = props;
+  if (environmentId === null) return null;
+  return (
+    <SettingsSection title="Group chats">
+      <SettingsRow
+        title="Talk to several Tots at once"
+        description="One shared thread you and several Tots talk in. Name a Tot with @ to ask it; with no name, the moderator answers. Tots can answer each other up to a limit you set."
+        control={
+          <Button size="sm" onClick={() => openGroupChatEditor({ mode: "create", environmentId })}>
+            New group chat
+          </Button>
+        }
+      />
+      {rooms.map((entry) => (
+        <GroupChatRow key={`${entry.environmentId}:${entry.room.id}`} entry={entry} />
+      ))}
+    </SettingsSection>
+  );
+}
+
+function GroupChatRow(props: { readonly entry: EnvironmentGroupChat }) {
+  const { environmentId, room } = props.entry;
+  const members = useGroupChatMembers(props.entry);
+  const actions = useGroupChatActions(environmentId, room);
+  return (
+    <SettingsRow
+      title={
+        <span className="flex items-center gap-2">
+          <GroupChatAvatar members={members} size={22} />
+          {room.name}
+        </span>
+      }
+      description={members.map((member) => member.tot.name).join(", ")}
+      control={
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <Button size="sm" variant="outline" onClick={actions.open}>
+            Open
+          </Button>
+          <Button size="sm" variant="outline" onClick={actions.edit}>
+            Edit
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive-outline"
+            disabled={actions.pending}
+            onClick={() => void actions.remove()}
+          >
+            Delete
+          </Button>
+        </div>
+      }
+    />
   );
 }
 
