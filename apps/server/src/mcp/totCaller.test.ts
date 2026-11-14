@@ -15,7 +15,7 @@ import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.t
 import * as TotService from "../tots/TotService.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import { liveThreadShell } from "./McpToolAccess.testkit.ts";
-import { readTotCaller, requireTotChange } from "./totCaller.ts";
+import { readTotCaller, refuseTots, requireTotChange } from "./totCaller.ts";
 
 const environmentId = EnvironmentId.make("environment:tot-caller");
 const homeThread = ThreadId.make("tot:home:current");
@@ -135,5 +135,24 @@ it.effect("a live full-access Tot can make changes", () =>
   Effect.gen(function* () {
     const caller = yield* run(requireTotChange(), threadScope(homeThread));
     expect(caller.totId).toBe("home");
+  }),
+);
+
+it.effect("refuses a Tot what Tots may never do, and lets anyone else through", () =>
+  Effect.gen(function* () {
+    const refused = yield* run(
+      Effect.flip(refuseTots("A Tot cannot delete projects.")),
+      threadScope(homeThread),
+    );
+    expect(refused).toMatchObject({
+      code: "capability_denied",
+      message: "A Tot cannot delete projects.",
+    });
+    const linked = yield* run(
+      Effect.flip(refuseTots("A Tot cannot delete projects.")),
+      linkedScope("full-access", "tot:yui:n1"),
+    );
+    expect(linked.code).toBe("capability_denied");
+    yield* run(refuseTots("A Tot cannot delete projects."), threadScope(ThreadId.make("thread:x")));
   }),
 );
