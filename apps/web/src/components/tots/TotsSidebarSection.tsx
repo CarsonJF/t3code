@@ -7,8 +7,8 @@ import {
   type EnvironmentTot,
 } from "@t3tools/client-runtime/tots";
 import { useNavigate } from "@tanstack/react-router";
-import { HOME_TOT_ID } from "@t3tools/contracts";
-import { memo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { HOME_TOT_ID, type TotFaceState } from "@t3tools/contracts";
+import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { useShownThreadRouteTarget } from "~/hooks/useShownThreadRouteTarget";
@@ -17,10 +17,39 @@ import { useThreadShell } from "~/state/entities";
 import { useTots } from "~/state/tots";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { readLocalApi } from "../../localApi";
+import { toastManager } from "../ui/toast";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { TotAvatar } from "./TotAvatar";
 import { useTotAccent } from "./totAccent";
 import { useTotActions } from "./useTotActions";
+
+const STATUS_TONE: Partial<Record<TotFaceState, string>> = {
+  working: "text-muted-foreground",
+  "needs-you": "text-warning-foreground",
+  failure: "text-destructive-foreground",
+  sleep: "text-muted-foreground/70",
+};
+
+/** A Tot's status at a glance: a word for what it is doing, and a filled ping for an unseen reply. */
+function TotStatus(props: { readonly state: TotFaceState; readonly accent: string }) {
+  if (props.state === "idle") return null;
+  if (props.state === "success") {
+    return (
+      <span
+        role="img"
+        aria-label="New reply"
+        data-testid="sidebar-tot-ping"
+        className="size-2.5 shrink-0 rounded-full"
+        style={{ backgroundColor: props.accent }}
+      />
+    );
+  }
+  return (
+    <span className={`shrink-0 text-xs ${STATUS_TONE[props.state] ?? ""}`}>
+      {STATE_LABELS[props.state]}
+    </span>
+  );
+}
 
 const TotRow = memo(function TotRow(props: {
   readonly entry: EnvironmentTot;
@@ -35,6 +64,38 @@ const TotRow = memo(function TotRow(props: {
   const ref = tot.threadId === null ? null : scopeThreadRef(environmentId, tot.threadId);
   const shell = useThreadShell(ref);
   const state = totFaceState(totFaceInputFromShell(tot, shell));
+  const toastsOn = useClientSettings((settings) => settings.totToasts);
+  const previous = useRef(state);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- raises a toast when a Tot's state changes outside React
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = state;
+    if (!toastsOn || props.active || before === state) return;
+    if (state !== "success" && state !== "needs-you" && state !== "failure") return;
+    const id = toastManager.add({
+      type: state === "failure" ? "error" : "info",
+      title:
+        state === "success"
+          ? `${tot.name} replied`
+          : state === "needs-you"
+            ? `${tot.name} needs you`
+            : `${tot.name} hit a problem`,
+      ...(ref === null
+        ? {}
+        : {
+            actionProps: {
+              children: "Open",
+              onClick: () => {
+                toastManager.close(id);
+                void navigate({
+                  to: "/$environmentId/$threadId",
+                  params: buildThreadRouteParams(ref),
+                });
+              },
+            },
+          }),
+    });
+  }, [state, toastsOn, props.active, tot.name, ref, navigate]);
   const actions = useTotActions(environmentId, tot);
   const showMenu = async (position: { x: number; y: number }) => {
     const api = readLocalApi();
@@ -118,10 +179,12 @@ const TotRow = memo(function TotRow(props: {
           size={20}
           hovered={hovered}
         />
-        <span className="min-w-0 flex-1 truncate">{tot.name}</span>
-        {state === "needs-you" || state === "failure" ? (
-          <span className="text-muted-foreground text-xs">{STATE_LABELS[state]}</span>
-        ) : null}
+        <span
+          className={`min-w-0 flex-1 truncate ${state === "sleep" ? "text-muted-foreground" : ""}`}
+        >
+          {tot.name}
+        </span>
+        <TotStatus state={state} accent={accent} />
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
