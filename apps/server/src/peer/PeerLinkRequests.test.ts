@@ -1,4 +1,5 @@
 import { NodeHttpServer } from "@effect/platform-node";
+import * as TotTestkit from "../tots/TotTestkit.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
@@ -166,7 +167,9 @@ const makeLaptopWith = (
     const layerHere = McpHttpServer.layerOrchestratorToolkit.pipe(
       Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
       Layer.provideMerge(PeerLinkRequests.layer),
-      Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
+      Layer.provide(
+        Layer.merge(Layer.mock(PeerForwarding.PeerForwarding)({}), TotTestkit.notTotLayer),
+      ),
       Layer.provide(Layer.mock(RemoteDelegation.RemoteDelegation)({})),
       Layer.provide(Layer.succeedContext(answering)),
       Layer.provide(NodeCrypto.layer),
