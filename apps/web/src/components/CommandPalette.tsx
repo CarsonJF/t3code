@@ -1,6 +1,7 @@
 import { ThreadContextDragGhost } from "./chat/ThreadContextDragGhost";
 import { openTotEditor, useTotHostEnvironmentId } from "./tots/totEditorStore";
-import { useTots } from "../state/tots";
+import { useGroupChats, useTots } from "../state/tots";
+import { openGroupChatEditor } from "./tots/GroupChatEditorDialog";
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 
@@ -423,6 +424,7 @@ function OpenCommandPaletteDialog(props: {
   const pathname = useLocation({ select: (location) => location.pathname });
   const { openChildSearch, setOpen } = props;
   const tots = useTots();
+  const groupChats = useGroupChats();
   const totHostEnvironmentId = useTotHostEnvironmentId();
   // Keyed by palette session: the intent and restored search only seed this
   // mount, and closing must not change what the closing palette shows.
@@ -1711,7 +1713,32 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
+  for (const { environmentId, room } of groupChats) {
+    const threadId = room.threadId;
+    if (threadId === null) continue;
+    actionItems.push({
+      kind: "action",
+      value: `action:group-chat:${environmentId}:${room.id}`,
+      searchTerms: ["group chat", "room", "tots", room.name],
+      title: `Open ${room.name}`,
+      icon: <BotIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(scopeThreadRef(environmentId, threadId)),
+        });
+      },
+    });
+  }
   if (totHostEnvironmentId !== null) {
+    actionItems.push({
+      kind: "action",
+      value: "action:new-group-chat",
+      searchTerms: ["new group chat", "room", "tots", "chat with tots"],
+      title: "New group chat",
+      icon: <BotIcon className={ITEM_ICON_CLASS} />,
+      run: async () => openGroupChatEditor({ mode: "create", environmentId: totHostEnvironmentId }),
+    });
     actionItems.push({
       kind: "action",
       value: "action:new-tot",

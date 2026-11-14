@@ -1,9 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
+  selectGroupChats,
   selectTots,
   totHostOrder,
   withoutTotProjects,
+  type EnvironmentGroupChat,
   type EnvironmentTot,
 } from "@t3tools/client-runtime/tots";
 import {
@@ -29,6 +31,19 @@ const totsAtom = Atom.make((get): ReadonlyArray<EnvironmentTot> => {
   return selectTots(settingsByEnvironment);
 }).pipe(Atom.withLabel("web-tots"));
 
+const groupChatsAtom = Atom.make((get): ReadonlyArray<EnvironmentGroupChat> => {
+  const settingsByEnvironment = new Map<EnvironmentId, ServerSettings>();
+  for (const environmentId of get(environmentSummaries.environmentIdsAtom)) {
+    const settings = get(serverEnvironment.settingsValueAtom(environmentId));
+    if (settings !== null) settingsByEnvironment.set(environmentId, settings);
+  }
+  return selectGroupChats(settingsByEnvironment);
+}).pipe(Atom.withLabel("web-group-chats"));
+
+export function useGroupChats(): ReadonlyArray<EnvironmentGroupChat> {
+  return useAtomValue(groupChatsAtom);
+}
+
 export function useTots(): ReadonlyArray<EnvironmentTot> {
   return useAtomValue(totsAtom);
 }
@@ -50,7 +65,7 @@ export function useTotHosts(): ReadonlyArray<TotHost> {
 
 /** Projects offered for new work: everything but the Tots' own projects. */
 export function usePickableProjects() {
-  return withoutTotProjects(useProjects(), useTots());
+  return withoutTotProjects(useProjects(), useTots(), useGroupChats());
 }
 
 /** Home's current thread, for the shortcut and palette; null while Home is off. */
