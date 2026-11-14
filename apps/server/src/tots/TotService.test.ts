@@ -295,3 +295,18 @@ it.effect("keeps a Tot's memory files, and refuses paths outside its memory", ()
     expect(outside).toBeInstanceOf(TotError);
   }).pipe(Effect.provide(layer));
 });
+
+it.effect("keeps a Tot's own face designs, newest first, without repeats", () => {
+  const { layer } = makeTots({ tots: [{ ...DEFAULT_HOME_TOT, projectId: totProjectId }] });
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    yield* tots.saveDesign(HOME_TOT_ID, { color: "#111111" });
+    yield* tots.saveDesign(HOME_TOT_ID, { color: "#222222", shape: "gem", antenna: true });
+    const again = yield* tots.saveDesign(HOME_TOT_ID, { color: "#111111" });
+    expect(again.avatar).toEqual({ color: "#111111" });
+    expect(again.designs).toEqual([
+      { color: "#111111" },
+      { color: "#222222", shape: "gem", antenna: true },
+    ]);
+  }).pipe(Effect.provide(layer));
+});
