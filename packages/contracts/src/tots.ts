@@ -105,9 +105,9 @@ const parsePrefixed = (prefix: string, id: string): TotId | null => {
 };
 
 /** Every Tot thread, current or left behind by a fresh start. */
-export const TOT_THREAD_ID_PREFIX = "tot:";
+const TOT_THREAD_ID_PREFIX = "tot:";
 /** Every thread a Tot launches; clients leave those to the Tot instead of notifying. */
-export const TOT_LAUNCHED_THREAD_ID_PREFIX = "tot-launched:";
+const TOT_LAUNCHED_THREAD_ID_PREFIX = "tot-launched:";
 /** Watch reports T3 Code sends into a Tot's thread. */
 export const TOT_REPORT_MESSAGE_ID_PREFIX = "tot-report:";
 

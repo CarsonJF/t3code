@@ -1392,7 +1392,7 @@ const make = Effect.gen(function* () {
         }),
       ),
     updateTots: (update) =>
-      updateAndPersistSettings((current) =>
+      updateAndPersistSettings({}, (current) =>
         Effect.succeed({ ...current, tots: update(current.tots) }),
       ),
     withSettingsSnapshot,
