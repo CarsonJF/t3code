@@ -40,7 +40,7 @@ Open a Tot's memory from **Settings → Tots → Memory**, or right-click it in 
 
 ## Moving a Tot
 
-A Tot lives on one machine. To move it, open **Edit**, choose another machine under **Lives on**, and save. The Tot is made again on that machine with its memory; its thread starts fresh, and its model and any project scope are chosen again there. The original is removed once the new one is ready. Home stays where it is.
+A Tot lives on one machine. To move it, open **Edit**, choose another machine under **Lives on**, and save. The Tot is made again on that machine with its memory; its thread starts fresh, and its model and any project scope are chosen again there. The original is removed once the new one is ready. Home moves too: the other machine's own Home takes its settings and memory, and the old Home is reset to its default and turned off.
 
 ## In the sidebar
 
