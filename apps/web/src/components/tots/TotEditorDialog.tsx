@@ -4,8 +4,15 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { isTotProject } from "@t3tools/client-runtime/tots";
 import { validateTotDraft, type TotDraftErrors } from "@t3tools/client-runtime/tots/editor";
+import { TOT_SKIN_SERIES, totSkinSeriesOf, totSkinsIn } from "@t3tools/client-runtime/tots/skins";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { ProjectId, TotScope } from "@t3tools/contracts";
+import {
+  TOT_SHAPES,
+  type ProjectId,
+  type TotAvatar as TotAvatarValue,
+  type TotScope,
+  type TotShape,
+} from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
@@ -32,14 +39,19 @@ import {
 } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { TotAvatar } from "./TotAvatar";
 import { closeTotEditor, type TotEditorTarget, useTotEditorTarget } from "./totEditorStore";
 import { useTotModelChoice } from "./useTotModelChoice";
 
-/** A few BoopFace skins to start from; the flat color is the default. */
-const SKIN_CHOICES: ReadonlyArray<number | null> = [null, 101, 201, 301, 401, 501, 601, 701, 901];
 const COLOR_CHOICES = ["#0A7EA4", "#7C3AED", "#DB2777", "#EA580C", "#16A34A", "#475569"];
+
+const faceOf = (color: string, skin: number | null, shape: TotShape): TotAvatarValue => ({
+  color,
+  ...(skin === null ? {} : { skin }),
+  ...(shape === "round" ? {} : { shape }),
+});
 
 /** Mounted once; opens for whatever asked for it. */
 export function TotEditorHost() {
@@ -67,6 +79,8 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const [name, setName] = useState(editing?.name ?? "");
   const [color, setColor] = useState(editing?.avatar.color ?? COLOR_CHOICES[0]!);
   const [skin, setSkin] = useState<number | null>(editing?.avatar.skin ?? null);
+  const [shape, setShape] = useState<TotShape>(editing?.avatar.shape ?? "round");
+  const [skinSeries, setSkinSeries] = useState(() => totSkinSeriesOf(skin));
   const [scope, setScope] = useState<TotScope>(editing?.scope ?? "all");
   const [instructions, setInstructions] = useState(editing?.instructions ?? "");
   const [errors, setErrors] = useState<TotDraftErrors>({});
@@ -99,7 +113,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
       return;
     }
     const checked = validateTotDraft(
-      { name, color, skin, scope, instructions, modelSelection: model.selection },
+      { name, color, skin, shape, scope, instructions, modelSelection: model.selection },
       environmentTots.map((tot) => tot.id),
       editing?.id ?? null,
     );
@@ -173,7 +187,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
                 <TotAvatar
-                  avatar={skin === null ? { color } : { color, skin }}
+                  avatar={faceOf(color, skin, shape)}
                   state="idle"
                   animation={animate && !reducedMotion ? "full" : "still"}
                   size={56}
@@ -215,8 +229,54 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                     onChange={(event) => setColor(event.target.value)}
                   />
                 </div>
+                <div
+                  className="flex flex-wrap items-center gap-1.5"
+                  aria-label="Shape"
+                  role="group"
+                >
+                  {TOT_SHAPES.map((choice) => (
+                    <button
+                      key={choice}
+                      type="button"
+                      aria-label={`Shape ${choice}`}
+                      aria-pressed={shape === choice}
+                      className="rounded-md border border-transparent p-0.5 aria-pressed:border-ring"
+                      onClick={() => setShape(choice)}
+                    >
+                      <TotAvatar
+                        avatar={faceOf(color, skin, choice)}
+                        state="idle"
+                        animation="still"
+                        size={28}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground text-xs">Skin</span>
+                  <Select
+                    value={String(skinSeries.series)}
+                    onValueChange={(value) =>
+                      setSkinSeries(
+                        TOT_SKIN_SERIES.find((series) => String(series.series) === value) ??
+                          skinSeries,
+                      )
+                    }
+                  >
+                    <SelectTrigger size="sm" className="w-48" aria-label="Skin series">
+                      <SelectValue>{skinSeries.title}</SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup align="end" alignItemWithTrigger={false}>
+                      {TOT_SKIN_SERIES.map((series) => (
+                        <SelectItem key={series.series} value={String(series.series)}>
+                          {series.title}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                </div>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {SKIN_CHOICES.map((choice) => (
+                  {[null, ...totSkinsIn(skinSeries)].map((choice) => (
                     <button
                       key={choice ?? "flat"}
                       type="button"
@@ -226,7 +286,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                       onClick={() => setSkin(choice)}
                     >
                       <TotAvatar
-                        avatar={choice === null ? { color } : { color, skin: choice }}
+                        avatar={faceOf(color, choice, shape)}
                         state="idle"
                         animation="still"
                         size={28}

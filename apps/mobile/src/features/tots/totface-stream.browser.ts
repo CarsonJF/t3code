@@ -1,9 +1,13 @@
 // Runs inside the Tot face WebView: one BoopFace that the app drives by message.
-import "boopface/lite";
+import "boopface";
+import { applyTotHeadShape } from "@t3tools/client-runtime/tots/shapes";
+import type { TotShape } from "@t3tools/contracts";
 
 interface FaceMessage {
   readonly action: string;
   readonly color: string;
+  readonly skin?: number;
+  readonly shape?: TotShape;
   readonly size: number;
   readonly motion: "auto" | "reduce";
 }
@@ -28,7 +32,10 @@ document.body.append(face);
 const apply = (message: FaceMessage) => {
   face.setAttribute("size", String(message.size));
   face.setAttribute("color", message.color);
+  if (message.skin === undefined) face.removeAttribute("skin");
+  else face.setAttribute("skin", String(message.skin));
   face.setAttribute("motion", message.motion);
+  applyTotHeadShape(face, message.shape);
   face.setPointerFollow(false);
   face.play(message.action);
 };
