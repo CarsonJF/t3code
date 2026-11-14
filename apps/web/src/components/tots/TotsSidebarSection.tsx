@@ -8,18 +8,21 @@ import {
 } from "@t3tools/client-runtime/tots";
 import { useNavigate } from "@tanstack/react-router";
 import { HOME_TOT_ID, type TotFaceState } from "@t3tools/contracts";
+import type { EnvironmentGroupChat } from "@t3tools/client-runtime/tots";
 import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { useShownThreadRouteTarget } from "~/hooks/useShownThreadRouteTarget";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useThreadShell } from "~/state/entities";
-import { useTots } from "~/state/tots";
+import { useGroupChats, useTots } from "~/state/tots";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { readLocalApi } from "../../localApi";
 import { toastManager } from "../ui/toast";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
+import { GroupChatAvatar, useGroupChatMembers } from "./GroupChatAvatar";
 import { TotAvatar } from "./TotAvatar";
+import { useGroupChatActions } from "./useGroupChatActions";
 import { useTotAccent } from "./totAccent";
 import { useTotActions } from "./useTotActions";
 
@@ -194,11 +197,58 @@ const TotRow = memo(function TotRow(props: {
   );
 });
 
-/** The user's Tots, under the search bar and above drafts and threads. */
+const GroupChatRow = memo(function GroupChatRow(props: {
+  readonly entry: EnvironmentGroupChat;
+  readonly active: boolean;
+}) {
+  const { environmentId, room } = props.entry;
+  const members = useGroupChatMembers(props.entry);
+  const actions = useGroupChatActions(environmentId, room);
+  const showMenu = async (position: { x: number; y: number }) => {
+    const api = readLocalApi();
+    if (!api) return;
+    const clicked = await api.contextMenu
+      .show(
+        [
+          { id: "open", label: "Open" },
+          { id: "edit", label: "Edit", icon: "settings" },
+          { id: "delete", label: "Delete", icon: "trash", destructive: true },
+        ],
+        position,
+      )
+      .catch(() => null);
+    if (clicked === "open") actions.open();
+    else if (clicked === "edit") actions.edit();
+    else if (clicked === "delete") void actions.remove();
+  };
+  return (
+    <SidebarMenuItem
+      data-testid={`sidebar-group-chat-${room.id}`}
+      onContextMenu={(event: ReactMouseEvent) => {
+        event.preventDefault();
+        void showMenu({ x: event.clientX, y: event.clientY });
+      }}
+    >
+      <SidebarMenuButton
+        aria-label={`${room.name}, group chat`}
+        aria-current={props.active ? "page" : undefined}
+        isActive={props.active}
+        onClick={actions.open}
+      >
+        <GroupChatAvatar members={members} size={20} />
+        <span className="min-w-0 flex-1 truncate">{room.name}</span>
+        <span className="shrink-0 text-muted-foreground text-xs">{members.length}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+});
+
+/** The user's Tots and group chats, under the search bar and above drafts and threads. */
 export const TotsSidebarSection = memo(function TotsSidebarSection() {
   const tots = useTots();
+  const rooms = useGroupChats();
   const shown = useShownThreadRouteTarget().shownTarget;
-  if (tots.length === 0) return null;
+  if (tots.length === 0 && rooms.length === 0) return null;
   const shownThread = shown?.kind === "server" ? shown.threadRef : null;
   return (
     <div className="mt-1 mb-1 border-border/60 border-b pb-1">
@@ -212,6 +262,18 @@ export const TotsSidebarSection = memo(function TotsSidebarSection() {
               entry.tot.threadId !== null &&
               shownThread.environmentId === entry.environmentId &&
               shownThread.threadId === entry.tot.threadId
+            }
+          />
+        ))}
+        {rooms.map((entry) => (
+          <GroupChatRow
+            key={`${entry.environmentId}:${entry.room.id}`}
+            entry={entry}
+            active={
+              shownThread !== null &&
+              entry.room.threadId !== null &&
+              shownThread.environmentId === entry.environmentId &&
+              shownThread.threadId === entry.room.threadId
             }
           />
         ))}
