@@ -1,7 +1,11 @@
 import { toServerClock } from "@t3tools/client-runtime/clock";
+import {
+  isGroupChatThreadId,
+  type OrchestrationV2ProviderTurn,
+  type RunAttemptId,
+} from "@t3tools/contracts";
 import { msg } from "gt-react";
 import { m, type MessageResolver } from "../i18n/messages";
-import { type OrchestrationV2ProviderTurn, type RunAttemptId } from "@t3tools/contracts";
 import {
   deriveLatestThreadRun,
   deriveThreadRuntime,
@@ -1084,6 +1088,7 @@ export function hasCompactableConversation(input: {
 
 export function hasServerAcknowledgedLocalDispatch(input: {
   localDispatch: LocalDispatchSnapshot | null;
+  threadId?: string | undefined;
   phase: SessionPhase;
   latestRun: Thread["latestRun"] | null;
   latestUserMessageId?: ChatMessage["id"] | null;
@@ -1100,6 +1105,14 @@ export function hasServerAcknowledgedLocalDispatch(input: {
   }
   const latestUserMessageChanged =
     input.localDispatch.latestUserMessageId !== (input.latestUserMessageId ?? null);
+  // A room starts no run, so its only acknowledgement is the message itself.
+  if (
+    input.threadId !== undefined &&
+    isGroupChatThreadId(input.threadId) &&
+    latestUserMessageChanged
+  ) {
+    return true;
+  }
   if (input.phase === "connecting" || derivePhase(input.runtime ?? null) === "connecting") {
     // A message queued behind other work, such as an idle compaction the shell hides, has landed.
     return input.runtime?.status === "queued" && latestUserMessageChanged;
