@@ -38,6 +38,7 @@ import {
   type ProviderSessionId,
   resolveProjectProviderInstanceEnabled,
   RunId,
+  type RuntimeRequestId,
   type ScheduledTaskId,
   ThreadId,
   type TurnItemId,
@@ -190,8 +191,9 @@ export interface ThreadManagementWaitResult {
   readonly timedOut: boolean;
   /** With `untilDelegatedWorkSettled`, once settled: the run with the thread's final answer. */
   readonly resultRun?: OrchestrationV2Run;
-  /** With `untilAttention`: what the waiting run asks for. */
+  /** With `untilAttention`: what the waiting run asks for, and which request asks. */
   readonly attention?: "question" | "approval";
+  readonly attentionRequestId?: RuntimeRequestId;
 }
 
 export interface ThreadManagementInterruptInput {
@@ -1059,13 +1061,30 @@ const make = Effect.gen(function* () {
         const asked = runtimeRequests.find((request) => request.status === "pending");
         const attention: "question" | "approval" | undefined =
           asked === undefined ? undefined : asked.kind === "user_input" ? "question" : "approval";
-        return { ...current, settled: true, resultRun: undefined, attention };
+        return {
+          ...current,
+          settled: true,
+          resultRun: undefined,
+          attention,
+          attentionRequestId: asked?.id,
+        };
       }
       if (!current.settled || !untilDelegatedWorkSettled) {
-        return { ...current, resultRun: undefined, attention: undefined };
+        return {
+          ...current,
+          resultRun: undefined,
+          attention: undefined,
+          attentionRequestId: undefined,
+        };
       }
       const resultRun = yield* delegatedWorkResult;
-      return { ...current, settled: resultRun !== undefined, resultRun, attention: undefined };
+      return {
+        ...current,
+        settled: resultRun !== undefined,
+        resultRun,
+        attention: undefined,
+        attentionRequestId: undefined,
+      };
     });
     const settledResult = (current: Effect.Success<ReturnType<typeof evaluate>>) => ({
       threadId: input.threadId,
@@ -1073,6 +1092,9 @@ const make = Effect.gen(function* () {
       timedOut: !current.settled,
       ...(current.resultRun === undefined ? {} : { resultRun: current.resultRun }),
       ...(current.attention === undefined ? {} : { attention: current.attention }),
+      ...(current.attentionRequestId === undefined
+        ? {}
+        : { attentionRequestId: current.attentionRequestId }),
     });
     const initial = yield* evaluate(target.runs);
     if (initial.settled) return settledResult(initial);

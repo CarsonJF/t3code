@@ -27,6 +27,7 @@ import * as ThreadManagementService from "../orchestration-v2/ThreadManagementSe
 import * as TotService from "./TotService.ts";
 import {
   formatWatchLine,
+  runIsOver,
   watchTransition,
   type WatchedThreadState,
 } from "./totWatchTransitions.ts";
@@ -66,6 +67,24 @@ export class TotWatchService extends Context.Service<
   }
 >()("t3/tots/TotWatchService") {}
 
+const statusOf = (
+  status: OrchestrationV2ThreadShell["status"] | OrchestratorMcpThreadWaitResult["status"],
+): WatchedThreadState["status"] => {
+  switch (status) {
+    case "waiting":
+    case "completed":
+    case "failed":
+    case "idle":
+      return status;
+    case "interrupted":
+    case "cancelled":
+    case "rolled_back":
+      return "stopped";
+    default:
+      return "running";
+  }
+};
+
 const watchedStateFromShell = (shell: OrchestrationV2ThreadShell | null): WatchedThreadState => {
   if (
     shell === null ||
@@ -73,7 +92,7 @@ const watchedStateFromShell = (shell: OrchestrationV2ThreadShell | null): Watche
     shell.archivedAt !== null ||
     shell.settledOverride === "settled"
   ) {
-    return { status: "idle", pending: null, runId: null, ended: true };
+    return { status: "idle", pending: null, runId: null, requestId: null, ended: true };
   }
   const request = shell.pendingRuntimeRequest;
   const pending =
@@ -84,43 +103,29 @@ const watchedStateFromShell = (shell: OrchestrationV2ThreadShell | null): Watche
         : request.kind === "dynamic_tool_call" || request.kind === "auth_refresh"
           ? null
           : "approval";
-  const status: WatchedThreadState["status"] =
-    shell.status === "waiting"
-      ? "waiting"
-      : shell.status === "completed"
-        ? "completed"
-        : shell.status === "failed"
-          ? "failed"
-          : shell.status === "idle" ||
-              shell.status === "interrupted" ||
-              shell.status === "cancelled" ||
-              shell.status === "rolled_back"
-            ? "idle"
-            : "running";
-  return { status, pending, runId: shell.latestRunId, ended: false };
+  return {
+    status: statusOf(shell.status),
+    pending,
+    runId: shell.latestRunId,
+    requestId: pending === null || request === null ? null : request.id,
+    ended: false,
+  };
 };
 
 const watchedStateFromWait = (waited: OrchestratorMcpThreadWaitResult): WatchedThreadState => ({
-  status:
-    waited.status === "waiting"
-      ? "waiting"
-      : waited.status === "completed"
-        ? "completed"
-        : waited.status === "failed"
-          ? "failed"
-          : waited.status === "idle" ||
-              waited.status === "interrupted" ||
-              waited.status === "cancelled" ||
-              waited.status === "rolled_back"
-            ? "idle"
-            : "running",
+  status: statusOf(waited.status),
   pending: waited.attention ?? null,
   runId: waited.runId,
+  requestId: waited.attentionRequestId ?? null,
   ended: false,
 });
 
-const followerKey = (totId: TotId, watch: Pick<TotWatch, "environmentId" | "threadId">) =>
-  [totId, watch.environmentId, watch.threadId].join(" ");
+/** Keyed by the Tot's current thread too, so a fresh start restarts its followers. */
+const followerKey = (
+  totId: TotId,
+  totThreadId: ThreadId,
+  watch: Pick<TotWatch, "environmentId" | "threadId">,
+) => [totId, totThreadId, watch.environmentId, watch.threadId].join(" ");
 
 const touchesWatches = (event: OrchestrationV2DomainEvent) =>
   event.type === "run.updated" ||
@@ -173,6 +178,13 @@ const make = Effect.gen(function* () {
       const comparesWithEmpty = explicit.some((watch) => watch.reason !== "requested");
       if (previous === undefined && !comparesWithEmpty) continue;
       const event = watchTransition(previous, next);
+      const sent = explicit.filter((watch) => watch.reason === "sent");
+      const onlySent = sent.length > 0 && sent.length === explicit.length;
+      // Only the run this Tot started counts, and its end, however it ends, ends the watch.
+      const sentRun = onlySent && sent.some((watch) => watch.runId === next.runId);
+      if (sentRun && runIsOver(next)) {
+        yield* tots.removeWatch(tot.id, environmentId, threadId).pipe(Effect.ignore);
+      }
       if (event === null) continue;
       if (event === "ended") {
         if (explicit.length > 0) {
@@ -180,14 +192,7 @@ const make = Effect.gen(function* () {
         }
         continue;
       }
-      const sent = explicit.filter((watch) => watch.reason === "sent");
-      if (sent.length > 0 && sent.length === explicit.length) {
-        // Only the run this Tot started counts, and it ends the watch.
-        if (!sent.some((watch) => watch.runId === next.runId)) continue;
-        if (event === "completed" || event === "failed") {
-          yield* tots.removeWatch(tot.id, environmentId, threadId).pipe(Effect.ignore);
-        }
-      }
+      if (onlySent && !sentRun) continue;
       const link = formatThreadLink({ environmentId, threadId }, shell?.title);
       outbox.push({
         totId: tot.id,
@@ -197,11 +202,11 @@ const make = Effect.gen(function* () {
     }
   });
 
-  const stillWatching = (totId: TotId, watch: TotWatch) =>
+  const stillWatching = (totId: TotId, totThreadId: ThreadId, watch: TotWatch) =>
     tots.list.pipe(
       Effect.map((all) => {
         const tot = all.find((candidate) => candidate.id === totId);
-        if (tot === undefined || tot.threadId === null) return undefined;
+        if (tot === undefined || tot.threadId !== totThreadId) return undefined;
         const watched = tot.watches.some(
           (each) => each.environmentId === watch.environmentId && each.threadId === watch.threadId,
         );
@@ -210,12 +215,17 @@ const make = Effect.gen(function* () {
     );
 
   /** Follows one thread on a linked environment for one Tot until its watch ends. */
-  const follow = Effect.fn("TotWatchService.follow")(function* (totId: TotId, watch: TotWatch) {
-    const first = yield* stillWatching(totId, watch);
+  const follow = Effect.fn("TotWatchService.follow")(function* (
+    totId: TotId,
+    totThreadId: ThreadId,
+    watch: TotWatch,
+  ) {
+    const first = yield* stillWatching(totId, totThreadId, watch);
     if (first === undefined) return;
-    const caller = yield* threads
+    const callerShell = threads
       .getThreadShell(first.threadId)
       .pipe(Effect.orElseSucceed(() => null));
+    const caller = yield* callerShell;
     if (caller === null) return;
     const scope = {
       environmentId,
@@ -241,7 +251,7 @@ const make = Effect.gen(function* () {
     let baseline = watch.reason === "requested";
     let previous: WatchedThreadState | undefined = undefined;
     while (true) {
-      const tot = yield* stillWatching(totId, watch);
+      const tot = yield* stillWatching(totId, totThreadId, watch);
       if (tot === undefined) return;
       const waited = yield* forwarding
         .waitForThread(scope, watch.environmentId, {
@@ -258,7 +268,10 @@ const make = Effect.gen(function* () {
           Effect.retry(followRetry),
         );
       if (waited.gone) {
-        yield* tots.removeWatch(totId, watch.environmentId, watch.threadId).pipe(Effect.ignore);
+        // Only the watched thread being gone ends the watch; a missing caller just stops here.
+        if ((yield* callerShell) !== null) {
+          yield* tots.removeWatch(totId, watch.environmentId, watch.threadId).pipe(Effect.ignore);
+        }
         return;
       }
       const next = watchedStateFromWait(waited.result);
@@ -276,22 +289,27 @@ const make = Effect.gen(function* () {
             label,
           ),
         });
-        if (watch.reason === "sent" && (event === "completed" || event === "failed")) {
-          yield* tots.removeWatch(totId, watch.environmentId, watch.threadId).pipe(Effect.ignore);
-          return;
-        }
+      }
+      // Work the Tot started ends with its run there; looking on would poll forever.
+      if (watch.reason !== "requested" && forThisRun && runIsOver(next)) {
+        yield* tots.removeWatch(totId, watch.environmentId, watch.threadId).pipe(Effect.ignore);
+        return;
       }
       if (!waited.result.timedOut) yield* pause;
     }
   });
 
   const syncFollowers = Effect.gen(function* () {
-    const wanted = new Map<string, { totId: TotId; watch: TotWatch }>();
+    const wanted = new Map<string, { totId: TotId; totThreadId: ThreadId; watch: TotWatch }>();
     for (const tot of yield* tots.list) {
       if (tot.threadId === null) continue;
       for (const watch of tot.watches) {
         if (watch.environmentId !== environmentId) {
-          wanted.set(followerKey(tot.id, watch), { totId: tot.id, watch });
+          wanted.set(followerKey(tot.id, tot.threadId, watch), {
+            totId: tot.id,
+            totThreadId: tot.threadId,
+            watch,
+          });
         }
       }
     }
@@ -300,9 +318,9 @@ const make = Effect.gen(function* () {
       followers.delete(key);
       yield* Fiber.interrupt(fiber);
     }
-    for (const [key, { totId, watch }] of wanted) {
+    for (const [key, { totId, totThreadId, watch }] of wanted) {
       if (followers.has(key)) continue;
-      const fiber = yield* follow(totId, watch).pipe(
+      const fiber = yield* follow(totId, totThreadId, watch).pipe(
         Effect.ensuring(Effect.sync(() => followers.delete(key))),
         Effect.ignore,
         Effect.forkIn(layerScope),

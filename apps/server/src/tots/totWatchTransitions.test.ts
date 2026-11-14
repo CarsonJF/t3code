@@ -10,6 +10,7 @@ const state = (overrides: Partial<WatchedThreadState>): WatchedThreadState => ({
   status: "idle",
   pending: null,
   runId: "run-1",
+  requestId: null,
   ended: false,
   ...overrides,
 });
@@ -67,4 +68,17 @@ it("formats a report line with the thread's ready link", () => {
   expect(formatWatchLine("approval", "[Deploy](t3-thread://v2/env/t2)", "ProMini")).toBe(
     "- Needs approval: [Deploy](t3-thread://v2/env/t2) on ProMini",
   );
+});
+
+it("reports a second request in the same run", () => {
+  expect(
+    watchTransition(
+      state({ status: "waiting", pending: "approval", requestId: "q1" }),
+      state({ status: "waiting", pending: "approval", requestId: "q2" }),
+    ),
+  ).toBe("approval");
+});
+
+it("reports nothing for a run that was stopped", () => {
+  expect(watchTransition(state({ status: "running" }), state({ status: "stopped" }))).toBeNull();
 });

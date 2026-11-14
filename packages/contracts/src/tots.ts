@@ -131,7 +131,8 @@ export const parseTotLaunchedThreadId = (threadId: string): TotId | null =>
 export const isQuietTotThread = (threadId: string, tots: ReadonlyArray<Tot> | null): boolean => {
   const owner = parseTotLaunchedThreadId(threadId);
   if (owner === null) return false;
-  const tot = tots?.find((candidate) => candidate.id === owner);
+  // A Tot never turned on here (every server decodes a default Home) is hosted elsewhere.
+  const tot = tots?.find((candidate) => candidate.id === owner && candidate.projectId !== null);
   return tot === undefined || tot.threadId !== null;
 };
 

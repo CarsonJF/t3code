@@ -1,4 +1,10 @@
-import { OrchestratorMcpFailure, parseTotThreadId, type TotId } from "@t3tools/contracts";
+import {
+  type EnvironmentId,
+  OrchestratorMcpFailure,
+  parseTotThreadId,
+  type ThreadId,
+  type TotId,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -63,4 +69,21 @@ export const refuseTots = Effect.fn("mcp.refuseTots")(function* (message: string
   if (Option.isSome(yield* readTotCaller())) {
     return yield* new OrchestratorMcpFailure({ code: "capability_denied", message });
   }
+});
+
+/**
+ * The sender a forwarded call names. A former Tot thread (turned off or started
+ * fresh) still has a `tot:` id; it forwards without one, so a linked environment
+ * never grants it a Tot's powers.
+ */
+export const senderForForwarding = Effect.fnUntraced(function* (
+  environmentId: EnvironmentId,
+  caller: { readonly id: ThreadId; readonly title: string },
+) {
+  if (parseTotThreadId(caller.id) !== null) {
+    const tots = yield* Effect.serviceOption(TotService.TotService);
+    const current = Option.isSome(tots) && Option.isSome(yield* tots.value.totForThread(caller.id));
+    if (!current) return undefined;
+  }
+  return { environmentId, threadId: caller.id, title: caller.title };
 });
