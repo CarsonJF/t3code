@@ -599,6 +599,11 @@ export const OrchestratorMcpThreadWaitInput = Schema.Struct({
         "Also wait for the `output` the run was asked for, which a later turn may submit.",
     }),
   ),
+  until: Schema.optional(
+    Schema.Literals(["terminal", "attention"]).annotate({
+      description: "'attention': also return when it asks a question or needs an approval.",
+    }),
+  ),
 });
 export type OrchestratorMcpThreadWaitInput = typeof OrchestratorMcpThreadWaitInput.Type;
 
@@ -612,6 +617,8 @@ export const OrchestratorMcpThreadWaitResult = Schema.Struct({
   resultRun: Schema.optional(Schema.Struct({ runId: RunId, status: OrchestrationV2RunStatus })),
   /** What the run returned against the `outputSchema` it was sent with. Absent until submitted. */
   output: Schema.optional(Schema.Json),
+  /** With until 'attention': what the waiting run asks for. */
+  attention: Schema.optional(Schema.Literals(["question", "approval"])),
 });
 export type OrchestratorMcpThreadWaitResult = typeof OrchestratorMcpThreadWaitResult.Type;
 
