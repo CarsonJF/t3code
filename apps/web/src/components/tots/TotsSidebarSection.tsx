@@ -75,26 +75,28 @@ const TotRow = memo(function TotRow(props: {
   );
 });
 
-/** The user's Tots, above the threads. */
+/** The user's Tots, under the search bar and above drafts and threads. */
 export const TotsSidebarSection = memo(function TotsSidebarSection() {
   const tots = useTots();
   const shown = useShownThreadRouteTarget().shownTarget;
   if (tots.length === 0) return null;
   const shownThread = shown?.kind === "server" ? shown.threadRef : null;
   return (
-    <SidebarMenu aria-label="Tots" className="mb-1" data-testid="sidebar-tots">
-      {tots.map((entry) => (
-        <TotRow
-          key={`${entry.environmentId}:${entry.tot.id}`}
-          entry={entry}
-          active={
-            shownThread !== null &&
-            entry.tot.threadId !== null &&
-            shownThread.environmentId === entry.environmentId &&
-            shownThread.threadId === entry.tot.threadId
-          }
-        />
-      ))}
-    </SidebarMenu>
+    <div className="mt-1 mb-1 border-border/60 border-b pb-1">
+      <SidebarMenu aria-label="Tots" data-testid="sidebar-tots">
+        {tots.map((entry) => (
+          <TotRow
+            key={`${entry.environmentId}:${entry.tot.id}`}
+            entry={entry}
+            active={
+              shownThread !== null &&
+              entry.tot.threadId !== null &&
+              shownThread.environmentId === entry.environmentId &&
+              shownThread.threadId === entry.tot.threadId
+            }
+          />
+        ))}
+      </SidebarMenu>
+    </div>
   );
 });
