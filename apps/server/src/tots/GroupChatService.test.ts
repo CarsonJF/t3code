@@ -70,7 +70,9 @@ const makeRoom = (messages: ReadonlyArray<RoomMessage>) => {
         Layer.mergeAll(
           NodeCrypto.layer,
           ServerSettings.layerTest({ tots: [brain, ledger], groupChats: [room] }),
-          Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({}),
+          Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
+            namedProjectsRoot: "/projects",
+          }),
           Layer.mock(ThreadLaunch.ThreadLaunchService)({}),
           Layer.mock(ThreadManagement.ThreadManagementService)({
             streamDomainEvents: Stream.make(event),
