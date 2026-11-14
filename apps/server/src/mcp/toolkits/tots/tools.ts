@@ -1,5 +1,6 @@
 import {
   EnvironmentId,
+  GroupChatId,
   OrchestratorMcpFailure,
   ThreadId,
   TotId,
@@ -10,6 +11,7 @@ import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
 
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
@@ -21,6 +23,7 @@ const shared = {
     ThreadManagementService.ThreadManagementService,
     SecureRandom.SecureRandom,
     TotService.TotService,
+    GroupChatService.GroupChatService,
   ],
 };
 
@@ -59,4 +62,15 @@ const TotWatchTool = Tool.make("t3_tot_watch", {
   success: Schema.Struct({ ok: Schema.Literal(true) }),
 }).annotate(Tool.Destructive, false);
 
-export const TotToolkit = Toolkit.make(TotListTool, TotWatchTool);
+const GroupChatSayTool = Tool.make("t3_group_chat_say", {
+  ...shared,
+  description:
+    "As a Tot, post one short chat message in a group chat you belong to. Group chat messages reach you as a prompt that names the room; this is the only way the room sees your answer.",
+  parameters: Schema.Struct({
+    room: GroupChatId.annotate({ description: "The room id from the prompt." }),
+    text: Schema.String.annotate({ description: "The message, as you would say it in a chat." }),
+  }),
+  success: Schema.Struct({ ok: Schema.Literal(true) }),
+}).annotate(Tool.Destructive, false);
+
+export const TotToolkit = Toolkit.make(TotListTool, TotWatchTool, GroupChatSayTool);
