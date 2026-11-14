@@ -271,6 +271,11 @@ export class ServerSettingsService extends Context.Service<
       patch?: ServerSettingsPatch,
     ) => Effect.Effect<ServerSettings, ServerSettingsError>;
 
+    /** Tots are server-owned: only TotService writes them, never a client patch. */
+    readonly updateTots: (
+      update: (tots: ServerSettings["tots"]) => ServerSettings["tots"],
+    ) => Effect.Effect<ServerSettings, ServerSettingsError>;
+
     readonly withSettingsSnapshot: <A, E, R>(
       use: (settings: ServerSettings) => Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | ServerSettingsError, R>;
@@ -335,6 +340,10 @@ const makeTest = Effect.fn("serverSettings.makeTest")(function* (
           const patched = applyServerSettingsPatch(currentSettings, patch);
           return applyProviderInstanceMutation(patched, mutation);
         }),
+      ),
+    updateTots: (update) =>
+      updateTestSettings((currentSettings) =>
+        Effect.succeed({ ...currentSettings, tots: update(currentSettings.tots) }),
       ),
     withSettingsSnapshot: (use) =>
       writeSemaphore.withPermits(1)(getSettings.pipe(Effect.flatMap(use))),
@@ -1381,6 +1390,10 @@ const make = Effect.gen(function* () {
           const patched = applyServerSettingsPatch(current, patch);
           return applyProviderInstanceMutation(patched, mutation);
         }),
+      ),
+    updateTots: (update) =>
+      updateAndPersistSettings((current) =>
+        Effect.succeed({ ...current, tots: update(current.tots) }),
       ),
     withSettingsSnapshot,
     get streamChanges() {
