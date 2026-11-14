@@ -13,8 +13,8 @@ interface BoopFaceElement extends HTMLElement {
 }
 
 // One import for the page; the full build loads skin painting only when a skin is used.
-let boopFaceLoad: Promise<unknown> | null = null;
-const loadBoopFace = () => (boopFaceLoad ??= import("boopface"));
+let boopFaceLoad: Promise<typeof import("boopface")> | null = null;
+export const loadBoopFace = () => (boopFaceLoad ??= import("boopface"));
 const isDefined = () =>
   typeof customElements !== "undefined" && customElements.get("boop-face") !== undefined;
 
