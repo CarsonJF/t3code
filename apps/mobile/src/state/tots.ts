@@ -1,11 +1,16 @@
 import { useAtomValue } from "@effect/atom-react";
-import { selectTots, withoutTotProjects, type EnvironmentTot } from "@t3tools/client-runtime/tots";
+import {
+  selectTots,
+  totHostOrder,
+  withoutTotProjects,
+  type EnvironmentTot,
+} from "@t3tools/client-runtime/tots";
 import type { EnvironmentId, ServerSettings } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
 
 import { useProjects } from "./entities";
 import { mobilePreferencesAtom } from "./preferences";
-import { connectedEnvironmentIdsAtom } from "./presentation";
+import { connectedEnvironmentIdsAtom, environmentPresentations } from "./presentation";
 import { serverEnvironment } from "./server";
 
 /** Every Tot on every connected environment, Home first. */
@@ -20,6 +25,21 @@ const totsAtom = Atom.make((get): ReadonlyArray<EnvironmentTot> => {
 
 export function useTots(): ReadonlyArray<EnvironmentTot> {
   return useAtomValue(totsAtom);
+}
+
+export interface TotHost {
+  readonly environmentId: EnvironmentId;
+  readonly label: string;
+}
+
+/** Connected machines a Tot can live on, the one already hosting Tots first. */
+export function useTotHosts(): ReadonlyArray<TotHost> {
+  const connected = useAtomValue(connectedEnvironmentIdsAtom);
+  const presentations = useAtomValue(environmentPresentations.presentationsAtom);
+  return totHostOrder(connected, useTots()).map((environmentId) => ({
+    environmentId,
+    label: presentations.get(environmentId)?.entry.target.label ?? "This machine",
+  }));
 }
 
 /** Projects offered for new work: everything but the Tots' own projects. */
