@@ -6,6 +6,7 @@ import {
   EnvironmentId,
   ProjectId,
   RunId,
+  RuntimeRequestId,
   ThreadId,
   TotId,
   type OrchestrationV2ThreadShell,
@@ -53,12 +54,14 @@ interface RemoteOptions {
   readonly waitForThread: PeerForwarding.PeerForwarding["Service"]["waitForThread"];
   readonly pause?: Effect.Effect<void>;
   readonly retry?: Schedule.Schedule<unknown>;
+  readonly onRemove?: Effect.Effect<void>;
 }
 
 const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
   const state = { tots: [...initial] };
   const shells = new Map<ThreadId, OrchestrationV2ThreadShell>();
   const reports: Array<{ totId: string; lines: ReadonlyArray<string> }> = [];
+  const removed: Array<string> = [];
   const layer = TotWatchService.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -71,6 +74,7 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
             }),
           removeWatch: (id, env, threadId) =>
             Effect.sync(() => {
+              removed.push(threadId);
               state.tots = state.tots.map((tot) =>
                 tot.id !== id
                   ? tot
@@ -81,7 +85,7 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
                       ),
                     },
               );
-            }),
+            }).pipe(Effect.andThen(remote?.onRemove ?? Effect.void)),
         }),
         Layer.mock(ThreadManagement.ThreadManagementService)({
           getThreadShell: (threadId) => Effect.sync(() => shells.get(threadId) ?? null),
@@ -116,7 +120,8 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
     Effect.flatMap((service) => service.syncFollowers),
   );
   shells.set(homeThread, shell(homeThread, "running"));
-  return { state, reports, layer, step, flush, syncFollowers };
+  shells.set(ThreadId.make("tot:home:fresh"), shell(ThreadId.make("tot:home:fresh"), "running"));
+  return { state, reports, removed, layer, step, flush, syncFollowers };
 };
 
 const watch = (threadId: ThreadId, reason: TotWatch["reason"], runId?: string): TotWatch => ({
@@ -299,3 +304,107 @@ it.effect(
       }).pipe(Effect.provide(layer));
     }),
 );
+
+it.effect("a second approval in the same remote run is reported too", () =>
+  Effect.gen(function* () {
+    const paused = yield* Queue.unbounded<void>();
+    const resume = yield* Queue.unbounded<void>();
+    const answers: Array<OrchestratorMcpThreadWaitResult> = ["q1", "q2"].map((requestId) => ({
+      threadId: remoteThread,
+      runId: RunId.make("run-1"),
+      status: "waiting" as const,
+      timedOut: false,
+      attention: "approval" as const,
+      attentionRequestId: RuntimeRequestId.make(requestId),
+    }));
+    const { reports, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [{ environmentId: promini, threadId: remoteThread, reason: "launched" }] })],
+      {
+        waitForThread: () => {
+          const next = answers.shift();
+          return next === undefined ? Effect.never : Effect.succeed(next);
+        },
+        pause: Queue.offer(paused, undefined).pipe(Effect.andThen(Queue.take(resume))),
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      yield* Queue.take(paused);
+      yield* Queue.offer(resume, undefined);
+      yield* Queue.take(paused);
+      yield* flush;
+      expect(reports.flatMap((report) => report.lines)).toEqual([
+        expect.stringContaining("- Needs approval: "),
+        expect.stringContaining("- Needs approval: "),
+      ]);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect("a remote launch's watch ends once its run is over", () =>
+  Effect.gen(function* () {
+    const ended = yield* Queue.unbounded<void>();
+    const { state, reports, removed, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [{ environmentId: promini, threadId: remoteThread, reason: "launched" }] })],
+      {
+        waitForThread: () =>
+          Effect.succeed({
+            threadId: remoteThread,
+            runId: RunId.make("run-1"),
+            status: "completed",
+            timedOut: false,
+          }),
+        onRemove: Queue.offer(ended, undefined).pipe(Effect.asVoid),
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      yield* Queue.take(ended);
+      yield* flush;
+      expect(reports.flatMap((report) => report.lines)).toEqual([
+        expect.stringContaining("- Completed: "),
+      ]);
+      expect(removed).toEqual([remoteThread]);
+      expect(state.tots[0]!.watches).toHaveLength(0);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect("a fresh start moves remote followers to the new Tot thread", () =>
+  Effect.gen(function* () {
+    const callers = yield* Queue.unbounded<string>();
+    const { state, layer, syncFollowers } = makeHarness(
+      [home({ watches: [{ environmentId: promini, threadId: remoteThread, reason: "launched" }] })],
+      {
+        waitForThread: (scope) =>
+          Queue.offer(callers, scope.thread?.threadId ?? "none").pipe(Effect.andThen(Effect.never)),
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      expect(yield* Queue.take(callers)).toBe("tot:home:current");
+      state.tots = [
+        home({
+          threadId: ThreadId.make("tot:home:fresh"),
+          watches: [{ environmentId: promini, threadId: remoteThread, reason: "launched" }],
+        }),
+      ];
+      yield* syncFollowers;
+      expect(yield* Queue.take(callers)).toBe("tot:home:fresh");
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect("a run a Tot started that is stopped ends its watch without a report", () => {
+  const { reports, removed, layer, step, flush } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "run-1")] }),
+    yui,
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(yuiThread, "running", "run-1"));
+    yield* step(shell(yuiThread, "interrupted", "run-1"));
+    yield* flush;
+    expect(reports).toHaveLength(0);
+    expect(removed).toEqual([yuiThread]);
+  }).pipe(Effect.provide(layer));
+});
