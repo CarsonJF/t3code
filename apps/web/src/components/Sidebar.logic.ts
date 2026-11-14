@@ -26,6 +26,7 @@ import {
   type ThreadId,
   type Tot,
 } from "@t3tools/contracts";
+import { isGroupChatThreadId } from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import type { AsyncResult } from "effect/reactivity";
 import {
@@ -1498,7 +1499,10 @@ export function sortScopedProjectsForSidebar<
   );
 }
 
-/** Each Tot's current thread has its own row above the threads, so the roster leaves it out. */
+/**
+ * Each Tot's current thread, and every group chat room, has its own row above the threads, so the
+ * roster leaves them out.
+ */
 export function withoutTotThreads<
   T extends { readonly environmentId: string; readonly id: string },
 >(
@@ -1510,6 +1514,7 @@ export function withoutTotThreads<
       entry.tot.threadId === null ? [] : [`${entry.environmentId}\u0000${entry.tot.threadId}`],
     ),
   );
-  if (current.size === 0) return threads;
-  return threads.filter((thread) => !current.has(`${thread.environmentId}\u0000${thread.id}`));
+  const hidden = (thread: T) =>
+    isGroupChatThreadId(thread.id) || current.has(`${thread.environmentId}\u0000${thread.id}`);
+  return threads.some(hidden) ? threads.filter((thread) => !hidden(thread)) : threads;
 }
