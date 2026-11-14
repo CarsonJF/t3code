@@ -1923,6 +1923,12 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
+    designTotAvatar: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:design-avatar",
+      tag: WS_METHODS.totsDesignAvatar,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
     readTotMemory: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:tots:read-memory",
       tag: WS_METHODS.totsReadMemory,
