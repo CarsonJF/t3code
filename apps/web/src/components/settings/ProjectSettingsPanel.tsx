@@ -53,6 +53,7 @@ import {
 } from "./ProjectFaviconPickerDialog";
 import { ProjectActionsSettings } from "./ProjectActionsSettings";
 import { ProjectDefaultGroupRow } from "./ProjectDefaultGroupRow";
+import { ProjectThemeRow } from "./ProjectThemeRow";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { ProjectRepositoriesSettings } from "./ProjectRepositoriesSettings";
 import { ProjectWorktreeLayoutSettings } from "./ProjectWorktreeLayoutSettings";
@@ -694,6 +695,7 @@ function ProjectDetail({
             </>
           ) : null}
           <ProjectDefaultGroupRow memberProjectRefs={group.memberProjectRefs} />
+          <ProjectThemeRow memberProjectRefs={group.memberProjectRefs} />
         </SettingsSection>
         <ProjectDefaultsSettings category="project" />
         <ProjectActionsSettings />
