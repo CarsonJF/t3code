@@ -297,7 +297,7 @@ import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
-import { TotThreadHero } from "./tots/TotThreadHero";
+import { TotHeaderTint, TotThreadHero } from "./tots/TotThreadHero";
 import { useSideChat } from "./chat/useSideChat";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
@@ -3348,8 +3348,15 @@ export default function ChatView(props: ChatViewProps) {
                   )
                 : "flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center pl-(--workspace-gutter-start) pr-(--workspace-gutter-end)",
               COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
+              isTotThread && "isolate",
             )}
           >
+            {isTotThread ? (
+              <TotHeaderTint
+                environmentId={activeThread.environmentId}
+                threadId={activeThread.id}
+              />
+            ) : null}
             {isElectron && rightPanelControlsAtRoot ? (
               <span
                 aria-hidden
