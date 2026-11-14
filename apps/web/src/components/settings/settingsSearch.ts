@@ -393,6 +393,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("latex tex katex equations formulas markdown")],
   },
   {
+    id: "tot-toasts",
+    title: "Tot toasts",
+    to: "/settings/appearance",
+    searchTerms: ["tots notification toast reply ping"],
+  },
+  {
     id: "animate-tot-avatars",
     title: "Animate Tot avatars",
     to: "/settings/appearance",

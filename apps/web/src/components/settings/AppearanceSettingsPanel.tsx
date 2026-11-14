@@ -382,6 +382,25 @@ export function AppearanceSettingsPanel() {
             />
           }
         />
+        <SettingsRow
+          {...searchableSetting("tot-toasts")}
+          description="Show a toast when a Tot replies and you are not looking at its thread."
+          resetAction={
+            settings.totToasts !== DEFAULT_UNIFIED_SETTINGS.totToasts ? (
+              <SettingResetButton
+                label="Tot toasts"
+                onClick={() => updateSettings({ totToasts: DEFAULT_UNIFIED_SETTINGS.totToasts })}
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.totToasts}
+              onCheckedChange={(checked) => updateSettings({ totToasts: Boolean(checked) })}
+              aria-label="Tot toasts"
+            />
+          }
+        />
         <AdvancedSettings
           targetIds={[
             searchableSetting("panel-animations").id,
