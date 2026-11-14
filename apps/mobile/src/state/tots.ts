@@ -1,8 +1,9 @@
 import { useAtomValue } from "@effect/atom-react";
-import { selectTots, type EnvironmentTot } from "@t3tools/client-runtime/tots";
+import { selectTots, withoutTotProjects, type EnvironmentTot } from "@t3tools/client-runtime/tots";
 import type { EnvironmentId, ServerSettings } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
 
+import { useProjects } from "./entities";
 import { mobilePreferencesAtom } from "./preferences";
 import { connectedEnvironmentIdsAtom } from "./presentation";
 import { serverEnvironment } from "./server";
@@ -19,6 +20,11 @@ const totsAtom = Atom.make((get): ReadonlyArray<EnvironmentTot> => {
 
 export function useTots(): ReadonlyArray<EnvironmentTot> {
   return useAtomValue(totsAtom);
+}
+
+/** Projects offered for new work: everything but the Tots' own projects. */
+export function usePickableProjects() {
+  return withoutTotProjects(useProjects(), useTots());
 }
 
 /** This device's choice; faces move unless the user turned it off. */
