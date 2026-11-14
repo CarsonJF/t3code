@@ -41,6 +41,7 @@ import {
   resolveCollapsedGroupStatuses,
   sidebarFolderExpansionKeys,
   withoutRemovedCheckout,
+  withoutTotThreads,
 } from "./Sidebar.logic";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
@@ -49,7 +50,14 @@ import {
 } from "@t3tools/client-runtime/state/thread-sort";
 import { resolveProjectExpanded } from "../uiStateStore";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { EnvironmentId, ProjectId, ProviderInstanceId, RunId, ThreadId } from "@t3tools/contracts";
+import {
+  DEFAULT_HOME_TOT,
+  EnvironmentId,
+  ProjectId,
+  ProviderInstanceId,
+  RunId,
+  ThreadId,
+} from "@t3tools/contracts";
 
 import {
   DEFAULT_INTERACTION_MODE,
@@ -1871,5 +1879,18 @@ describe("resolveCollapsedGroupStatuses", () => {
         { status: "done", count: 1 },
       ],
     );
+  });
+});
+
+describe("withoutTotThreads", () => {
+  it("leaves out each Tot's current thread, which has its own row, and keeps the rest", () => {
+    const env = EnvironmentId.make("env");
+    const current = { environmentId: env, id: ThreadId.make("tot:home:now") };
+    const former = { environmentId: env, id: ThreadId.make("tot:home:before") };
+    const other = { environmentId: env, id: ThreadId.make("thread:other") };
+    const tots = [{ environmentId: env, tot: { ...DEFAULT_HOME_TOT, threadId: current.id } }];
+    expect(withoutTotThreads([current, former, other], tots)).toEqual([former, other]);
+    const untouched = [former, other];
+    expect(withoutTotThreads(untouched, [])).toBe(untouched);
   });
 });
