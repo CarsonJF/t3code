@@ -88,6 +88,39 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const updateTot = useAtomCommand(serverEnvironment.updateTot, { reportFailure: false });
   const enableTot = useAtomCommand(serverEnvironment.enableTot, { reportFailure: false });
   const removeTot = useAtomCommand(serverEnvironment.removeTot, { reportFailure: false });
+  const designAvatar = useAtomCommand(serverEnvironment.designTotAvatar, { reportFailure: false });
+  const [designPrompt, setDesignPrompt] = useState("");
+  const [designState, setDesignState] = useState<"idle" | "asking" | "asked">("idle");
+  const [designFailure, setDesignFailure] = useState<string | null>(null);
+  const savedDesigns =
+    (editing === null
+      ? undefined
+      : tots.find(
+          (entry) => entry.environmentId === target.environmentId && entry.tot.id === editing.id,
+        )?.tot.designs) ?? [];
+  const applyDesign = (design: TotAvatarValue) => {
+    setColor(design.color);
+    setSkin(design.skin ?? null);
+    setSkinSeries(totSkinSeriesOf(design.skin ?? null));
+    setShape(design.shape ?? "round");
+    setAntenna(design.antenna === true);
+  };
+  const askForDesign = async () => {
+    if (editing === null || designPrompt.trim() === "") return;
+    setDesignState("asking");
+    setDesignFailure(null);
+    const result = await designAvatar({
+      environmentId: target.environmentId,
+      input: { id: editing.id, prompt: designPrompt.trim() },
+    });
+    if (result._tag === "Failure") {
+      setDesignState("idle");
+      if (!isAtomCommandInterrupted(result))
+        setDesignFailure(String(squashAtomCommandFailure(result)));
+      return;
+    }
+    setDesignState("asked");
+  };
   const readTotMemory = useAtomCommand(serverEnvironment.readTotMemory, { reportFailure: false });
   const writeTotMemory = useAtomCommand(serverEnvironment.writeTotMemory, { reportFailure: false });
 
@@ -346,6 +379,63 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                     </button>
                   ))}
                 </div>
+                {editing === null ? null : (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        aria-label="Describe a face"
+                        value={designPrompt}
+                        placeholder={`Ask ${editing.name} to design its own face…`}
+                        onChange={(event) => {
+                          setDesignPrompt(event.target.value);
+                          setDesignState("idle");
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          designState === "asking" ||
+                          designPrompt.trim() === "" ||
+                          editing.threadId === null
+                        }
+                        onClick={() => void askForDesign()}
+                      >
+                        Ask
+                      </Button>
+                    </div>
+                    {editing.threadId === null ? (
+                      <p className="text-muted-foreground text-xs">Turn {editing.name} on first.</p>
+                    ) : designState === "asked" ? (
+                      <p className="text-muted-foreground text-xs">
+                        Asked. {editing.name}'s design shows up below when it answers.
+                      </p>
+                    ) : null}
+                    {designFailure ? (
+                      <p className="text-destructive-foreground text-xs">{designFailure}</p>
+                    ) : null}
+                    {savedDesigns.length > 0 ? (
+                      <div
+                        className="flex flex-wrap items-center gap-1.5"
+                        role="group"
+                        aria-label="Designs"
+                      >
+                        {savedDesigns.map((design, index) => (
+                          <button
+                            key={`${design.color}${design.skin ?? ""}${design.shape ?? ""}${design.antenna === true}`}
+                            type="button"
+                            aria-label={`Use design ${index + 1}`}
+                            className="rounded-md border border-transparent p-0.5 hover:border-ring"
+                            onClick={() => applyDesign(design)}
+                          >
+                            <TotAvatar avatar={design} state="idle" animation="still" size={28} />
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-muted-foreground text-xs">Antenna</span>
                   <Switch aria-label="Antenna" checked={antenna} onCheckedChange={setAntenna} />
