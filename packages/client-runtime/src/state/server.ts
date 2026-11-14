@@ -1825,6 +1825,18 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
+    readTotMemory: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:read-memory",
+      tag: WS_METHODS.totsReadMemory,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
+    writeTotMemory: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:write-memory",
+      tag: WS_METHODS.totsWriteMemory,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
     createGuestShare: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:guest-share:create",
       tag: WS_METHODS.guestShareCreate,
