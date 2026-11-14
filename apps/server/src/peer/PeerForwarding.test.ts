@@ -1,4 +1,5 @@
 import * as DocumentText from "../provider/DocumentText.ts";
+import * as TotTestkit from "../tots/TotTestkit.ts";
 import { NodeHttpServer } from "@effect/platform-node";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -222,7 +223,7 @@ const serveBox = (seen: Ref.Ref<Seen>, linkSession: Ref.Ref<string>) =>
       McpHttpServer.layerThreadToolkit,
     ).pipe(
       Layer.provide(DocumentText.layer.pipe(Layer.provideMerge(NodeServices.layer))),
-      Layer.provide(NodeCrypto.layer),
+      Layer.provide(Layer.merge(NodeCrypto.layer, TotTestkit.notTotLayer)),
       Layer.provide(boxThreads(seen, linkSession)),
       Layer.provide(Layer.mock(ThreadSearch.ThreadSearch)({})),
       Layer.provide(boxLaunches(seen)),
@@ -245,7 +246,9 @@ const serveBox = (seen: Ref.Ref<Seen>, linkSession: Ref.Ref<string>) =>
       Layer.provide(Layer.mock(ProjectCloneTracker.ProjectCloneTracker)({})),
       Layer.provide(Layer.mock(SecretRequests.SecretRequests)({})),
       Layer.provide(ServerSettings.layerTest()),
-      Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
+      Layer.provide(
+        Layer.merge(Layer.mock(PeerForwarding.PeerForwarding)({}), TotTestkit.notTotLayer),
+      ),
       Layer.provide(Layer.mock(RemoteDelegation.RemoteDelegation)({})),
       Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
       Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
@@ -293,7 +296,7 @@ const makeLaptop = Effect.gen(function* () {
     Layer.provide(NodeServices.layer),
     Layer.provide(PeerForwarding.layer),
     Layer.provide(Layer.succeedContext(linking)),
-    Layer.provide(NodeCrypto.layer),
+    Layer.provide(Layer.merge(NodeCrypto.layer, TotTestkit.notTotLayer)),
     Layer.provideMerge(
       Layer.mock(ThreadManagement.ThreadManagementService)({
         getThreadShell: (threadId) =>
