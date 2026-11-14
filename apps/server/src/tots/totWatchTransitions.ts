@@ -1,16 +1,29 @@
 /** What a Tot's watcher knows about one thread between looks. */
 export interface WatchedThreadState {
-  readonly status: "idle" | "running" | "waiting" | "completed" | "failed";
+  /** `stopped`: interrupted, cancelled or rolled back; it ends watches without a report. */
+  readonly status: "idle" | "running" | "waiting" | "completed" | "failed" | "stopped";
   readonly pending: "question" | "approval" | null;
   /** The latest run, so a new run's outcome counts even when the status repeats. */
   readonly runId: string | null;
+  /** The pending request, so a second question in the same run counts too. */
+  readonly requestId: string | null;
   /** Settled, archived, deleted, or gone from a live list. */
   readonly ended: boolean;
 }
 
 export type TotWatchEvent = "completed" | "failed" | "question" | "approval" | "ended";
 
-const EMPTY: WatchedThreadState = { status: "idle", pending: null, runId: null, ended: false };
+const EMPTY: WatchedThreadState = {
+  status: "idle",
+  pending: null,
+  runId: null,
+  requestId: null,
+  ended: false,
+};
+
+/** Whether the run a state shows has finished, whatever its outcome. */
+export const runIsOver = (state: WatchedThreadState) =>
+  state.status === "completed" || state.status === "failed" || state.status === "stopped";
 
 /**
  * What a watched thread's change means for its Tot, using the same moments as
@@ -24,7 +37,12 @@ export function watchTransition(
   const prior = previous ?? EMPTY;
   if (next.ended) return prior.ended ? null : "ended";
   const sameRun = prior.runId === next.runId;
-  if (next.pending !== null && (next.pending !== prior.pending || !sameRun)) return next.pending;
+  if (
+    next.pending !== null &&
+    (next.pending !== prior.pending || !sameRun || next.requestId !== prior.requestId)
+  ) {
+    return next.pending;
+  }
   if (next.status === "failed" && (prior.status !== "failed" || !sameRun)) return "failed";
   if (next.status === "completed" && (prior.status !== "completed" || !sameRun)) {
     return "completed";
