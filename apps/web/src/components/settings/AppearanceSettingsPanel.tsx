@@ -32,6 +32,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "./settingsLayout";
+import { GroupThemesSection } from "./GroupThemesSection";
 import { useSearchableSetting } from "./settingsSearch";
 import { AdvancedSettings } from "./AdvancedSettings";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
@@ -166,6 +167,8 @@ export function AppearanceSettingsPanel() {
           />
         </div>
       </SettingsSection>
+
+      <GroupThemesSection />
 
       <SettingsSection id="appearance-interface" title={gt("Interface")}>
         <SettingsRow
