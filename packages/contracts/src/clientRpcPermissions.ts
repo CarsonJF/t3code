@@ -72,6 +72,13 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
   // Force stop kills agent processes, as Stop on a terminal does.
   [ORCHESTRATION_V2_WS_METHODS.forceStopThread]: AuthOrchestrationOperateScope,
+  // A Tot launches full-access agents and approves requests with the user's reach.
+  [WS_METHODS.totsCreate]: AuthOrchestrationOperateScope,
+  [WS_METHODS.totsUpdate]: AuthOrchestrationOperateScope,
+  [WS_METHODS.totsRemove]: AuthOrchestrationOperateScope,
+  [WS_METHODS.totsEnable]: AuthOrchestrationOperateScope,
+  [WS_METHODS.totsDisable]: AuthOrchestrationOperateScope,
+  [WS_METHODS.totsStartFresh]: AuthOrchestrationOperateScope,
   // A guest link hands thread access to someone outside, like a pairing link.
   [WS_METHODS.guestShareCreate]: AuthAccessWriteScope,
   [WS_METHODS.peerLinksLink]: AuthAccessWriteScope,
