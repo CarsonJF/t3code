@@ -26,6 +26,15 @@ Watches live on the Tot and are evaluated on the host ([`TotWatchService`](../..
 - A `sent` watch covers only the run one Tot started in another Tot's thread, so a coordinator is not woken by the user talking to that Tot directly.
 - Reports are batched and re-check that the Tot thread they were meant for is still current.
 
+## Group chats
+
+A group chat is a host-owned record in `ServerSettings.groupChats` (written only by [`GroupChatService`](../../apps/server/src/tots/GroupChatService.ts)) and one room thread, `tot-room:<id>`.
+
+- **The room runs no agent.** A thread is one agent session and every message sent to one starts or queues a run, so a shared room cannot be an ordinary thread. The orchestrator recognises the id prefix in `message.dispatch` (`dispatchRoomMessage`) and records the message as `message.updated` and `turn-item.updated` with `runId: null`: no run, no provider turn, no queue. Those events and fields already existed, so stored history and older clients decode it. Anything that sends a message the usual way (the composer on every client, `sendToThread`) lands in the room through the same path, except that `sendToThread` expects a run back and so is not used for rooms.
+- **Speakers come from `senderThreadId`.** A Tot speaks with `t3_group_chat_say`, which dispatches with the Tot's thread as sender; clients draw a message whose sender is a Tot thread as that Tot, and `createdBy: "system"` as a notice.
+- **Members answer from their own threads.** The service watches room messages, asks `decideRoomTurn` ([`groupChatTurns.ts`](../../apps/server/src/tots/groupChatTurns.ts)) who is due, and wakes each with a message in its Tot thread carrying the recent transcript. The user reaches who they name, or the moderator; a Tot reaches only Tots it names, and only until `hopLimit` Tot messages follow one user message.
+- Room threads and room projects are hidden from the thread roster and project pickers like Tot ones (`withoutTotThreads`, `withoutTotProjects`). Members are same-host only.
+
 ## Faces
 
 The web renders BoopFace directly and always loads its full build: the lite and full builds both define `<boop-face>`, and the full build fetches skin code only when a skin is used. Mobile cannot run a Web Component natively, so it runs one WebView for the Tots tab's moving face (bundled like the device stream script) and draws still faces with `react-native-svg` in lists.
