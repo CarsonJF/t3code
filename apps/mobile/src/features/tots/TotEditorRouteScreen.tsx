@@ -8,11 +8,13 @@ import { validateTotDraft, type TotDraftErrors } from "@t3tools/client-runtime/t
 import {
   EnvironmentId,
   HOME_TOT_ID,
+  TOT_SHAPES,
   type ModelSelection,
   type ProjectId,
   type Tot,
   type TotId,
   type TotScope,
+  type TotShape,
 } from "@t3tools/contracts";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { useState } from "react";
@@ -94,6 +96,7 @@ function TotEditorForm(props: {
 
   const [name, setName] = useState(editing?.name ?? "");
   const [color, setColor] = useState(editing?.avatar.color ?? COLOR_CHOICES[0]!);
+  const [shape, setShape] = useState<TotShape>(editing?.avatar.shape ?? "round");
   const [scope, setScope] = useState<TotScope>(editing?.scope ?? "all");
   const [instructions, setInstructions] = useState(editing?.instructions ?? "");
   const [errors, setErrors] = useState<TotDraftErrors>({});
@@ -135,6 +138,7 @@ function TotEditorForm(props: {
         name,
         color,
         skin: editing?.avatar.skin ?? null,
+        shape,
         scope,
         instructions,
         modelSelection: model,
@@ -192,7 +196,7 @@ function TotEditorForm(props: {
       contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
     >
       <View className="items-center gap-3">
-        <TotStillFace avatar={{ color }} state="idle" size={88} />
+        <TotStillFace avatar={{ color, shape }} state="idle" size={88} />
         <View className="flex-row gap-2">
           {COLOR_CHOICES.map((choice) => (
             <Pressable
@@ -210,6 +214,25 @@ function TotEditorForm(props: {
                 borderColor: "#F8FAFC",
               }}
             />
+          ))}
+        </View>
+        <View className="flex-row flex-wrap justify-center gap-1.5">
+          {TOT_SHAPES.map((choice) => (
+            <Pressable
+              key={choice}
+              accessibilityRole="button"
+              accessibilityLabel={`Shape ${choice}`}
+              accessibilityState={{ selected: shape === choice }}
+              onPress={() => setShape(choice)}
+              style={{
+                padding: 2,
+                borderRadius: 10,
+                borderWidth: 2,
+                borderColor: shape === choice ? "#F8FAFC" : "transparent",
+              }}
+            >
+              <TotStillFace avatar={{ color, shape: choice }} state="idle" size={34} />
+            </Pressable>
           ))}
         </View>
       </View>
