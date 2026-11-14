@@ -88,6 +88,7 @@ import {
   type ScopedThreadRef,
   type ThreadId,
   ProviderInteractionMode,
+  parseTotThreadId,
   resolveIdleCompaction,
   RuntimeMode,
 } from "@t3tools/contracts";
@@ -324,6 +325,7 @@ import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { TotThreadHero } from "./tots/TotThreadHero";
 import { useSideChat } from "./chat/useSideChat";
 import { sideThreadComposer, sideThreadKindOf } from "@t3tools/client-runtime/side-thread";
 import { useOpenSurfaceInMainView } from "../hooks/useOpenSurfaceInMainView";
@@ -1108,6 +1110,8 @@ export default function ChatView(props: ChatViewProps) {
   })();
   const activeThreadRef = useActiveThreadRef(activeThread);
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
+  const isTotThread =
+    activeThreadRef !== null && parseTotThreadId(activeThreadRef.threadId) !== null;
   const activeEnvironmentServerBrowser = useEnvironmentSupportsServerBrowser(
     activeThreadRef?.environmentId ?? null,
   );
@@ -3656,6 +3660,12 @@ export default function ChatView(props: ChatViewProps) {
               {...conversationArea}
               className="relative flex min-h-0 flex-1 flex-col bg-background"
             >
+              {isTotThread ? (
+                <TotThreadHero
+                  environmentId={activeThread.environmentId}
+                  threadId={activeThread.id}
+                />
+              ) : null}
               <WorkspaceMutationIdContext value={workspaceMutationId}>
                 <ThreadTimeline
                   pendingApprovals={pendingApprovals}
@@ -4134,6 +4144,8 @@ export default function ChatView(props: ChatViewProps) {
                   onConfirm={handleSwitchCheckoutToThreadStable}
                 />
 
+                {/* A Tot's thread is a conversation, not work in a checkout. */}
+                {isTotThread ? null : (
                 <ThreadDetailsPanel
                   anchor={threadPanelPopoverAnchorRef}
                   handle={threadPanelPopoverHandle}
@@ -4148,7 +4160,9 @@ export default function ChatView(props: ChatViewProps) {
                   activeProjectName={activeProject?.title}
                   activeProjectScripts={activeProject ? activeProjectScripts : undefined}
                   preferredScriptId={
-                    activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
+                      activeProject
+                        ? (lastInvokedScriptByProjectId[activeProject.id] ?? null)
+                        : null
                   }
                   keybindings={keybindings}
                   availableEditors={availableEditors}
@@ -4207,6 +4221,7 @@ export default function ChatView(props: ChatViewProps) {
                     contextWindow: activeContextWindow,
                   }}
                 />
+                )}
 
                 <PullRequestThreadDialogHost
                   threadKey={activeThreadKey}
