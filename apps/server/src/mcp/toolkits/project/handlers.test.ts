@@ -6,12 +6,17 @@ import {
   ProjectId,
   ProviderInstanceId,
   ProviderDriverKind,
+  RunId,
   type ServerProvider,
   type Project as ProjectRecord,
   type ModelSelection,
   type RuntimeMode,
   type OrchestrationV2ThreadShell,
   ThreadId,
+  DEFAULT_HOME_TOT,
+  TotId,
+  type Tot,
+  type TotWatch,
 } from "@t3tools/contracts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -44,6 +49,8 @@ import * as GitVcsDriver from "../../../vcs/GitVcsDriver.ts";
 import * as VcsProcess from "../../../vcs/VcsProcess.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
+import { liveThreadShell } from "../../McpToolAccess.testkit.ts";
+import * as TotService from "../../../tots/TotService.ts";
 import * as ProjectHandlers from "./handlers.ts";
 import { ProjectToolkit } from "./tools.ts";
 
@@ -60,6 +67,12 @@ const clientLaunchHarness = (input: {
   readonly hostedAppUrl?: string;
   /** The orchestrator refuses the new thread's mode, as under a managed ceiling. */
   readonly refusedByCeiling?: true;
+  /** Calls as this scope instead of a plain full client. */
+  readonly invocation?: Partial<McpInvocationContext.McpInvocationScope>;
+  /** The calling thread's shell, for a thread caller. */
+  readonly callerShell?: OrchestrationV2ThreadShell;
+  /** Tots on this environment, and where their watches land. */
+  readonly tots?: { readonly list: ReadonlyArray<Tot>; readonly watches: Array<TotWatch> };
 }) => {
   const projectId = ProjectId.make("project:client-target");
   const modelSelection = {
@@ -100,10 +113,21 @@ const clientLaunchHarness = (input: {
       },
       issuedAt: 0,
       capabilities: new Set(["orchestration" as const]),
+      ...input.invocation,
+    }),
+    Layer.mock(TotService.TotService)({
+      list: Effect.succeed(input.tots?.list ?? []),
+      totForThread: (threadId) =>
+        Effect.succeed(
+          Option.fromNullishOr(input.tots?.list.find((tot) => tot.threadId === threadId)),
+        ),
+      addWatch: (_id, watch) => Effect.sync(() => void input.tots?.watches.push(watch)),
     }),
     Layer.mock(ThreadManagement.ThreadManagementService)({
       // A thread exists once a launch started it.
       getThreadShell: (threadId) => {
+        if (input.callerShell !== undefined && threadId === input.callerShell.id)
+          return Effect.succeed(input.callerShell);
         const launch = input.launched.find((candidate) => candidate.threadId === threadId);
         return Effect.succeed(
           launch === undefined
@@ -904,5 +928,132 @@ it.effect("an update the project refuses tells the agent why", () =>
       .pipe(Stream.unwrap, Stream.runCollect, Effect.provide(dependencies));
 
     expect(refused.at(-1)?.result).toMatchObject({ code: "invalid_request", message: detail });
+  }),
+);
+
+const yuiThread = ThreadId.make("tot:yui:current");
+const yui: Tot = {
+  ...DEFAULT_HOME_TOT,
+  id: TotId.make("yui"),
+  name: "Yui",
+  threadId: yuiThread,
+  projectId: ProjectId.make("project:yui"),
+};
+
+const launchAs = Effect.fn("test.launchAs")(function* (
+  options: {
+    readonly invocation: Partial<McpInvocationContext.McpInvocationScope>;
+    readonly callerShell?: OrchestrationV2ThreadShell;
+    readonly tots?: ReadonlyArray<Tot>;
+  },
+  params: { readonly projectId?: ProjectId | "target"; readonly scratch?: boolean },
+) {
+  const launched: Array<ThreadLaunch.ThreadLaunchInput> = [];
+  const watches: Array<TotWatch> = [];
+  const { projectId, dependencies } = clientLaunchHarness({
+    runtimeModeCeiling: "full-access",
+    launched,
+    invocation: options.invocation,
+    ...(options.callerShell === undefined ? {} : { callerShell: options.callerShell }),
+    tots: { list: options.tots ?? [yui], watches },
+  });
+  const toolkit = yield* ProjectToolkit.pipe(
+    Effect.provide(
+      McpToolAccess.HandlersLayer.layer(ProjectHandlers.layer).pipe(Layer.provide(dependencies)),
+    ),
+  );
+  const result = yield* toolkit
+    .handle("t3_thread_launch", {
+      title: "Fix",
+      message: "Fix the bug",
+      ...(params.projectId === undefined
+        ? {}
+        : { projectId: params.projectId === "target" ? projectId : params.projectId }),
+      ...(params.scratch === undefined ? {} : { scratch: params.scratch }),
+    })
+    .pipe(Stream.unwrap, Stream.runCollect, Effect.provide(dependencies));
+  return { result: result.at(-1)?.result, launched, watches };
+});
+
+const linkedTot = (
+  access: "full-access" | "auto",
+): Partial<McpInvocationContext.McpInvocationScope> => ({
+  client: {
+    sessionId: "peer",
+    label: "Asuna",
+    access,
+    linked: true,
+    senderThread: { environmentId: EnvironmentId.make("asuna"), threadId: yuiThread, title: "Yui" },
+  },
+});
+
+it.effect("a Tot over a full-access link launches a thread it owns", () =>
+  Effect.gen(function* () {
+    const { launched } = yield* launchAs(
+      { invocation: linkedTot("full-access") },
+      { projectId: "target" },
+    );
+    expect(launched[0]?.threadId?.startsWith("tot-launched:yui:")).toBe(true);
+  }),
+);
+
+it.effect("a Tot sender over a link below full access launches an ordinary thread", () =>
+  Effect.gen(function* () {
+    const { launched } = yield* launchAs(
+      { invocation: linkedTot("auto") },
+      { projectId: "target" },
+    );
+    expect(launched[0]?.threadId?.startsWith("tot-launched:")).toBe(false);
+  }),
+);
+
+it.effect("a Tot must name a project or ask for scratch", () =>
+  Effect.gen(function* () {
+    const { result, launched } = yield* launchAs({ invocation: linkedTot("full-access") }, {});
+    expect(result).toMatchObject({
+      code: "invalid_request",
+      message: "A Tot must pass projectId or scratch:true.",
+    });
+    expect(launched).toHaveLength(0);
+  }),
+);
+
+it.effect("nothing launches into a Tot's own project", () =>
+  Effect.gen(function* () {
+    const { result, launched } = yield* launchAs(
+      { invocation: linkedTot("full-access") },
+      { projectId: ProjectId.make("project:yui") },
+    );
+    expect(result).toMatchObject({
+      code: "invalid_request",
+      message: "Nothing launches into a Tot's own folder. Pass another projectId or scratch:true.",
+    });
+    expect(launched).toHaveLength(0);
+  }),
+);
+
+it.effect("a Tot here watches what it launches before the launch starts", () =>
+  Effect.gen(function* () {
+    const { launched, watches } = yield* launchAs(
+      {
+        invocation: {
+          client: undefined,
+          thread: {
+            threadId: yuiThread,
+            providerSessionId: "session",
+            providerInstanceId: ProviderInstanceId.make("codex"),
+          },
+        },
+        callerShell: {
+          ...liveThreadShell(yuiThread, { activeRunId: RunId.make("run") }),
+          projectId: ProjectId.make("project:yui"),
+        },
+      },
+      { projectId: "target" },
+    );
+    expect(launched[0]?.threadId?.startsWith("tot-launched:yui:")).toBe(true);
+    expect(watches).toEqual([
+      { environmentId: "environment", threadId: launched[0]?.threadId, reason: "launched" },
+    ]);
   }),
 );
