@@ -6,6 +6,7 @@ import type {
   OrchestrationV2ThreadHistoryPage,
   ProjectId,
 } from "@t3tools/contracts";
+import { isGroupChatThreadId } from "@t3tools/contracts";
 import {
   latestExecutedRun,
   latestRootProviderFailure,
@@ -15817,6 +15818,76 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     return parentRunId;
   });
 
+  /**
+   * A message in a group chat room. The room never runs an agent: its members answer from
+   * their own threads, so the message is recorded with no run, no provider turn and no queue.
+   */
+  const dispatchRoomMessage = Effect.fn("orchestrationV2.roomMessage")(function* (
+    command: Extract<OrchestrationV2Command, { type: "message.dispatch" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) {
+    const projection = yield* getProjectionWithPendingEvents(command.threadId, events);
+    const now = yield* DateTime.now;
+    const emitEvent = emit(events, command);
+    const message: OrchestrationV2ConversationMessage = {
+      createdBy: command.createdBy,
+      creationSource: command.creationSource,
+      ...(command.senderThreadId === undefined ? {} : { senderThreadId: command.senderThreadId }),
+      ...(command.linkedSender === undefined ? {} : { linkedSender: command.linkedSender }),
+      id: command.messageId,
+      threadId: command.threadId,
+      runId: null,
+      nodeId: null,
+      role: "user",
+      text: command.text,
+      attachments: command.attachments,
+      ...(command.context ? { context: command.context } : {}),
+      streaming: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const turnItem: OrchestrationV2TurnItem = {
+      createdBy: command.createdBy,
+      creationSource: command.creationSource,
+      ...(command.senderThreadId === undefined ? {} : { senderThreadId: command.senderThreadId }),
+      ...(command.linkedSender === undefined ? {} : { linkedSender: command.linkedSender }),
+      id: idAllocator.derive.userTurnItem({ messageId: command.messageId }),
+      threadId: command.threadId,
+      runId: null,
+      nodeId: null,
+      providerThreadId: null,
+      providerTurnId: null,
+      nativeItemRef: null,
+      parentItemId: null,
+      ordinal: yield* nextTurnItemOrdinal(projection),
+      status: "completed",
+      title: null,
+      startedAt: now,
+      completedAt: now,
+      updatedAt: now,
+      type: "user_message",
+      messageId: command.messageId,
+      inputIntent: "turn_start",
+      text: command.text,
+      attachments: command.attachments,
+      ...(command.context ? { context: command.context } : {}),
+    };
+    yield* emitEvent({
+      type: "message.updated",
+      threadId: command.threadId,
+      providerInstanceId: projection.thread.providerInstanceId,
+      occurredAt: now,
+      payload: message,
+    });
+    yield* emitEvent({
+      type: "turn-item.updated",
+      threadId: command.threadId,
+      providerInstanceId: projection.thread.providerInstanceId,
+      occurredAt: now,
+      payload: turnItem,
+    });
+  });
+
   const dispatchUnsupported = (command: OrchestrationV2ServerCommand) =>
     Effect.fail(
       new OrchestratorDispatchError({
@@ -16051,6 +16122,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         yield* dispatchThreadProjectAdoptFolder(command, events);
         break;
       case "message.dispatch": {
+        if (isGroupChatThreadId(command.threadId)) {
+          yield* dispatchRoomMessage(command, events);
+          break;
+        }
         const thread = yield* refuseNativeSubagentMessage(command);
         const guestSend =
           command.guestMessageId === undefined

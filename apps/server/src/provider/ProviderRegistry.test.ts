@@ -437,6 +437,7 @@ function makeMutableServerSettingsService(
           return next;
         }),
       updateTots: () => Effect.die("Unexpected Tot update"),
+      updateGroupChats: () => Effect.die("Unexpected group chat update"),
       updateProviderInstance: (mutation, patch = {}) =>
         Effect.gen(function* () {
           const current = yield* Ref.get(settingsRef);
