@@ -1,5 +1,6 @@
 import {
   type EnvironmentId,
+  type GroupChat,
   HOME_TOT_ID,
   type ProjectId,
   type ServerSettings,
@@ -124,15 +125,41 @@ export function totHostOrder(
 export const isTotProject = (projectId: ProjectId, tots: ReadonlyArray<Tot>): boolean =>
   tots.some((tot) => tot.projectId === projectId);
 
-/** The projects a user may pick for new work: a Tot's project holds only its own thread. */
+export interface EnvironmentGroupChat {
+  readonly environmentId: EnvironmentId;
+  readonly room: GroupChat;
+}
+
+/** Every group chat across connected environments, by name. */
+export function selectGroupChats(
+  settingsByEnvironment: ReadonlyMap<EnvironmentId, ServerSettings>,
+): ReadonlyArray<EnvironmentGroupChat> {
+  const entries: Array<EnvironmentGroupChat> = [];
+  for (const [environmentId, settings] of settingsByEnvironment) {
+    for (const room of settings.groupChats) entries.push({ environmentId, room });
+  }
+  return entries.sort((left, right) => left.room.name.localeCompare(right.room.name));
+}
+
+/**
+ * The projects a user may pick for new work: a Tot's project holds only its own thread, and a
+ * group chat's holds only its room.
+ */
 export function withoutTotProjects<
   T extends { readonly environmentId: EnvironmentId; readonly id: ProjectId },
->(projects: ReadonlyArray<T>, tots: ReadonlyArray<EnvironmentTot>): ReadonlyArray<T> {
-  const owned = new Set(
-    tots.flatMap(({ environmentId, tot }) =>
+>(
+  projects: ReadonlyArray<T>,
+  tots: ReadonlyArray<EnvironmentTot>,
+  groupChats: ReadonlyArray<EnvironmentGroupChat> = [],
+): ReadonlyArray<T> {
+  const owned = new Set([
+    ...tots.flatMap(({ environmentId, tot }) =>
       tot.projectId === null ? [] : [`${environmentId}\u0000${tot.projectId}`],
     ),
-  );
+    ...groupChats.flatMap(({ environmentId, room }) =>
+      room.projectId === null ? [] : [`${environmentId}\u0000${room.projectId}`],
+    ),
+  ]);
   if (owned.size === 0) return projects;
   const kept = projects.filter(
     (project) => !owned.has(`${project.environmentId}\u0000${project.id}`),
