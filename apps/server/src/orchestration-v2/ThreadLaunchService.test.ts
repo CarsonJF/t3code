@@ -27,6 +27,7 @@ import {
   ThreadId,
   TextGenerationError,
   ServerSettingsError,
+  DEFAULT_HOME_TOT,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
@@ -663,6 +664,26 @@ it.effect.each([" /COMPACT "])(
         );
       }).pipe(Effect.provide(harness.layer));
     }),
+);
+
+it.effect("keeps a Tot's project to the Tot's own thread", () =>
+  Effect.gen(function* () {
+    const harness = makeHarness({
+      serverSettings: { tots: [{ ...DEFAULT_HOME_TOT, projectId }] },
+    });
+    yield* Effect.gen(function* () {
+      const launches = yield* ThreadLaunch.ThreadLaunchService;
+      const refused = yield* launches
+        .launch(launchInput({ command: "tot-project-extra", thread: "thread:extra" }))
+        .pipe(Effect.flip);
+      assert.include(String(refused.cause), "Home");
+      const own = yield* launches.launch({
+        ...launchInput({ command: "tot-project-own", thread: "tot:home:own" }),
+        title: "Home",
+      });
+      assert.equal(own.threadId, "tot:home:own");
+    }).pipe(Effect.provide(harness.layer));
+  }),
 );
 
 it.effect("keeps a Tot thread's name when the user first writes to it", () =>
