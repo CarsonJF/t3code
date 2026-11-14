@@ -619,6 +619,7 @@ export const OrchestratorMcpThreadWaitResult = Schema.Struct({
   output: Schema.optional(Schema.Json),
   /** With until 'attention': what the waiting run asks for. */
   attention: Schema.optional(Schema.Literals(["question", "approval"])),
+  attentionRequestId: Schema.optional(RuntimeRequestId),
 });
 export type OrchestratorMcpThreadWaitResult = typeof OrchestratorMcpThreadWaitResult.Type;
 
