@@ -65,6 +65,7 @@ function createWorkspaceTabsModel(selectedTab?: WorkspaceTab) {
   const scrollOffsets: Record<WorkspaceSearchTab, number> = {
     threads: 0,
     pullRequests: 0,
+    tots: 0,
     issues: 0,
     workflows: 0,
     usage: 0,
