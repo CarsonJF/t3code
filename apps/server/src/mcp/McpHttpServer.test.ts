@@ -1,4 +1,5 @@
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
+import * as TotTestkit from "../tots/TotTestkit.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import { expect, it } from "@effect/vitest";
@@ -300,6 +301,7 @@ const layerRecordingTools = (calls: Array<unknown>) => {
     Layer.provide(
       Layer.mergeAll(
         McpToolAccessTestkit.liveThreadsLayer,
+        TotTestkit.notTotLayer,
         Layer.mock(OrchestratorMcpService.OrchestratorMcpService)({}),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
