@@ -25,7 +25,8 @@ import * as ThreadHandlers from "./handlers.ts";
 import { ThreadToolkit } from "./tools.ts";
 
 const homeThread = ThreadId.make("tot:home:current");
-const worker = ThreadId.make("thread:worker");
+const worker = ThreadId.make("tot-launched:home:c1");
+const unmanaged = ThreadId.make("thread:supervised");
 const approval = RuntimeRequestId.make("request:approval");
 
 const harness = (callerThread: ThreadId) => {
@@ -44,6 +45,7 @@ const harness = (callerThread: ThreadId) => {
       capabilities: new Set(["orchestration" as const]),
     }),
     Layer.mock(TotService.TotService)({
+      list: Effect.succeed([{ ...DEFAULT_HOME_TOT, threadId: homeThread }]),
       totForThread: (threadId) =>
         Effect.succeed(
           threadId === homeThread
@@ -136,5 +138,22 @@ it.effect("only a Tot can approve a permission request", () =>
     expect(dispatched).toHaveLength(0);
     const listed = yield* call({ action: "list", threadId: worker });
     expect(listed).not.toHaveProperty("approvals");
+  }),
+);
+
+it.effect("a Tot approves only in threads it launched or watches", () =>
+  Effect.gen(function* () {
+    const { call, dispatched } = harness(homeThread);
+    const result = yield* call({
+      action: "respond",
+      threadId: unmanaged,
+      requestId: approval,
+      decision: "accept",
+    });
+    expect(result).toMatchObject({
+      code: "capability_denied",
+      message: "A Tot approves requests only in threads it launched or watches.",
+    });
+    expect(dispatched).toHaveLength(0);
   }),
 );
