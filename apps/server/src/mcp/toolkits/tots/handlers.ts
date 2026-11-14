@@ -50,6 +50,25 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
       return { ok: true as const };
     }),
   ),
+  t3_tot_design_avatar: McpToolAccess.reads((input) =>
+    Effect.gen(function* () {
+      const tot = yield* requireTotChange();
+      if (tot.via !== "local")
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message: "Design your face from your own environment.",
+        });
+      yield* (yield* TotService.TotService)
+        .saveDesign(tot.totId, input)
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new OrchestratorMcpFailure({ code: "invalid_request", message: error.message }),
+          ),
+        );
+      return { ok: true as const };
+    }),
+  ),
   t3_tot_watch: McpToolAccess.reads((input) =>
     Effect.gen(function* () {
       const tot = yield* requireTotChange();
