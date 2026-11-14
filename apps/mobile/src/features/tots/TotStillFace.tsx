@@ -1,3 +1,4 @@
+import { totStillHeadPath } from "@t3tools/client-runtime/tots/shapes";
 import type { TotAvatar, TotFaceState } from "@t3tools/contracts";
 import Svg, { Path, Rect } from "react-native-svg";
 
@@ -73,9 +74,14 @@ export function TotStillFace(props: {
   readonly state: TotFaceState;
   readonly size: number;
 }) {
+  const head = totStillHeadPath(props.avatar.shape);
   return (
     <Svg width={props.size} height={props.size} viewBox="0 0 100 100" accessibilityElementsHidden>
-      <Rect x={6} y={10} width={88} height={80} rx={30} fill={props.avatar.color} />
+      {head === null ? (
+        <Rect x={6} y={10} width={88} height={80} rx={30} fill={props.avatar.color} />
+      ) : (
+        <Path d={head} fill={props.avatar.color} />
+      )}
       <Eyes state={props.state} />
     </Svg>
   );
