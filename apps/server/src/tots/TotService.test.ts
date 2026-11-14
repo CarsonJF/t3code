@@ -177,11 +177,21 @@ it.effect("moves a Tot's routines to its new thread, and no one else's", () => {
   }).pipe(Effect.provide(layer));
 });
 
-it.effect("never deletes Home", () => {
-  const { layer } = makeTots();
+it.effect("resets Home instead of deleting it", () => {
+  const { layer } = makeTots({
+    tots: [
+      {
+        ...DEFAULT_HOME_TOT,
+        name: "Boss",
+        projectId: totProjectId,
+        threadId: ThreadId.make("tot:home:now"),
+      },
+    ],
+  });
   return Effect.gen(function* () {
-    const failure = yield* Effect.flip((yield* TotService.TotService).remove(HOME_TOT_ID));
-    expect(failure).toBeInstanceOf(TotError);
+    const tots = yield* TotService.TotService;
+    yield* tots.remove(HOME_TOT_ID);
+    expect(yield* tots.list).toEqual([DEFAULT_HOME_TOT]);
   }).pipe(Effect.provide(layer));
 });
 
