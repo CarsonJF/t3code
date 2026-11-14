@@ -177,6 +177,13 @@ export type TotUpdateInput = typeof TotUpdateInput.Type;
 export const TotIdInput = Schema.Struct({ id: TotId });
 export type TotIdInput = typeof TotIdInput.Type;
 
+export const TotEnableInput = Schema.Struct({
+  id: TotId,
+  /** Defaults to the model the Tot last ran with. */
+  modelSelection: Schema.optional(ModelSelection),
+});
+export type TotEnableInput = typeof TotEnableInput.Type;
+
 export const TotThreadResult = Schema.Struct({ threadId: ThreadId });
 export type TotThreadResult = typeof TotThreadResult.Type;
 

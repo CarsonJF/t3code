@@ -450,6 +450,15 @@ import {
   SourceControlSignInPrompt,
   SourceControlSignInResult,
 } from "./sourceControl.ts";
+import {
+  Tot,
+  TotCreateInput,
+  TotEnableInput,
+  TotError,
+  TotIdInput,
+  TotThreadResult,
+  TotUpdateInput,
+} from "./tots.ts";
 import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
@@ -571,6 +580,13 @@ export const WS_METHODS = {
   peerLinksPairClient: "peerLinks.pairClient",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+  // Tots
+  totsCreate: "tots.create",
+  totsUpdate: "tots.update",
+  totsRemove: "tots.remove",
+  totsEnable: "tots.enable",
+  totsDisable: "tots.disable",
+  totsStartFresh: "tots.startFresh",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverCheckSecretSource: "server.checkSecretSource",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
@@ -974,6 +990,30 @@ const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSettings, {
   }),
   success: ServerSettings,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
+});
+
+const totError = Schema.Union([TotError, EnvironmentAuthorizationError]);
+const WsTotsCreateRpc = Rpc.make(WS_METHODS.totsCreate, {
+  payload: TotCreateInput,
+  success: Tot,
+  error: totError,
+});
+const WsTotsUpdateRpc = Rpc.make(WS_METHODS.totsUpdate, {
+  payload: TotUpdateInput,
+  success: Tot,
+  error: totError,
+});
+const WsTotsRemoveRpc = Rpc.make(WS_METHODS.totsRemove, { payload: TotIdInput, error: totError });
+const WsTotsEnableRpc = Rpc.make(WS_METHODS.totsEnable, {
+  payload: TotEnableInput,
+  success: TotThreadResult,
+  error: totError,
+});
+const WsTotsDisableRpc = Rpc.make(WS_METHODS.totsDisable, { payload: TotIdInput, error: totError });
+const WsTotsStartFreshRpc = Rpc.make(WS_METHODS.totsStartFresh, {
+  payload: TotIdInput,
+  success: TotThreadResult,
+  error: totError,
 });
 
 const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
@@ -2375,6 +2415,12 @@ export const WsRpcGroup = RpcGroup.make(
   WsPeerLinksThreadHistoryPageRpc,
   WsPeerLinksThreadItemRpc,
   WsPeerLinksPairClientRpc,
+  WsTotsCreateRpc,
+  WsTotsUpdateRpc,
+  WsTotsRemoveRpc,
+  WsTotsEnableRpc,
+  WsTotsDisableRpc,
+  WsTotsStartFreshRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerCheckSecretSourceRpc,
   WsServerSearchAcpRegistryRpc,
