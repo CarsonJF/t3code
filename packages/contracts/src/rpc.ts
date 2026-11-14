@@ -489,6 +489,13 @@ import {
   SourceControlSignInResult,
 } from "./sourceControl.ts";
 import {
+  GroupChat,
+  GroupChatCreateInput,
+  GroupChatError,
+  GroupChatIdInput,
+  GroupChatUpdateInput,
+} from "./groupChats.ts";
+import {
   Tot,
   TotCreateInput,
   TotEnableInput,
@@ -636,6 +643,9 @@ export const WS_METHODS = {
   totsDisable: "tots.disable",
   totsStartFresh: "tots.startFresh",
   totsReadMemory: "tots.readMemory",
+  groupChatsCreate: "groupChats.create",
+  groupChatsUpdate: "groupChats.update",
+  groupChatsRemove: "groupChats.remove",
   totsWriteMemory: "tots.writeMemory",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverCheckSecretSource: "server.checkSecretSource",
@@ -1101,6 +1111,21 @@ const WsTotsStartFreshRpc = Rpc.make(WS_METHODS.totsStartFresh, {
   error: totError,
 });
 
+const groupChatError = Schema.Union([GroupChatError, EnvironmentAuthorizationError]);
+const WsGroupChatsCreateRpc = Rpc.make(WS_METHODS.groupChatsCreate, {
+  payload: GroupChatCreateInput,
+  success: GroupChat,
+  error: groupChatError,
+});
+const WsGroupChatsUpdateRpc = Rpc.make(WS_METHODS.groupChatsUpdate, {
+  payload: GroupChatUpdateInput,
+  success: GroupChat,
+  error: groupChatError,
+});
+const WsGroupChatsRemoveRpc = Rpc.make(WS_METHODS.groupChatsRemove, {
+  payload: GroupChatIdInput,
+  error: groupChatError,
+});
 const WsTotsReadMemoryRpc = Rpc.make(WS_METHODS.totsReadMemory, {
   payload: TotMemoryReadInput,
   success: TotMemory,
@@ -2621,6 +2646,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsTotsDisableRpc,
   WsTotsStartFreshRpc,
   WsTotsReadMemoryRpc,
+  WsGroupChatsCreateRpc,
+  WsGroupChatsUpdateRpc,
+  WsGroupChatsRemoveRpc,
   WsTotsWriteMemoryRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerCheckSecretSourceRpc,
