@@ -37,6 +37,7 @@ import {
 import { ModelSelection } from "./modelSelection.ts";
 import { ProjectScript, type ProjectMutation } from "./project.ts";
 import { ThreadGroupOp, ThreadGroupsState } from "./threadGroups.ts";
+import { GroupChatsSetting } from "./groupChats.ts";
 import { TotsSetting } from "./tots.ts";
 import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
 import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
@@ -1474,6 +1475,7 @@ export const ServerSettings = Schema.Struct({
   threadGroups: ThreadGroupsState.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   /** Owned by the Tot RPCs and tools; never part of a client settings patch. */
   tots: TotsSetting,
+  groupChats: GroupChatsSetting,
 
   enableAgentDeviceAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /** Enabling the Device panel must not grant providers device control. */

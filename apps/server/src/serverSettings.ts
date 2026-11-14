@@ -278,6 +278,11 @@ export class ServerSettingsService extends Context.Service<
       update: (tots: ServerSettings["tots"]) => ServerSettings["tots"],
     ) => Effect.Effect<ServerSettings, ServerSettingsError>;
 
+    /** Group chats are server-owned like Tots: only GroupChatService writes them. */
+    readonly updateGroupChats: (
+      update: (groupChats: ServerSettings["groupChats"]) => ServerSettings["groupChats"],
+    ) => Effect.Effect<ServerSettings, ServerSettingsError>;
+
     readonly withSettingsSnapshot: <A, E, R>(
       use: (settings: ServerSettings) => Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | ServerSettingsError, R>;
@@ -346,6 +351,10 @@ const makeTest = Effect.fn("serverSettings.makeTest")(function* (
     updateTots: (update) =>
       updateTestSettings((currentSettings) =>
         Effect.succeed({ ...currentSettings, tots: update(currentSettings.tots) }),
+      ),
+    updateGroupChats: (update) =>
+      updateTestSettings((currentSettings) =>
+        Effect.succeed({ ...currentSettings, groupChats: update(currentSettings.groupChats) }),
       ),
     withSettingsSnapshot: (use) =>
       writeSemaphore.withPermits(1)(getSettings.pipe(Effect.flatMap(use))),
@@ -1471,6 +1480,10 @@ const make = Effect.gen(function* () {
     updateTots: (update) =>
       updateAndPersistSettings({}, (current) =>
         Effect.succeed({ ...current, tots: update(current.tots) }),
+      ),
+    updateGroupChats: (update) =>
+      updateAndPersistSettings({}, (current) =>
+        Effect.succeed({ ...current, groupChats: update(current.groupChats) }),
       ),
     withSettingsSnapshot,
     get streamChanges() {

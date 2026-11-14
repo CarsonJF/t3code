@@ -1,4 +1,5 @@
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
+import * as GroupChatService from "./tots/GroupChatService.ts";
 import * as TotService from "./tots/TotService.ts";
 import * as TotWatchService from "./tots/TotWatchService.ts";
 import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
@@ -930,6 +931,10 @@ const layerMakeRoutes = Layer.mergeAll(
   ),
   // Wakes each Tot when the threads it watches finish or need it.
   Layer.effectDiscard(TotWatchService.TotWatchService.pipe(Effect.flatMap((watch) => watch.start))),
+  // Wakes the right Tots when a message reaches a group chat.
+  Layer.effectDiscard(
+    GroupChatService.GroupChatService.pipe(Effect.flatMap((rooms) => rooms.start)),
+  ),
 ).pipe(
   Layer.provide(
     PullRequestReviewGuideService.layer.pipe(Layer.provide(PullRequestReviewGuides.layer)),
@@ -950,6 +955,7 @@ const layerMakeRoutes = Layer.mergeAll(
   ),
   Layer.provide(PreviewBrowser.layer),
   Layer.provide(TotWatchService.layer),
+  Layer.provide(GroupChatService.layer),
   Layer.provide(TotService.layer),
   // Links to other environments, shared by clients (WebSocket) and agents (/mcp).
   Layer.provide(
