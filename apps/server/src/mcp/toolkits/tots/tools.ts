@@ -3,6 +3,7 @@ import {
   GroupChatId,
   OrchestratorMcpFailure,
   ThreadId,
+  TotAvatar,
   TotId,
   TotScope,
 } from "@t3tools/contracts";
@@ -73,4 +74,17 @@ const GroupChatSayTool = Tool.make("t3_group_chat_say", {
   success: Schema.Struct({ ok: Schema.Literal(true) }),
 }).annotate(Tool.Destructive, false);
 
-export const TotToolkit = Toolkit.make(TotListTool, TotWatchTool, GroupChatSayTool);
+const TotDesignAvatarTool = Tool.make("t3_tot_design_avatar", {
+  ...shared,
+  description:
+    "As a Tot, set your own face when the user asks you to design it. It becomes your face and one of your saved options.",
+  parameters: TotAvatar,
+  success: Schema.Struct({ ok: Schema.Literal(true) }),
+}).annotate(Tool.Destructive, false);
+
+export const TotToolkit = Toolkit.make(
+  TotListTool,
+  TotWatchTool,
+  GroupChatSayTool,
+  TotDesignAvatarTool,
+);
