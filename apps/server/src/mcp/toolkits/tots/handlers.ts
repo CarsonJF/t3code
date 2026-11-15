@@ -2,7 +2,10 @@ import { DEFAULT_HOME_TOT, OrchestratorMcpFailure } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
+import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
+import * as ScheduledTaskService from "../../../scheduledTasks/ScheduledTaskService.ts";
+import { defaultWebhookWakePrompt } from "../../../scheduledTasks/webhookListener.ts";
 import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -69,6 +72,111 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
           ),
         );
       return { ok: true as const };
+    }),
+  ),
+  t3_tot_webhook_listener: McpToolAccess.reads((input) =>
+    Effect.gen(function* () {
+      const caller = yield* requireTotChange();
+      if (caller.via !== "local")
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message:
+            "Webhook listeners live with the Tots here; create one from your own environment.",
+        });
+      const tots = yield* TotService.TotService;
+      const all = yield* tots.list;
+      const self = all.find((tot) => tot.id === caller.totId);
+      if (self === undefined)
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message: "This thread is no longer a Tot's current thread.",
+        });
+      const target = input.tot === undefined ? self : all.find((tot) => tot.id === input.tot);
+      if (target === undefined)
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: `There is no Tot "${input.tot}".`,
+        });
+      if (target.id !== self.id && self.scope !== "all")
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message: "Only a Tot whose scope is all can listen for another Tot.",
+        });
+      if (target.threadId === null)
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: `Turn ${target.name} on first: a listener posts into its thread.`,
+        });
+      const threads = yield* ThreadManagementService.ThreadManagementService;
+      const shell = yield* threads.getThreadShell(target.threadId).pipe(
+        Effect.mapError(
+          (error) =>
+            new OrchestratorMcpFailure({
+              code: "orchestration_error",
+              message: `Could not read ${target.name}'s thread: ${error.message}`,
+            }),
+        ),
+      );
+      if (shell === null || shell.deletedAt !== null || shell.archivedAt !== null)
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: `${target.name}'s thread is not open. Start it again and retry.`,
+        });
+      const mode = input.mode ?? "notify";
+      const template = input.messageTemplate;
+      const prompt =
+        mode === "wake" ? (template ?? defaultWebhookWakePrompt(input.name)) : input.name;
+      const scheduledTasks = yield* ScheduledTaskService.ScheduledTaskService;
+      const { task } = yield* scheduledTasks
+        .upsert({
+          title: input.name,
+          prompt,
+          enabled: true,
+          schedule: {
+            type: "webhook",
+            ...(input.filters === undefined ? {} : { filters: input.filters }),
+            listener: {
+              mode,
+              ...(template === undefined ? {} : { messageTemplate: template }),
+              ...(input.cooldownSeconds === undefined
+                ? {}
+                : { cooldownSeconds: input.cooldownSeconds }),
+              ...(input.notify === true ? { notify: true } : {}),
+            },
+          },
+          projectId: shell.projectId,
+          threadId: target.threadId,
+          threadMode: "continue",
+          workspaceStrategy: { type: "root" },
+          modelSelection: target.modelSelection ?? shell.modelSelection,
+          runtimeMode: shell.runtimeMode,
+          interactionMode: shell.interactionMode,
+          createdBy: "agent",
+          creationSource: "mcp",
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new OrchestratorMcpFailure({
+                code: "orchestration_error",
+                message: `Could not create the listener: ${error.message}`,
+              }),
+          ),
+        );
+      if (task.webhook === undefined)
+        return yield* new OrchestratorMcpFailure({
+          code: "orchestration_error",
+          message: "The listener was saved without a webhook URL.",
+        });
+      const scope = yield* McpInvocationContext.McpInvocationContext;
+      return {
+        listenerId: task.id,
+        name: task.title,
+        mode,
+        webhookUrl: task.webhook.url,
+        webhookPath: task.webhook.path,
+        link: McpInvocationContext.threadLinkFor(scope, target.threadId, target.name),
+      };
     }),
   ),
   t3_tot_create: McpToolAccess.reads((input) =>
