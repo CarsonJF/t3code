@@ -47,6 +47,10 @@
       "types": "./src/totTheme.ts",
       "import": "./src/totTheme.ts"
     },
+    "./totThemeTokens": {
+      "types": "./src/totThemeTokens.ts",
+      "import": "./src/totThemeTokens.ts"
+    },
     "./themePreview": {
       "types": "./src/themePreview.ts",
       "import": "./src/themePreview.ts"
