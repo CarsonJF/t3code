@@ -64,6 +64,7 @@ describe("Tot settings", () => {
 
   it("animates Tot avatars by default on each client", () => {
     expect(decodeClientSettings({}).animateTotAvatars).toBe(true);
+    expect(decodeClientSettings({}).totThemeEffects).toBe(true);
   });
 });
 
