@@ -3662,6 +3662,9 @@ export default function ChatView(props: ChatViewProps) {
               <TotThemeEffect
                 threadId={activeThread.id}
                 script={settings.tots.find((tot) => tot.id === activeTotId)?.theme?.effect}
+                contextWindow={activeContextWindow}
+                working={isWorking}
+                phase={phase}
               />
               {isTotThread ? (
                 <TotThreadHero
