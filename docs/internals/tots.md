@@ -35,6 +35,16 @@ A group chat is a host-owned record in `ServerSettings.groupChats` (written only
 - **Members answer from their own threads.** The service watches room messages, asks `decideRoomTurn` ([`groupChatTurns.ts`](../../apps/server/src/tots/groupChatTurns.ts)) who is due, and wakes each with a message in its Tot thread carrying the recent transcript. The user reaches who they name, or the moderator; a Tot reaches only Tots it names, and only until `hopLimit` Tot messages follow one user message.
 - Room threads and room projects are hidden from the thread roster and project pickers like Tot ones (`withoutTotThreads`, `withoutTotProjects`). Members are same-host only.
 
+## Webhook listeners
+
+A listener is a scheduled task with a webhook trigger, a `listener` block on its schedule, and a bound thread. `ScheduledTaskService.triggerWebhook` authenticates and filters as usual, then either posts a runless notice or renders the wake prompt and continues through the normal run path.
+
+- A notify delivery dispatches `message.dispatch` with `systemNotice: true`. The orchestrator records one completed `system_notice` turn item with `runId: null` and no message, so it reaches the timeline but never the provider transcript. That is what keeps notify-only free: no run, no provider turn, no queue, no tokens.
+- A wake delivery renders the listener template through `renderWebhookPrompt`, so request values keep their `<webhook-data-…>` framing and mention breaking. The task's bound thread follows a Tot to a fresh start through `TotService.moveRoutines`.
+- `cooldownSeconds` is an in-memory window per task (reset on restart); drops are logged as the `cooldown` delivery outcome rather than as runs.
+- A static `bearer` header check reuses the task's `webhook_secret` column so no migration is needed. It and the signature check are mutually exclusive.
+- `t3_tot_webhook_listener` is the one-call creator. It requires a Tot caller, binds the task to the Tot's current thread, defaults to notify, and returns the URL (a secret). The Tot settings panel can list these tasks with `list_scheduled_tasks` and edit the listener fields through `schedule_task`'s webhook schedule.
+
 ## Faces
 
 The web renders BoopFace directly and always loads its full build: the lite and full builds both define `<boop-face>`, and the full build fetches skin code only when a skin is used. Mobile cannot run a Web Component natively, so it runs one WebView for the Tots tab's moving face (bundled like the device stream script) and draws still faces with `react-native-svg` in lists.
