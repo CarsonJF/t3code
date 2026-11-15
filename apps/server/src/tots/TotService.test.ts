@@ -320,3 +320,50 @@ it.effect("keeps a Tot's own face designs, newest first, without repeats", () =>
     ]);
   }).pipe(Effect.provide(layer));
 });
+
+it.effect("a theme write keeps the field it did not write, and clears one field alone", () => {
+  const { layer } = makeTots();
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    const withCss = yield* tots.setTheme(HOME_TOT_ID, { css: ":root { color: red; }" });
+    expect(withCss.theme).toEqual({ css: ":root { color: red; }" });
+    const withEffect = yield* tots.setTheme(HOME_TOT_ID, { effect: "sparkles" });
+    expect(withEffect.theme).toEqual({ css: ":root { color: red; }", effect: "sparkles" });
+    const clearedCss = yield* tots.setTheme(HOME_TOT_ID, { css: "" });
+    expect(clearedCss.theme).toEqual({ effect: "sparkles" });
+    const clearedEffect = yield* tots.setTheme(HOME_TOT_ID, { effect: null });
+    expect(clearedEffect.theme).toBeUndefined();
+    expect((yield* tots.list)[0]?.theme).toBeUndefined();
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("updating a Tot with a theme keeps the new fields and the other theme field", () => {
+  const { layer } = makeTots();
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    yield* tots.setTheme(HOME_TOT_ID, { css: ".row { color: red; }", effect: "glow" });
+    const updated = yield* tots.update({
+      id: HOME_TOT_ID,
+      name: "Hearth",
+      theme: { effect: "sparkles" },
+    });
+    expect(updated.name).toBe("Hearth");
+    expect(updated.theme).toEqual({ css: ".row { color: red; }", effect: "sparkles" });
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("refuses a theme over the cap or one that loads remote files", () => {
+  const { layer } = makeTots();
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    const tooLong = yield* Effect.flip(tots.setTheme(HOME_TOT_ID, { effect: "a".repeat(20_001) }));
+    expect(tooLong).toBeInstanceOf(TotError);
+    expect(tooLong.message).toContain("20000");
+    const remote = yield* Effect.flip(
+      tots.setTheme(HOME_TOT_ID, { css: "@import url(https://example.com/a.css);" }),
+    );
+    expect(remote).toBeInstanceOf(TotError);
+    expect(remote.message).toContain("cannot load files");
+    expect((yield* tots.list)[0]?.theme).toBeUndefined();
+  }).pipe(Effect.provide(layer));
+});
