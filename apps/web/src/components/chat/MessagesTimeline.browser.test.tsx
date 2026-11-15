@@ -2248,11 +2248,11 @@ it("renders automatic compaction as one live divider that finishes with its reas
   expect(container.textContent).not.toContain("Compacting before");
 });
 
-function TimelineChangedFilesCard() {
+function TimelineChangedFilesCard({ runId = "run-1" }: { runId?: string | undefined } = {}) {
   const [expanded, setExpanded] = useState(true);
   return (
     <ChangedFilesCard
-      runId={RunId.make("run-1")}
+      runId={RunId.make(runId)}
       files={["src/a.ts", "src/b.ts", "src/c.ts"].map((path) => ({
         path,
         kind: "modified",
@@ -2268,7 +2268,7 @@ function TimelineChangedFilesCard() {
   );
 }
 
-function ChangedFilesTimeline() {
+function ChangedFilesTimeline({ runId }: { runId?: string } = {}) {
   return (
     <LegendList
       data={["files", "after"]}
@@ -2277,23 +2277,64 @@ function ChangedFilesTimeline() {
       recycleItems={false}
       className="h-[600px]"
       renderItem={({ item }) =>
-        item === "files" ? <TimelineChangedFilesCard /> : <div data-testid="after">After</div>
+        item === "files" ? (
+          <TimelineChangedFilesCard runId={runId} />
+        ) : (
+          <div data-testid="after">After</div>
+        )
       }
     />
   );
 }
 
 describe("ChangedFilesCard", () => {
+  it("keeps the file list collapsed until the header is opened", async () => {
+    await using screen = await render(<ChangedFilesTimeline runId="run-collapsed" />);
+    const toggle = () =>
+      screen.container.querySelector<HTMLButtonElement>('button[aria-label$="changed files"]')!;
+    const openDiff = () =>
+      screen.container.querySelector<HTMLButtonElement>('button[aria-label="Open diff"]')!;
+
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(screen.container.textContent).not.toContain("a.ts");
+
+    await act(() => {
+      openDiff().click();
+    });
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(screen.container.textContent).not.toContain("a.ts");
+
+    await act(() => {
+      toggle().click();
+    });
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(screen.container.textContent).toContain("a.ts");
+
+    await act(() => {
+      toggle().click();
+    });
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(screen.container.textContent).not.toContain("a.ts");
+  });
+
   it.each(["folder", "all folders"])(
     "measures %s collapse and expansion in the same commit",
     async (toggle) => {
-      await using screen = await render(<ChangedFilesTimeline />);
+      await using screen = await render(
+        <ChangedFilesTimeline runId={`run-${toggle.replaceAll(" ", "-")}`} />,
+      );
       const after = () =>
         screen.container.querySelector('[data-testid="after"]')!.getBoundingClientRect().top;
       const cardBottom = () =>
         screen.container.querySelector("[data-changed-files-state]")!.getBoundingClientRect()
           .bottom;
       await vi.waitFor(() => expect(after()).toBe(cardBottom()));
+      await act(() => {
+        screen.container
+          .querySelector<HTMLButtonElement>('button[aria-label="Expand changed files"]')!
+          .click();
+      });
+      await vi.waitFor(() => expect(screen.container.textContent).toContain("a.ts"));
       const topBefore = after();
       const button = () =>
         screen.container.querySelector<HTMLButtonElement>(
