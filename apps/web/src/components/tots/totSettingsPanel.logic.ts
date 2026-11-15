@@ -1,20 +1,30 @@
 import {
   parseTotThreadId,
+  TOT_THEME_MAX_LENGTH,
   type ScheduledTask,
   type ScheduledTaskWebhookFilter,
   type Tot,
   type TotAvatar,
   type TotScope,
 } from "@t3tools/contracts";
+import { totThemeProblem } from "@t3tools/shared/totTheme";
+
+export interface TotThemeDraft {
+  readonly css: string;
+  readonly effect: string;
+}
 
 export interface TotSettingsDraft {
   readonly name: string;
   readonly avatar: TotAvatar;
   readonly scope: TotScope;
   readonly instructions: string;
+  readonly theme: TotThemeDraft;
 }
 
-export type TotSettingsDraftErrors = Partial<Record<"name" | "color" | "scope", string>>;
+export type TotSettingsDraftErrors = Partial<
+  Record<"name" | "color" | "scope" | "themeCss" | "themeEffect", string>
+>;
 
 export function totSettingsDraftFromTot(tot: Tot): TotSettingsDraft {
   return {
@@ -22,6 +32,7 @@ export function totSettingsDraftFromTot(tot: Tot): TotSettingsDraft {
     avatar: tot.avatar,
     scope: tot.scope,
     instructions: tot.instructions,
+    theme: { css: tot.theme?.css ?? "", effect: tot.theme?.effect ?? "" },
   };
 }
 
@@ -54,6 +65,7 @@ export function totSettingsDraftKey(draft: TotSettingsDraft): string {
     ],
     scope: normalizedScope(draft.scope),
     instructions: draft.instructions,
+    theme: draft.theme,
   });
 }
 
@@ -68,6 +80,17 @@ export function totSettingsDraftErrors(draft: TotSettingsDraft): TotSettingsDraf
   if (draft.scope !== "all" && draft.scope.projects.length + draft.scope.groups.length === 0) {
     errors.scope = "Pick at least one project or group, or Everything.";
   }
+  // The server runs the same checks; this is the early answer in the panel.
+  const cssProblem = totThemeProblem({ css: draft.theme.css });
+  if (cssProblem !== null) {
+    errors.themeCss =
+      draft.theme.css.length > TOT_THEME_MAX_LENGTH
+        ? `Keep the CSS under ${TOT_THEME_MAX_LENGTH.toLocaleString()} characters.`
+        : "CSS cannot load files. Use data: or #id for url().";
+  }
+  if (draft.theme.effect.length > TOT_THEME_MAX_LENGTH) {
+    errors.themeEffect = `Keep the effect under ${TOT_THEME_MAX_LENGTH.toLocaleString()} characters.`;
+  }
   return errors;
 }
 
@@ -77,6 +100,7 @@ export function totSettingsDraftUpdate(draft: TotSettingsDraft): TotSettingsDraf
     avatar: draft.avatar,
     scope: draft.scope,
     instructions: draft.instructions,
+    theme: { css: draft.theme.css, effect: draft.theme.effect },
   };
 }
 
