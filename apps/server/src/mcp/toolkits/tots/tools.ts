@@ -92,6 +92,40 @@ const TotDesignAvatarTool = Tool.make("t3_tot_design_avatar", {
   success: Schema.Struct({ ok: Schema.Literal(true) }),
 }).annotate(Tool.Destructive, false);
 
+const TotThemeSetTool = Tool.make("t3_tot_theme_set", {
+  ...shared,
+  description:
+    "As a Tot, set the theme of your own thread; another Tot's is out of reach. `css` restyles your conversation and follows theme rules (no @import, no remote url()). `effect` is opaque text for the effect layer; T3 Code never runs or shows it. Empty string or null clears one field, not the other. Live full-access Tot thread only.",
+  parameters: Schema.Struct({
+    css: Schema.optional(Schema.NullOr(Schema.String)).annotate({
+      description: "CSS for your conversation, up to 20,000 characters. Scoped to it.",
+    }),
+    effect: Schema.optional(Schema.NullOr(Schema.String)).annotate({
+      description: "Opaque text for the effect layer, up to 20,000 characters. Not run here.",
+    }),
+  }),
+  success: Schema.Struct({
+    totId: TotId,
+    cssLength: Schema.Number,
+    effectLength: Schema.Number,
+    summary: Schema.String,
+  }),
+}).annotate(Tool.Destructive, false);
+
+const TotThemeReadTool = Tool.make("t3_tot_theme_read", {
+  ...shared,
+  description:
+    "As a Tot, read your own thread theme's sizes and whether each part is set. The stored text is not returned.",
+  success: Schema.Struct({
+    totId: TotId,
+    cssLength: Schema.Number,
+    effectLength: Schema.Number,
+    summary: Schema.String,
+  }),
+})
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false);
+
 const TotWebhookListenerTool = Tool.make("t3_tot_webhook_listener", {
   ...shared,
   dependencies: [...shared.dependencies, ScheduledTaskService.ScheduledTaskService],
@@ -160,6 +194,8 @@ export const TotToolkit = Toolkit.make(
   TotWatchTool,
   GroupChatSayTool,
   TotDesignAvatarTool,
+  TotThemeSetTool,
+  TotThemeReadTool,
   TotWebhookListenerTool,
   TotCreateTool,
 );

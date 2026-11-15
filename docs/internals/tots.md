@@ -48,3 +48,11 @@ A listener is a scheduled task with a webhook trigger, a `listener` block on its
 ## Faces
 
 The web renders BoopFace directly and always loads its full build: the lite and full builds both define `<boop-face>`, and the full build fetches skin code only when a skin is used. Mobile cannot run a Web Component natively, so it runs one WebView for the Tots tab's moving face (bundled like the device stream script) and draws still faces with `react-native-svg` in lists.
+
+## Themes
+
+A Tot stores its own theme on its record: `theme?: { css?: string; effect?: string }`, each capped at 20,000 characters by [`tots.ts`](../../packages/contracts/src/tots.ts). `TotService.setTheme` merges one field and leaves the other alone; `""` or null clears that field. A Tot writes its own theme only: `t3_tot_theme_set` takes no Tot id and resolves the caller from its thread, so even a Tot whose scope is all cannot write another's.
+
+- `css` is applied like an environment theme, not as one: the server refuses what [`themeCssLoadsRemoteFiles`](../../packages/shared/src/themeCss.ts) catches, and [`totThemeCss.ts`](../../apps/web/src/components/tots/totThemeCss.ts) parses it into its own constructed sheet, runs the same `stripFetches` guard, and rewrites each selector to start at `[data-tot-id="<totId>"]`. Bare `:root`, `html` and `body` steps become the scope; a qualified step such as `:root.dark` stays as ancestor context so appearance rules still work. `@keyframes` and `@font-face` stay global on purpose. The sheet exists only while that Tot's thread is open, and it never touches the app's own theme sheet.
+- `effect` is opaque text. T3 Code stores and returns it, and the client's effect layer reads it; nothing here parses, runs, or renders it.
+- The conversation root carries `data-tot-id` and `data-thread-id` ([`totThreadScope.ts`](../../apps/web/src/components/tots/totThreadScope.ts)), whether or not the thread has messages, so CSS never needs `:has()`.
