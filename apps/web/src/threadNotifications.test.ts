@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 const SOUND_SECONDS = 0.6;
 
-const audio = { currentTime: 0, started: 0 };
+const audio = { currentTime: 0, started: 0, tones: 0, gains: [] as number[] };
 
 class FakeAudioContext {
   state = "running";
@@ -15,6 +15,31 @@ class FakeAudioContext {
   }
   decodeAudioData() {
     return Promise.resolve({ duration: SOUND_SECONDS });
+  }
+  createGain() {
+    const node = {
+      gain: {
+        set value(next: number) {
+          audio.gains.push(next);
+        },
+        setValueAtTime() {},
+        linearRampToValueAtTime() {},
+        exponentialRampToValueAtTime() {},
+      },
+      connect: () => node,
+    };
+    return node;
+  }
+  createOscillator() {
+    return {
+      type: "",
+      frequency: { value: 0 },
+      connect: (node: unknown) => node,
+      start() {
+        audio.tones += 1;
+      },
+      stop() {},
+    };
   }
   createBufferSource() {
     return {
@@ -37,6 +62,8 @@ beforeEach(() => {
   vi.resetModules();
   audio.currentTime = 0;
   audio.started = 0;
+  audio.tones = 0;
+  audio.gains = [];
   vi.stubGlobal("AudioContext", FakeAudioContext);
   vi.stubGlobal(
     "fetch",
@@ -100,5 +127,30 @@ describe("playNotificationSound", () => {
     await playNotificationSound("completion", () => true);
 
     expect(audio.started).toBe(1);
+  });
+
+  it("plays nothing for the None sound or a zero volume", async () => {
+    const { playNotificationSound } = await loadUnlocked();
+    await playNotificationSound("completion", () => true, { sound: "none", volume: 50 });
+    await playNotificationSound("completion", () => true, { sound: "classic", volume: 0 });
+    await playNotificationSound("completion", () => true, { sound: "chime", volume: 0 });
+    expect(audio.started + audio.tones).toBe(0);
+  });
+
+  it("applies the volume as gain and clamps out-of-range values", async () => {
+    const { playNotificationSound } = await loadUnlocked();
+    await playNotificationSound("completion", () => true, { sound: "classic", volume: 25 });
+    audio.currentTime = 10;
+    await playNotificationSound("completion", () => true, { sound: "classic", volume: 400 });
+    expect(audio.gains).toEqual([0.25, 1]);
+  });
+
+  it("synthesizes the soft sounds without fetching audio files", async () => {
+    const { playNotificationSound } = await loadUnlocked();
+    vi.mocked(fetch).mockClear();
+    await playNotificationSound("input", () => true, { sound: "chime", volume: 40 });
+    expect(audio.tones).toBe(3);
+    expect(audio.started).toBe(0);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
