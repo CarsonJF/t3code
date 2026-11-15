@@ -2,8 +2,12 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   cliArchiveTarCommand,
+  cliReleaseApiUrl,
   cliReleaseAssetUrl,
+  cliReleaseCommitApiUrl,
   cliReleaseDownloadBaseUrl,
+  cliReleasePageUrl,
+  cliReleaseTag,
   newestCliReleaseVersion,
   parseChecksums,
 } from "./cliRelease.ts";
@@ -66,6 +70,20 @@ describe("cliRelease", () => {
     );
     expect(cliReleaseDownloadBaseUrl(version, "https://mirror.example/t3")).toBe(
       `https://mirror.example/t3/v${version}`,
+    );
+  });
+
+  it("addresses the fork's release and commit for a build identity", () => {
+    const version = "1.2.4-nightly.20260913.1";
+    expect(cliReleaseTag(version)).toBe(`v${version}-custom`);
+    expect(cliReleaseApiUrl(version)).toBe(
+      `https://api.github.com/repos/CarsonJF/t3code/releases/tags/v${version}-custom`,
+    );
+    expect(cliReleaseCommitApiUrl(version)).toBe(
+      `https://api.github.com/repos/CarsonJF/t3code/commits/v${version}-custom`,
+    );
+    expect(cliReleasePageUrl(version)).toBe(
+      `https://github.com/CarsonJF/t3code/releases/tag/v${version}-custom`,
     );
   });
 });

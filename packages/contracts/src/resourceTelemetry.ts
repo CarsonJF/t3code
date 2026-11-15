@@ -369,6 +369,8 @@ export const DesktopTelemetryRequestDesktopUpdate = Schema.Struct({
   /** A track switch: move to this channel first, and install only `targetVersion`. */
   channel: Schema.optionalKey(DesktopUpdateChannelSchema),
   targetVersion: Schema.optionalKey(TrimmedNonEmptyString),
+  /** Reinstall the same version when the feed still offers it. */
+  force: Schema.optionalKey(Schema.Boolean),
 });
 export type DesktopTelemetryRequestDesktopUpdate = typeof DesktopTelemetryRequestDesktopUpdate.Type;
 

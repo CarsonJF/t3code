@@ -65,6 +65,19 @@ throwaway tag instead — it checks out `custom` and runs the same pipeline:
 git push -f origin publish-custom-nightly`). If the macOS job fails with "not acquired by
 Runner", arm64 runners are out of capacity: rerun with `-f mac_runner=macos-15-intel`.
 
+## Forcing an update
+
+Settings → About shows the running build (`Build <commit>, built <date>`). **Force update**
+re-checks the newest release on that build's channel and compares the release tag's commit, not
+just its version. A same-version rebuild is offered when the commits differ; the same commit is not
+offered again. The dialog shows both builds before anything installs, and an older release is never
+offered.
+
+This works for the desktop app and for a server hosted by a desktop app. A background-service
+server (`t3 service install`) can still take a newer release, but its launcher only activates newer
+versions, so a rebuild of the version it already runs must be installed on that machine. The mobile
+app has no force action; its custom APK builds turn OTA updates off.
+
 ## Resolving a rebase conflict
 
     git fetch upstream --tags && git fetch origin

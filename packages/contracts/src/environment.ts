@@ -58,6 +58,13 @@ export const WorktreeSubmodules = Schema.Literals(["recursive", "top-level", "no
 export type WorktreeSubmodules = typeof WorktreeSubmodules.Type;
 export type ExecutionEnvironmentPlatform = typeof ExecutionEnvironmentPlatform.Type;
 
+/** What a server can say about the build it runs; older servers omit it. */
+export const ExecutionEnvironmentBuild = Schema.Struct({
+  commit: Schema.optionalKey(TrimmedNonEmptyString),
+  builtAt: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type ExecutionEnvironmentBuild = typeof ExecutionEnvironmentBuild.Type;
+
 export const ServerSelfUpdateMethod = Schema.Literals(["boot-service", "respawn", "desktop-app"]);
 export type ServerSelfUpdateMethod = typeof ServerSelfUpdateMethod.Type;
 
@@ -214,6 +221,8 @@ export const ExecutionEnvironmentDescriptor = Schema.Struct({
   label: TrimmedNonEmptyString,
   platform: ExecutionEnvironmentPlatform,
   serverVersion: TrimmedNonEmptyString,
+  /** The build behind `serverVersion`; absent on builds that predate build identity. */
+  build: Schema.optionalKey(ExecutionEnvironmentBuild),
   orchestrationProtocolVersion: Schema.optionalKey(Schema.Int),
   /** Highest migration this server's database holds; absent on older servers. */
   databaseMigration: Schema.optionalKey(Schema.Int),

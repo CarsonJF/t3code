@@ -31,7 +31,14 @@ import { createModelSelection, pickModelSelection } from "@t3tools/shared/model"
 import { resolvePastedPath } from "@t3tools/shared/path";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
-import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
+import {
+  APP_BUILD,
+  APP_DISPLAY_NAME,
+  APP_VERSION,
+  HOSTED_APP_CHANNEL,
+  HOSTED_APP_CHANNEL_LABEL,
+} from "../../branding";
+import { describeBuildIdentity } from "@t3tools/shared/buildIdentity";
 import { AboutVersionTitle } from "./AboutVersionTitle";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
 import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
@@ -122,7 +129,10 @@ import { environmentIdsKey } from "~/state/environmentAtomList";
 import { environmentSessionStatesAtom } from "~/state/session";
 import { useCheckProviderUpdates } from "../ProviderUpdatesAction";
 import { canUpdateServer } from "../ServerUpdateAction";
-import { downloadLocalUpdate } from "../sidebar/SidebarUpdatePill";
+import { downloadLocalUpdate, installLocalUpdate } from "../sidebar/SidebarUpdatePill";
+import { ForceUpdateAction } from "./ForceUpdateAction";
+import type { ForceUpdatePlan, ForceUpdateSubject } from "./forceUpdate.logic";
+import { HostedServerUpdateRow } from "./HostedServerUpdateRow";
 import { useUpdateEverythingRun } from "../sidebar/updateEverythingRun";
 import { awaitsTrackSwitch, channelSwitchLabel } from "../sidebar/updateEverything.logic";
 import { isHostedByThisApp } from "../sidebar/useUpdateEverything";
@@ -293,6 +303,29 @@ function AboutVersionSection() {
       ? !canCheckForUpdate(updateState)
       : isDesktopUpdateButtonDisabled(updateState);
 
+  const appForceSubject: ForceUpdateSubject = {
+    kind: "app",
+    label: APP_DISPLAY_NAME,
+    current: APP_BUILD,
+  };
+  const installForcedApp = async (plan: ForceUpdatePlan): Promise<boolean> => {
+    const bridge = window.desktopBridge;
+    if (!bridge || typeof bridge.forceCheckForUpdate !== "function") return false;
+    const check = await bridge.forceCheckForUpdate();
+    if (!check.checked) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Could not check for updates",
+          description: check.state.message ?? "The update check failed.",
+        }),
+      );
+      return false;
+    }
+    if (!(await downloadLocalUpdate(bridge, { notifyDownloaded: false }))) return false;
+    return installLocalUpdate(bridge, undefined, plan.available.version);
+  };
+
   const actionLabel: Record<string, string> = { download: "Download", install: "Install" };
   const statusLabel: Record<string, string> = {
     checking: "Checking…",
@@ -316,23 +349,45 @@ function AboutVersionSection() {
         description={description}
         managed={updatesDenial}
         control={
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={buttonDisabled || isUpdateActionPending}
-                  onClick={handleButtonClick}
-                >
-                  {buttonLabel}
-                </Button>
-              }
-            />
-            {buttonTooltip ? <TooltipPopup>{buttonTooltip}</TooltipPopup> : null}
-          </Tooltip>
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={buttonDisabled || isUpdateActionPending}
+                    onClick={handleButtonClick}
+                  >
+                    {buttonLabel}
+                  </Button>
+                }
+              />
+              {buttonTooltip ? <TooltipPopup>{buttonTooltip}</TooltipPopup> : null}
+            </Tooltip>
+            {hasDesktopBridge && action === "none" ? (
+              <ForceUpdateAction
+                subject={appForceSubject}
+                size="sm"
+                variant="ghost"
+                disabled={updatesDenial !== undefined}
+                onInstall={installForcedApp}
+              />
+            ) : null}
+          </div>
         }
       />
+      {APP_BUILD.commit === undefined ? null : (
+        <SettingsRow
+          title="Build"
+          description={describeBuildIdentity(APP_BUILD)}
+          control={
+            <span className="text-muted-foreground text-xs">
+              Updates compare this build, not only the version.
+            </span>
+          }
+        />
+      )}
       {hasDesktopBridge ? (
         <SettingsRow
           {...searchableSetting("update-track")}
@@ -2329,6 +2384,18 @@ export function AboutSettingsPanel() {
               title={<AboutVersionTitle />}
               description="Current version of the application."
             />
+            {APP_BUILD.commit === undefined ? null : (
+              <SettingsRow
+                title="Build"
+                description={describeBuildIdentity(APP_BUILD)}
+                control={
+                  <span className="text-muted-foreground text-xs">
+                    Updates compare this build, not only the version.
+                  </span>
+                }
+              />
+            )}
+            <HostedServerUpdateRow />
           </>
         )}
         <MobileAppSettingsRow />

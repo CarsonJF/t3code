@@ -337,6 +337,38 @@ it.layer(NodeServices.layer)("server self update", (it) => {
     }),
   );
 
+  it.effect("refuses to reinstall the same version on a background service", () =>
+    Effect.gen(function* () {
+      const { selfUpdate, order, urls } = yield* makeHarness();
+      expect(
+        (yield* selfUpdate
+          .update({ targetVersion: packageJson.version, force: true })
+          .pipe(Effect.flip)).reason,
+      ).toContain("same version");
+      expect(order).toEqual([]);
+      expect(urls).toEqual([]);
+    }),
+  );
+
+  it.effect("passes the force flag to a desktop-managed update", () =>
+    Effect.gen(function* () {
+      let forced: boolean | undefined;
+      const { selfUpdate } = yield* makeHarness({
+        mode: "desktop",
+        desktopAppUpdate: {
+          available: true,
+          run: (_reportProgress, _trackSwitch, force) => {
+            forced = force;
+            return Effect.succeed({ targetVersion: "1.1.0", method: "desktop-app" as const });
+          },
+          commit: () => Effect.never,
+        },
+      });
+      yield* selfUpdate.update({ targetVersion: "1.1.0", force: true });
+      expect(forced).toBe(true);
+    }),
+  );
+
   it.effect("allows only one update at a time", () =>
     Effect.gen(function* () {
       const requested = yield* Deferred.make<void>();

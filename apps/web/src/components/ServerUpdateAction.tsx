@@ -96,6 +96,8 @@ export interface ServerUpdateTarget {
   readonly targetDatabaseMigration?: number;
   /** The host already runs its track's newest build and only saves the track. */
   readonly trackOnly?: boolean;
+  /** Reinstall the release even when the target version matches the running one. */
+  readonly force?: boolean;
 }
 
 type UpdateButtonProps = Pick<ComponentProps<typeof Button>, "variant" | "size" | "className"> & {
@@ -140,6 +142,7 @@ export function useServerUpdate() {
         ...(target.targetDatabaseMigration === undefined
           ? {}
           : { targetDatabaseMigration: target.targetDatabaseMigration }),
+        ...(target.force === true ? { force: true } : {}),
       },
     });
     pendingUpdateEnvironmentIds.delete(environmentId);

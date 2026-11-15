@@ -47,6 +47,25 @@ export function cliArchiveFileName(version: string, platformKey: CliArchivePlatf
 
 const CLI_RELEASE_DEFAULT_BASE_URL = `https://github.com/${CLI_RELEASE_REPOSITORY}/releases/download`;
 
+/** The fork publishes every build under `<version>-custom`, including stable versions. */
+export function cliReleaseTag(version: string): string {
+  return `v${version}${CLI_RELEASE_TAG_SUFFIX}`;
+}
+
+/** GitHub's release JSON, which carries `published_at` and each asset's digest. */
+export function cliReleaseApiUrl(version: string): string {
+  return `https://api.github.com/repos/${CLI_RELEASE_REPOSITORY}/releases/tags/${encodeURIComponent(cliReleaseTag(version))}`;
+}
+
+/** Resolves a tag to the commit the release was built from. */
+export function cliReleaseCommitApiUrl(version: string): string {
+  return `https://api.github.com/repos/${CLI_RELEASE_REPOSITORY}/commits/${encodeURIComponent(cliReleaseTag(version))}`;
+}
+
+export function cliReleasePageUrl(version: string): string {
+  return `https://github.com/${CLI_RELEASE_REPOSITORY}/releases/tag/${encodeURIComponent(cliReleaseTag(version))}`;
+}
+
 export function cliReleaseDownloadBaseUrl(
   version: string,
   baseUrl: string | undefined = CLI_RELEASE_DEFAULT_BASE_URL,

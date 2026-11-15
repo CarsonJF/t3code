@@ -88,6 +88,8 @@ export class ElectronUpdater extends Context.Service<
     readonly setFullChangelog: (value: boolean) => Effect.Effect<void>;
     readonly setDisableDifferentialDownload: (value: boolean) => Effect.Effect<void>;
     readonly checkForUpdates: Effect.Effect<void, ElectronUpdaterCheckForUpdatesError>;
+    /** Reads the feed even when it offers the running version, returning the info to install. */
+    readonly forceCheckForUpdates: Effect.Effect<unknown, ElectronUpdaterCheckForUpdatesError>;
     readonly downloadUpdate: Effect.Effect<void, ElectronUpdaterDownloadUpdateError>;
     readonly quitAndInstall: (options: {
       readonly isSilent: boolean;
@@ -159,6 +161,23 @@ export const make = ElectronUpdater.of({
       try: () => autoUpdater.checkForUpdates(),
       catch: (cause) => new ElectronUpdaterCheckForUpdatesError({ channel, cause }),
     }).pipe(Effect.asVoid);
+  }),
+  forceCheckForUpdates: Effect.suspend(() => {
+    const channel = autoUpdater.channel;
+    return Effect.tryPromise({
+      try: async () => {
+        // electron-updater skips availability on an equal version before it stores the info.
+        // Read the feed ourselves and keep it, so downloadUpdate has something to install.
+        const internals = autoUpdater as unknown as {
+          getUpdateInfoAndProvider: () => Promise<{ info: unknown; provider: unknown }>;
+          updateInfoAndProvider: unknown;
+        };
+        const infoAndProvider = await internals.getUpdateInfoAndProvider();
+        internals.updateInfoAndProvider = infoAndProvider;
+        return infoAndProvider.info;
+      },
+      catch: (cause) => new ElectronUpdaterCheckForUpdatesError({ channel, cause }),
+    });
   }),
   downloadUpdate: Effect.suspend(() => {
     const channel = autoUpdater.channel;

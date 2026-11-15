@@ -8,11 +8,13 @@ import {
 import { useAtomValue } from "@effect/atom-react";
 import { useEffect, useEffectEvent, useState } from "react";
 import {
+  AuthEnvironmentMaintainScope,
   AuthRelayWriteScope,
   type EnvironmentId,
   connectReachabilityHelpUrl,
   formatConnectReachable,
   managedCapabilityDenial,
+  managedUpdatesDenial,
   resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
 import {
@@ -55,7 +57,7 @@ import { useManagedTunnelUsage } from "~/cloud/managedRelayState";
 import { useT3ConnectAccountPage } from "../clerk/T3ConnectAccountPages";
 import { TunnelLimitAlert, TunnelUsageMeter } from "../cloud/TunnelUsage";
 import { environmentCatalog } from "~/connection/catalog";
-import { readEnvironmentScope } from "~/state/session";
+import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { type EnvironmentPresentation, useRelayEnvironmentDiscovery } from "~/state/environments";
 import { APP_VERSION } from "~/branding";
 import { useManagedPolicy } from "~/state/managedPolicy";
@@ -66,7 +68,11 @@ import {
   OutdatedServerUpdateAction,
   ServerUpdateAction,
   ServerUpdateProgress,
+  useServerUpdate,
+  type ServerUpdateTarget,
 } from "../ServerUpdateAction";
+import { ForceUpdateAction } from "./ForceUpdateAction";
+import type { ForceUpdatePlan, ForceUpdateSubject } from "./forceUpdate.logic";
 import { CloudEnvironmentConnectRows } from "../cloud/CloudEnvironmentConnectList";
 import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
 
@@ -165,6 +171,8 @@ export function SavedBackendListRow({
   });
   const versionMismatch = resolveServerConfigVersionMismatch(environment.serverConfig);
   const serverUpdateState = useAtomValue(serverEnvironment.updateStateAtom(environmentId));
+  const canMaintainEnvironment = useEnvironmentScope(environmentId, AuthEnvironmentMaintainScope);
+  const managedPolicy = useManagedPolicy(environmentId);
   const resumingServerUpdate =
     serverUpdateState.status === "running" && serverUpdateState.stage === "resuming";
   const status = savedBackendStatus(environment);
@@ -221,6 +229,48 @@ export function SavedBackendListRow({
     isConnected &&
     versionMismatch !== null &&
     (serverUpdateState.status === "idle" || serverUpdateState.status === "failed");
+
+  const updateServer = useServerUpdate();
+  const forceUpdateSubject: ForceUpdateSubject = {
+    kind: "environment",
+    label: `${environment.label} server`,
+    current: {
+      version: serverVersion ?? APP_VERSION,
+      ...(environment.serverConfig?.environment.build?.commit === undefined
+        ? {}
+        : { commit: environment.serverConfig.environment.build.commit }),
+      ...(environment.serverConfig?.environment.build?.builtAt === undefined
+        ? {}
+        : { builtAt: environment.serverConfig.environment.build.builtAt }),
+    },
+    environment: {
+      connected: isConnected,
+      canMaintain: canMaintainEnvironment,
+      updating: serverUpdateState.status === "running",
+      selfUpdate: resolveServerSelfUpdateCapability(environment.serverConfig),
+      desktopAppUpdate: supportsDesktopAppUpdate(environment.serverConfig),
+    },
+  };
+  const showForceUpdateAction =
+    enabled &&
+    isConnected &&
+    versionMismatch === null &&
+    managedUpdatesDenial(managedPolicy) === undefined &&
+    serverUpdateState.status !== "running";
+
+  const installForcedUpdate = async (plan: ForceUpdatePlan): Promise<boolean> => {
+    const target: ServerUpdateTarget = {
+      environmentId,
+      serverLabel: `${environment.label} server`,
+      selfUpdate: resolveServerSelfUpdateCapability(environment.serverConfig),
+      installation: environment.serverConfig?.environment.capabilities.serverInstallation,
+      desktopAppUpdate: supportsDesktopAppUpdate(environment.serverConfig),
+      targetVersion: plan.available.version,
+      force: true,
+    };
+    const outcome = await updateServer(target);
+    return outcome.status === "updated";
+  };
 
   const statusTooltip = `${
     unsupported
@@ -362,6 +412,14 @@ export function SavedBackendListRow({
           fromVersion={lastDescriptor?.serverVersion}
           targetVersion={APP_VERSION}
           label={serverUpdateState.status === "failed" ? "Retry update" : "Update"}
+        />
+      ) : null}
+      {showForceUpdateAction ? (
+        <ForceUpdateAction
+          subject={forceUpdateSubject}
+          size="xs"
+          variant="outline"
+          onInstall={installForcedUpdate}
         />
       ) : null}
       {showUpdateAction ? (

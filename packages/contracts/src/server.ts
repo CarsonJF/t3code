@@ -1014,6 +1014,8 @@ export const ServerSelfUpdateInput = Schema.Struct({
   /** The target release's highest migration; the host refuses to leave Nightly without it. */
   targetDatabaseMigration: Schema.optionalKey(Schema.Int),
   stageOnly: Schema.optionalKey(Schema.Boolean),
+  /** Reinstall the release even when the version string matches; the host still refuses older builds. */
+  force: Schema.optionalKey(Schema.Boolean),
 });
 export type ServerSelfUpdateInput = typeof ServerSelfUpdateInput.Type;
 

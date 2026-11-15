@@ -191,7 +191,10 @@ export class DesktopTelemetryReceiver extends Context.Service<
     readonly announceServerReady: Effect.Effect<void, DesktopTelemetryControlError>;
     readonly requestDesktopUpdate: (
       requestId: string,
-      trackSwitch?: DesktopTrackSwitch,
+      options?: {
+        readonly trackSwitch?: DesktopTrackSwitch;
+        readonly force?: boolean;
+      },
     ) => Effect.Effect<void, DesktopTelemetryControlError>;
     readonly commitDesktopUpdate: (
       requestId: string,
@@ -723,12 +726,13 @@ export const make = Effect.fn("resourceTelemetry.desktopTelemetryReceiver.make")
       Effect.withSpan("DesktopTelemetryReceiver.announceServerReady"),
     ),
     requestDesktopUpdate: Effect.fn("DesktopTelemetryReceiver.requestDesktopUpdate")(
-      function (requestId, trackSwitch) {
+      function (requestId, options) {
         return sendControlMessage({
           version: 1,
           type: "requestDesktopUpdate",
           requestId,
-          ...trackSwitch,
+          ...options?.trackSwitch,
+          ...(options?.force === true ? { force: true } : {}),
         });
       },
     ),

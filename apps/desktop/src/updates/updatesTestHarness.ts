@@ -25,6 +25,10 @@ export interface UpdatesHarnessOptions {
     void,
     ElectronUpdater.ElectronUpdaterCheckForUpdatesError
   >;
+  readonly forceCheckForUpdates?: Effect.Effect<
+    unknown,
+    ElectronUpdater.ElectronUpdaterCheckForUpdatesError
+  >;
   readonly beforeSetUpdateChannel?: Effect.Effect<void>;
   readonly setUpdateChannelError?: DesktopAppSettings.DesktopSettingsWriteError;
   readonly setDisableDifferentialDownload?: Effect.Effect<void>;
@@ -98,6 +102,12 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
       checkCount += 1;
       checkAllowedDowngrade.push(allowDowngrade);
     }).pipe(Effect.andThen(options.checkForUpdates ?? Effect.void)),
+    forceCheckForUpdates: Effect.sync(() => {
+      checkCount += 1;
+      checkAllowedDowngrade.push(allowDowngrade);
+    }).pipe(
+      Effect.andThen(options.forceCheckForUpdates ?? Effect.die("unexpected forced update check")),
+    ),
     downloadUpdate: Effect.sync(() => {
       downloadCount += 1;
     }).pipe(Effect.andThen(options.downloadUpdate ?? Effect.void)),

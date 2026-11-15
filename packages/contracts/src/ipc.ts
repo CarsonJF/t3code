@@ -1170,6 +1170,8 @@ export interface DesktopBridge {
     minimumVersion?: string,
   ) => Promise<DesktopUpdateState>;
   checkForUpdate: () => Promise<DesktopUpdateCheckResult>;
+  /** Re-checks the feed and offers the same version when its build differs. */
+  forceCheckForUpdate: () => Promise<DesktopUpdateCheckResult>;
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   /** With a version, installs only that downloaded build. */
   installUpdate: (expectedVersion?: string) => Promise<DesktopUpdateActionResult>;

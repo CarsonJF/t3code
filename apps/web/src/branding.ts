@@ -1,4 +1,6 @@
 import type { DesktopAppBranding } from "@t3tools/contracts";
+import type { BuildIdentity } from "@t3tools/shared/buildIdentity";
+import { normalizeBuildCommit } from "@t3tools/shared/buildIdentity";
 import {
   formatAppDisplayName,
   resolveHostedAppChannelLabel,
@@ -30,6 +32,13 @@ export const APP_DISPLAY_NAME =
   injectedDesktopAppBranding?.displayName ??
   formatAppDisplayName({ baseName: APP_BASE_NAME, stageLabel: APP_STAGE_LABEL });
 export const APP_VERSION = import.meta.env.APP_VERSION || "0.0.0";
+const appCommit = normalizeBuildCommit(import.meta.env.APP_COMMIT);
+/** The build behind APP_VERSION, for the force-update comparison. */
+export const APP_BUILD: BuildIdentity = {
+  version: APP_VERSION,
+  ...(appCommit === undefined ? {} : { commit: appCommit }),
+  ...(import.meta.env.APP_BUILT_AT ? { builtAt: import.meta.env.APP_BUILT_AT } : {}),
+};
 export const DESKTOP_DOWNLOAD_URL = "https://t3.codes/download";
 // Redirects to the App Store or Google Play to match the phone that opens it.
 export const MOBILE_APP_URL = "https://t3.codes/mobile";

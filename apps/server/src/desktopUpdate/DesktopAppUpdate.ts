@@ -45,6 +45,7 @@ export class DesktopAppUpdate extends Context.Service<
         stage: ServerSelfUpdateProgressStage,
       ) => Effect.Effect<void, ServerSelfUpdateError>,
       trackSwitch?: DesktopTelemetryReceiver.DesktopTrackSwitch,
+      force?: boolean,
     ) => Effect.Effect<ServerSelfUpdateResult, ServerSelfUpdateError>;
     /** Success stops the server; returns only on installation failure or timeout. */
     readonly commit: (
@@ -143,7 +144,7 @@ export const make = Effect.fn("desktopUpdate.desktopAppUpdate.make")(function* (
   });
 
   const run: DesktopAppUpdate["Service"]["run"] = Effect.fn("desktopUpdate.desktopAppUpdate.run")(
-    function* (reportProgress, trackSwitch) {
+    function* (reportProgress, trackSwitch, force = false) {
       if (!available) {
         return yield* failWith(
           "This server was not started by the T3 Code desktop app, so it cannot drive a desktop update.",
@@ -165,7 +166,10 @@ export const make = Effect.fn("desktopUpdate.desktopAppUpdate.make")(function* (
           // Subscribe before requesting to catch fast reports.
           const { changes } = yield* receiver.desktopUpdates;
           yield* receiver
-            .requestDesktopUpdate(requestId, trackSwitch)
+            .requestDesktopUpdate(requestId, {
+              ...(trackSwitch === undefined ? {} : { trackSwitch }),
+              ...(force ? { force: true } : {}),
+            })
             .pipe(
               Effect.mapError((error) =>
                 failWith("Could not reach the T3 Code desktop app on this machine.", error),

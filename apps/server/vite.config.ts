@@ -1,6 +1,9 @@
 import "vite-plus/test/config";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- build metadata needs git at config time.
+import * as NodeChildProcess from "node:child_process";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- tsdown needs the asset path when it reads this config.
 import * as NodePath from "node:path";
+import * as DateTime from "effect/DateTime";
 import { defineConfig, mergeConfig } from "vite-plus";
 
 import baseConfig from "../../vite.config.ts";
@@ -25,6 +28,23 @@ const buildVersion =
   process.env.APP_VERSION?.trim() ||
   resolveTaggedSourceVersion(NodePath.join(import.meta.dirname, "../.."), packageJson.version);
 const cliBuildChannel = /^[^-+]+-(?:nightly|preview)\./.test(buildVersion) ? "nightly" : "latest";
+// The updater compares this instead of the version, which stays the upstream tag for every custom build.
+const buildCommit = (() => {
+  const configured = process.env.T3CODE_COMMIT_HASH?.trim().toLowerCase();
+  if (configured !== undefined && /^[0-9a-f]{7,40}$/.test(configured)) return configured;
+  try {
+    const hash = NodeChildProcess.execFileSync("git", ["rev-parse", "--short=12", "HEAD"], {
+      cwd: NodePath.join(import.meta.dirname, "../.."),
+      encoding: "utf8",
+    })
+      .trim()
+      .toLowerCase();
+    return /^[0-9a-f]{7,40}$/.test(hash) ? hash : undefined;
+  } catch {
+    return undefined;
+  }
+})();
+const buildTime = process.env.T3CODE_BUILD_TIME?.trim() || DateTime.formatIso(DateTime.nowUnsafe());
 // Official release workflows set the telemetry channel; local builds and forks use "dev".
 const TELEMETRY_CHANNELS = ["stable", "nightly", "preview", "dev"];
 const telemetryChannel = process.env.T3CODE_TELEMETRY_CHANNEL?.trim() || "dev";
@@ -99,7 +119,13 @@ export default mergeConfig(
           load(id) {
             if (NodePath.resolve(id) !== serverManifestPath) return;
             return {
-              code: JSON.stringify({ ...packageJson, version: buildVersion }),
+              code: JSON.stringify({
+                ...packageJson,
+                version: buildVersion,
+                ...(buildCommit === undefined
+                  ? {}
+                  : { t3codeCommitHash: buildCommit, t3codeBuildTime: buildTime }),
+              }),
               moduleType: "json",
             };
           },

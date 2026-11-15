@@ -195,6 +195,7 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
           input.channel === undefined
             ? undefined
             : { channel: input.channel, targetVersion: input.targetVersion },
+          input.force === true,
         );
       }
       return yield* failWith(
@@ -214,6 +215,11 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
     const targetVersion = input.targetVersion.trim();
     if (!isExactServiceVersion(targetVersion)) {
       return yield* failWith(`'${targetVersion}' is not an exact t3 version.`);
+    }
+    if (input.force === true && targetVersion === packageJson.version) {
+      return yield* failWith(
+        `t3@${targetVersion} is already running here. The service launcher only activates newer versions, so a rebuild of the same version has to be installed on this machine.`,
+      );
     }
     if (yield* Ref.getAndSet(inFlight, true)) {
       return yield* failWith("A server update is already in progress.");

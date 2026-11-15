@@ -1,5 +1,8 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Vite config runs before any Effect runtime.
+import * as NodeChildProcess from "node:child_process";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Vite config runs before any Effect runtime.
 import * as NodeFSP from "node:fs/promises";
+import * as NodeURL from "node:url";
 import * as NodeZlib from "node:zlib";
 
 import react from "@vitejs/plugin-react";
@@ -30,6 +33,24 @@ Object.assign(process.env, repoEnv);
 
 // Signal single-origin dev explicitly; loadRepoEnv can restore deleted URL keys from .env.
 const isSingleOriginDev = process.env.T3CODE_SINGLE_ORIGIN_DEV === "1";
+
+// The desktop build and the served web client share this bundle, so both report the same build.
+const buildCommit = (() => {
+  const configured = process.env.T3CODE_COMMIT_HASH?.trim().toLowerCase();
+  if (configured !== undefined && /^[0-9a-f]{7,40}$/.test(configured)) return configured;
+  try {
+    const hash = NodeChildProcess.execFileSync("git", ["rev-parse", "--short=12", "HEAD"], {
+      cwd: NodeURL.fileURLToPath(new URL("../..", import.meta.url)),
+      encoding: "utf8",
+    })
+      .trim()
+      .toLowerCase();
+    return /^[0-9a-f]{7,40}$/.test(hash) ? hash : "";
+  } catch {
+    return "";
+  }
+})();
+const buildTime = process.env.T3CODE_BUILD_TIME?.trim() || new Date().toISOString();
 
 const port = Number(process.env.PORT ?? 5733);
 const explicitHost = process.env.HOST?.trim();
@@ -372,6 +393,8 @@ export default defineConfig(({ command }) => {
       "import.meta.env.T3CODE_FEATURE_SECRETS": JSON.stringify(configuredFeatureSecrets),
       "import.meta.env.VITE_RELEASE_CHANNEL": JSON.stringify(configuredReleaseChannel),
       "import.meta.env.APP_VERSION": JSON.stringify(configuredAppVersion),
+      "import.meta.env.APP_COMMIT": JSON.stringify(buildCommit),
+      "import.meta.env.APP_BUILT_AT": JSON.stringify(buildTime),
     },
     resolve: {
       tsconfigPaths: true,

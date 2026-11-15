@@ -281,14 +281,19 @@ export const listen: Effect.Effect<
               return false;
             case "check":
               attempts = { ...attempts, checks: attempts.checks + 1 };
-              yield* updates.check("remote-update", { allowDowngrade: crossing(state) }).pipe(
-                Effect.flatMap((result) => {
-                  if (result.checked) return Effect.void;
-                  attempts = { ...attempts, checks: attempts.checks - 1 };
-                  return retryLater(state);
-                }),
-                Effect.forkScoped,
-              );
+              yield* updates
+                .check("remote-update", {
+                  allowDowngrade: crossing(state),
+                  force: request.force === true,
+                })
+                .pipe(
+                  Effect.flatMap((result) => {
+                    if (result.checked) return Effect.void;
+                    attempts = { ...attempts, checks: attempts.checks - 1 };
+                    return retryLater(state);
+                  }),
+                  Effect.forkScoped,
+                );
               return false;
             case "download":
               attempts = { ...attempts, downloads: attempts.downloads + 1 };

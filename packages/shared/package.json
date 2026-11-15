@@ -115,6 +115,10 @@
       "types": "./src/semver.ts",
       "import": "./src/semver.ts"
     },
+    "./buildIdentity": {
+      "types": "./src/buildIdentity.ts",
+      "import": "./src/buildIdentity.ts"
+    },
     "./Net": {
       "types": "./src/Net.ts",
       "import": "./src/Net.ts"

@@ -256,6 +256,49 @@ describe("DesktopUpdates", () => {
     ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
   });
 
+  it.effect("force check offers the same version from the feed", () => {
+    const harness = makeHarness({
+      appVersion: "1.2.4",
+      forceCheckForUpdates: Effect.succeed({
+        version: "1.2.4",
+        releaseDate: "2026-11-14T10:00:00Z",
+      }),
+    });
+
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const updates = yield* DesktopUpdates.DesktopUpdates;
+        yield* updates.configure;
+
+        const result = yield* updates.check("force", { force: true });
+
+        assert.isTrue(result.checked);
+        assert.equal(result.state.status, "available");
+        assert.equal(result.state.availableVersion, "1.2.4");
+        assert.equal(harness.checkCount(), 1);
+      }),
+    ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
+  });
+
+  it.effect("force check never offers an older build", () => {
+    const harness = makeHarness({
+      appVersion: "1.2.4",
+      forceCheckForUpdates: Effect.succeed({ version: "1.2.3" }),
+    });
+
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const updates = yield* DesktopUpdates.DesktopUpdates;
+        yield* updates.configure;
+
+        const result = yield* updates.check("force", { force: true });
+
+        assert.equal(result.state.status, "up-to-date");
+        assert.equal(result.state.availableVersion, null);
+      }),
+    ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
+  });
+
   it.effect("checks shortly after startup and then every four hours", () => {
     const harness = makeHarness();
 

@@ -214,7 +214,7 @@ export class DesktopUpdates extends Context.Service<
     /** `allowDowngrade` is for a guarded track switch, which checked that older release. */
     readonly check: (
       reason: string,
-      options?: { readonly allowDowngrade?: boolean },
+      options?: { readonly allowDowngrade?: boolean; readonly force?: boolean },
     ) => Effect.Effect<DesktopUpdateCheckResult>;
     readonly download: Effect.Effect<DesktopUpdateActionResult>;
     readonly install: Effect.Effect<DesktopUpdateActionResult>;
@@ -561,6 +561,7 @@ export const make = Effect.gen(function* () {
     reason: string,
     actionReservation: "acquire" | "held" = "acquire",
     allowDowngrade = false,
+    force = false,
   ) {
     yield* Effect.annotateCurrentSpan({ reason });
     if (yield* Ref.get(desktopState.quitting)) return false;
@@ -585,6 +586,54 @@ export const make = Effect.gen(function* () {
         yield* setState(reduceDesktopUpdateStateOnCheckStart(state, yield* currentIsoTimestamp));
       }
       yield* logUpdaterInfo("checking for updates", { reason });
+
+      if (force) {
+        const checkedAt = yield* currentIsoTimestamp;
+        return yield* electronUpdater.forceCheckForUpdates.pipe(
+          Effect.flatMap((info) => {
+            const version = (info as { readonly version?: unknown } | null)?.version;
+            // A force check skips electron-updater's version gate, so keep older builds out here.
+            if (
+              typeof version === "string" &&
+              compareSemverVersions(version, environment.appVersion) < 0
+            ) {
+              return Ref.get(updateStateRef).pipe(
+                Effect.flatMap((current) =>
+                  setState(reduceDesktopUpdateStateOnNoUpdate(current, checkedAt)),
+                ),
+              );
+            }
+            return handleUpdateAvailable(info);
+          }),
+          // A failed decode leaves the check state; treat it as no offer rather than stuck checking.
+          Effect.tap(() =>
+            Ref.get(updateStateRef).pipe(
+              Effect.flatMap((current) =>
+                current.status === "checking"
+                  ? setState(reduceDesktopUpdateStateOnNoUpdate(current, checkedAt))
+                  : Effect.void,
+              ),
+            ),
+          ),
+          Effect.as(true),
+          Effect.catchTags({
+            ElectronUpdaterCheckForUpdatesError: Effect.fn(
+              "desktop.updates.handleForceCheckForUpdatesFailure",
+            )(function* (error) {
+              const failedAt = yield* currentIsoTimestamp;
+              yield* updateState((current) =>
+                reduceDesktopUpdateStateOnCheckFailure(current, error.message, failedAt),
+              );
+              yield* logUpdaterError(error.message, {
+                errorTag: error._tag,
+                cause: describeUpdateErrorCause(error.cause),
+                channel: error.channel,
+              });
+              return true;
+            }),
+          }),
+        );
+      }
 
       // The flag is shared updater state, so it flips only while this check holds the reservation.
       const restoreDowngrade = yield* electronUpdater.allowDowngrade;
@@ -1341,7 +1390,7 @@ export const make = Effect.gen(function* () {
     }),
     check: Effect.fn("desktop.updates.check")(function* (
       reason: string,
-      options?: { readonly allowDowngrade?: boolean },
+      options?: { readonly allowDowngrade?: boolean; readonly force?: boolean },
     ) {
       yield* Effect.annotateCurrentSpan({ reason });
       if (!(yield* Ref.get(updaterConfiguredRef))) {
@@ -1350,7 +1399,12 @@ export const make = Effect.gen(function* () {
           state: yield* Ref.get(updateStateRef),
         };
       }
-      const checked = yield* checkForUpdates(reason, "acquire", options?.allowDowngrade === true);
+      const checked = yield* checkForUpdates(
+        reason,
+        "acquire",
+        options?.allowDowngrade === true,
+        options?.force === true,
+      );
       return {
         checked,
         state: yield* Ref.get(updateStateRef),
