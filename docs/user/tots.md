@@ -21,6 +21,7 @@ Tots always run in full access, and they can approve requests in your other thre
 
 - Threads a Tot starts are normal threads you can open and steer. You are not notified about them; the Tot tells you what matters in its own thread.
 - A Tot hears about the threads it started when they finish, fail, ask a question or need an approval. Ask it to watch other threads too.
+- A Tot whose scope is all, such as Home, can create and turn on new Tots when you ask, here or on a linked environment. A new Tot cannot be given more scope than its creator has.
 - Home can hand work to another Tot and hears back when that work ends.
 - Tots never delete threads or projects. They archive or settle them.
 
