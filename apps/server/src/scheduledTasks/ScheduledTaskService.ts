@@ -25,6 +25,7 @@ import {
   type ScheduledTaskThreadMode,
   type ScheduledTaskUpsertInput,
   managedPolicyDeniedMessage,
+  scheduledTaskListenerMode,
   scheduledTaskThreadMode,
   managedRuntimeModeDenial,
 } from "@t3tools/contracts";
@@ -77,7 +78,12 @@ import {
   dedupeError,
 } from "./webhookDedupe.ts";
 import { describeFailedWebhookFilter, findFailedWebhookFilter } from "./webhookFilter.ts";
-import { constantTimeEquals, verifyWebhookSignature } from "./webhookVerification.ts";
+import { renderWebhookNotice, webhookListenerPromptTemplate } from "./webhookListener.ts";
+import {
+  constantTimeEquals,
+  verifyWebhookBearer,
+  verifyWebhookSignature,
+} from "./webhookVerification.ts";
 
 export const WEBHOOK_ROUTE_PREFIX = "/api/hooks";
 const isScheduledTaskError = Schema.is(ScheduledTaskError);
@@ -152,6 +158,7 @@ export type WebhookDeliveryOutcome =
   | "prompt_too_long"
   | "queue_full"
   | "rate_limited"
+  | "cooldown"
   | "disabled"
   | "rejected_signature"
   | "expired"
@@ -164,7 +171,14 @@ export type WebhookTriggerResult =
   | {
       readonly _tag: "accepted";
       readonly deliveryId: ScheduledTaskWebhookDeliveryId;
-      readonly outcome: "accepted" | "duplicate" | "coalesced" | "prompt_too_long" | "filtered";
+      readonly outcome:
+        | "accepted"
+        | "duplicate"
+        | "coalesced"
+        | "prompt_too_long"
+        | "filtered"
+        | "cooldown"
+        | "dispatch_failed";
     }
   | { readonly _tag: "not_found" }
   | { readonly _tag: "rejected_signature" }
@@ -500,6 +514,9 @@ export const layer = Layer.effect(
     // Include creation time so late deliveries cannot decrement a recreated task's count.
     const webhookQueued = yield* Ref.make<ReadonlyMap<string, number>>(new Map());
     const webhookRateWindows = yield* Ref.make<ReadonlyMap<ScheduledTaskId, RateWindow>>(new Map());
+    const webhookListenerCooldowns = yield* Ref.make<ReadonlyMap<ScheduledTaskId, number>>(
+      new Map(),
+    );
     const webhookRejectedRateWindows = yield* Ref.make<ReadonlyMap<ScheduledTaskId, RateWindow>>(
       new Map(),
     );
@@ -1452,6 +1469,47 @@ export const layer = Layer.effect(
           ? managedRuntimeModeDenial(managedPolicy.summary, input.runtimeMode)
           : undefined;
       if (modeDenial !== undefined) return yield* taskError(modeDenial, { taskId: id });
+      const storedWebhook =
+        existingTask?.schedule.type === "webhook" ? existingTask.schedule : undefined;
+      const signatureInput =
+        input.schedule.type === "webhook" ? input.schedule.signature : undefined;
+      const bearerInput = input.schedule.type === "webhook" ? input.schedule.bearer : undefined;
+      const signature: Extract<ScheduledTask["schedule"], { type: "webhook" }>["signature"] =
+        signatureInput === undefined
+          ? bearerInput != null
+            ? null
+            : (storedWebhook?.signature ?? null)
+          : signatureInput == null
+            ? null
+            : {
+                header: signatureInput.header.toLowerCase(),
+                encoding: signatureInput.encoding,
+                prefix: signatureInput.prefix,
+              };
+      const bearer: Extract<ScheduledTask["schedule"], { type: "webhook" }>["bearer"] =
+        bearerInput === undefined
+          ? signatureInput != null
+            ? null
+            : storedWebhook?.bearer
+          : bearerInput == null
+            ? null
+            : { header: bearerInput.header.toLowerCase() };
+      if (signature != null && bearer != null) {
+        return yield* taskError("Use either a signature or a static header check, not both.", {
+          taskId: id,
+        });
+      }
+      const listener =
+        input.schedule.type === "webhook"
+          ? input.schedule.listener === undefined
+            ? storedWebhook?.listener
+            : (input.schedule.listener ?? undefined)
+          : undefined;
+      if (listener !== undefined && threadId === null) {
+        return yield* taskError("A webhook listener needs a bound thread to post into.", {
+          taskId: id,
+        });
+      }
       // Keep the existing next_run_at when the schedule itself is untouched:
       // editing a title or prompt must not postpone (or resurrect) a due
       // run — only schedule/enabled changes restart the clock.
@@ -1459,14 +1517,8 @@ export const layer = Layer.effect(
         input.schedule.type === "webhook"
           ? {
               type: "webhook",
-              signature:
-                input.schedule.signature == null
-                  ? null
-                  : {
-                      header: input.schedule.signature.header.toLowerCase(),
-                      encoding: input.schedule.signature.encoding,
-                      prefix: input.schedule.signature.prefix,
-                    },
+              signature,
+              ...(bearer == null ? {} : { bearer }),
               maxDeliveryAgeMinutes: input.schedule.maxDeliveryAgeMinutes ?? null,
               ...(input.schedule.dedupe === undefined
                 ? existingTask?.schedule.type === "webhook" &&
@@ -1482,6 +1534,7 @@ export const layer = Layer.effect(
                     ? existingTask.schedule.filters
                     : undefined),
               ),
+              ...(listener === undefined ? {} : { listener }),
             }
           : input.schedule.type === "once"
             ? { type: "once", runAt: iso(DateTime.makeUnsafe(input.schedule.runAt)) }
@@ -1491,16 +1544,26 @@ export const layer = Layer.effect(
           ? yield* Effect.gen(function* () {
               const existing = existingTask === null ? null : yield* findWebhookCredentials(id);
               const token = existing?.token ?? (yield* newWebhookToken);
-              const signature = input.schedule.type === "webhook" ? input.schedule.signature : null;
+              const auth = signature ?? bearer;
               // A secretRef is a value the user entered for an agent; this
               // save consumes it, so it cannot be used again. A replay of a
               // save that already used it keeps the secret that save stored.
               const replay = input.commandId !== undefined && existing?.secret != null;
               const fromRef =
-                signature?.secretRef === undefined
-                  ? undefined
+                signatureInput?.secretRef === undefined
+                  ? bearerInput?.secretRef === undefined
+                    ? undefined
+                    : yield* secretRequests
+                        .consume({ ref: bearerInput.secretRef, projectId: input.projectId })
+                        .pipe(
+                          Effect.catch((error) =>
+                            replay
+                              ? Effect.void
+                              : Effect.fail(taskError(error.message, { taskId: id })),
+                          ),
+                        )
                   : yield* secretRequests
-                      .consume({ ref: signature.secretRef, projectId: input.projectId })
+                      .consume({ ref: signatureInput.secretRef, projectId: input.projectId })
                       .pipe(
                         Effect.catch((error) =>
                           replay
@@ -1508,16 +1571,19 @@ export const layer = Layer.effect(
                             : Effect.fail(taskError(error.message, { taskId: id })),
                         ),
                       );
-              // A ref, when given, is the only source: a plain secret sent
-              // alongside it must not replace what a replayed save stored.
-              const provided = signature?.secretRef === undefined ? signature?.secret : fromRef;
-              const secret = signature == null ? null : (provided ?? existing?.secret ?? null);
-              const secretChanged =
-                signature == null || provided !== undefined || existing === null;
-              if (signature != null && secret === null) {
-                return yield* taskError("A webhook signature check needs a signing secret.", {
-                  taskId: id,
-                });
+              const provided =
+                signatureInput?.secretRef !== undefined || bearerInput?.secretRef !== undefined
+                  ? fromRef
+                  : (signatureInput?.secret ?? bearerInput?.secret);
+              const secret = auth == null ? null : (provided ?? existing?.secret ?? null);
+              const secretChanged = auth == null || provided !== undefined || existing === null;
+              if (auth != null && secret === null) {
+                return yield* taskError(
+                  signature != null
+                    ? "A webhook signature check needs a signing secret."
+                    : "A webhook header check needs a secret.",
+                  { taskId: id },
+                );
               }
               return { token, secret, secretChanged };
             })
@@ -1623,6 +1689,11 @@ export const layer = Layer.effect(
       Effect.all(
         [
           Ref.update(webhookRateWindows, (windows) => {
+            const next = new Map(windows);
+            next.delete(id);
+            return next;
+          }),
+          Ref.update(webhookListenerCooldowns, (windows) => {
             const next = new Map(windows);
             next.delete(id);
             return next;
@@ -1846,6 +1917,7 @@ export const layer = Layer.effect(
         : outcome === "duplicate" ||
             outcome === "coalesced" ||
             outcome === "rate_limited" ||
+            outcome === "cooldown" ||
             error === PROMPT_TOO_LONG
           ? "dedupe"
           : "main";
@@ -1854,7 +1926,7 @@ export const layer = Layer.effect(
       retentionBucket: ReturnType<typeof deliveryBucket>,
     ) => {
       const rowBucket = sql.literal(`CASE WHEN outcome = 'filtered' THEN 'filtered'
-        WHEN outcome IN ('duplicate', 'coalesced', 'rate_limited') OR error = 'The filled-in prompt is too long.' THEN 'dedupe'
+        WHEN outcome IN ('duplicate', 'coalesced', 'rate_limited', 'cooldown') OR error = 'The filled-in prompt is too long.' THEN 'dedupe'
         ELSE 'main' END`);
       return sql`
         DELETE FROM scheduled_task_webhook_deliveries
@@ -1935,6 +2007,98 @@ export const layer = Layer.effect(
           }),
         )
         .pipe(Effect.ignore);
+
+    /** One cooldown window per listener; dropped deliveries are counted in the log. */
+    const takeListenerCooldownSlot = (id: ScheduledTaskId, nowMs: number, seconds: number) =>
+      seconds <= 0
+        ? Effect.succeed(true)
+        : Ref.modify(webhookListenerCooldowns, (windows) => {
+            const last = windows.get(id);
+            if (last !== undefined && nowMs - last < seconds * 1_000)
+              return [false, windows] as const;
+            return [true, new Map(windows).set(id, nowMs)] as const;
+          });
+
+    const markNotified = (task: ScheduledTask, atIso: string) =>
+      sql`
+        UPDATE scheduled_tasks
+        SET last_run_at = ${atIso},
+            last_run_status = 'succeeded',
+            last_run_error = NULL,
+            run_count = run_count + 1,
+            updated_at = ${atIso}
+        WHERE task_id = ${task.id} AND created_at = ${task.createdAt}
+      `.pipe(
+        Effect.mapError((cause) =>
+          taskError("Could not record webhook notice.", { taskId: task.id, cause }),
+        ),
+      );
+
+    /** Posts the notice into the listener's bound thread without starting a run. */
+    const appendListenerNotice = Effect.fn("ScheduledTaskService.appendListenerNotice")(
+      function* (input: {
+        readonly task: ScheduledTask;
+        readonly notice: string;
+        readonly deliveryId: string;
+        readonly unread: boolean;
+      }) {
+        const threadId = input.task.threadId;
+        if (threadId === null) {
+          return yield* taskError("A listener posts into a thread, but this one has none bound.", {
+            taskId: input.task.id,
+          });
+        }
+        const shell = yield* threadManagement.getThreadShell(ThreadId.make(threadId)).pipe(
+          Effect.mapError((cause) =>
+            taskError("Could not read the listener's thread.", {
+              taskId: input.task.id,
+              cause,
+            }),
+          ),
+        );
+        if (shell === null || shell.deletedAt !== null) {
+          return yield* taskError("The listener's thread no longer exists.", {
+            taskId: input.task.id,
+          });
+        }
+        if (shell.archivedAt !== null) {
+          return yield* taskError("The listener's thread is archived.", {
+            taskId: input.task.id,
+          });
+        }
+        const noticeId = `scheduled-task-notice:${input.deliveryId}`;
+        yield* threadManagement
+          .dispatch({
+            type: "message.dispatch",
+            commandId: CommandId.make(`scheduled-task:${input.deliveryId}:notice`),
+            threadId: ThreadId.make(threadId),
+            messageId: MessageId.make(noticeId),
+            text: input.notice,
+            attachments: [],
+            dispatchMode: { type: "start_immediately" },
+            systemNotice: true,
+            createdBy: "system",
+            creationSource: "server",
+          })
+          .pipe(
+            Effect.mapError((cause) =>
+              taskError("Could not post the webhook notice.", {
+                taskId: input.task.id,
+                cause,
+              }),
+            ),
+          );
+        if (input.unread) {
+          yield* threadManagement
+            .dispatch({
+              type: "thread.mark-unread",
+              commandId: CommandId.make(`scheduled-task:${input.deliveryId}:unread`),
+              threadId: ThreadId.make(threadId),
+            })
+            .pipe(Effect.ignore);
+        }
+      },
+    );
 
     /** Sliding one-minute window for deliveries that can start work. */
     const takeRateSlot = (
@@ -2259,6 +2423,7 @@ export const layer = Layer.effect(
             return { _tag: "disabled" as const };
           }
           const signature = schedule.signature;
+          const bearer = schedule.bearer ?? null;
           if (signature !== null) {
             const verified =
               row.webhook_secret !== null &&
@@ -2268,6 +2433,19 @@ export const layer = Layer.effect(
                 headers: request.headers,
                 body: request.body,
               }).pipe(Effect.provideService(Mac.Mac, mac)));
+            if (!verified) {
+              yield* log("rejected_signature");
+              yield* observe("rejected_signature");
+              return { _tag: "rejected_signature" as const };
+            }
+          } else if (bearer !== null) {
+            const verified =
+              row.webhook_secret !== null &&
+              (yield* verifyWebhookBearer({
+                header: bearer.header,
+                secret: row.webhook_secret,
+                headers: request.headers,
+              }).pipe(Effect.provideService(Digest.Digest, digest)));
             if (!verified) {
               yield* log("rejected_signature");
               yield* observe("rejected_signature");
@@ -2309,6 +2487,95 @@ export const layer = Layer.effect(
               deliveryId,
               outcome: "filtered" as const,
             });
+          }
+
+          const listener = schedule.listener;
+          if (listener !== undefined && scheduledTaskListenerMode(listener) === "notify") {
+            yield* refundRejectionSlot;
+            const nowMs = DateTime.toEpochMillis(now);
+            if (!(yield* takeListenerCooldownSlot(task.id, nowMs, listener.cooldownSeconds ?? 0))) {
+              if (yield* takeDedupeLogSlot(task.id, nowMs)) {
+                yield* log("cooldown", { signatureVerified: signature !== null });
+              }
+              yield* observe("cooldown");
+              return yield* releaseClaim({
+                _tag: "accepted" as const,
+                deliveryId,
+                outcome: "cooldown" as const,
+              });
+            }
+            // A notice still counts toward the per-minute ceiling, so a listener without a
+            // cooldown cannot flood the chat either.
+            const noticeSlot = yield* takeRateSlot(task.id, nowMs);
+            if (noticeSlot !== "allowed") {
+              if (noticeSlot === "first_rejected") yield* log("rate_limited");
+              yield* observe("rate_limited");
+              return yield* releaseClaim({
+                _tag: "rate_limited",
+                outcome: "rate_limited",
+              } as const);
+            }
+            const notice = renderWebhookNotice({
+              title: task.title,
+              time: DateTime.formatLocal(now, {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              }),
+              template: listener.messageTemplate,
+              request,
+            });
+            const posted = yield* appendListenerNotice({
+              task,
+              notice,
+              deliveryId,
+              unread: listener.notify === true,
+            }).pipe(Effect.exit);
+            if (Exit.isFailure(posted)) {
+              yield* log("dispatch_failed", {
+                signatureVerified: signature !== null,
+                renderedPrompt: notice,
+                error: "The listener notice could not be posted.",
+              });
+              yield* Effect.logWarning("Webhook listener notice failed", {
+                taskId: task.id,
+                cause: posted.cause,
+              });
+              yield* observe("error");
+              return yield* releaseClaim({
+                _tag: "accepted" as const,
+                deliveryId,
+                outcome: "dispatch_failed" as const,
+              });
+            }
+            yield* log("accepted", {
+              signatureVerified: signature !== null,
+              renderedPrompt: notice,
+            });
+            yield* markNotified(task, iso(now)).pipe(Effect.ignore);
+            yield* notifyChanged;
+            yield* observe("accepted");
+            return yield* releaseClaim({
+              _tag: "accepted" as const,
+              deliveryId,
+              outcome: "accepted" as const,
+            });
+          }
+
+          if (listener !== undefined && scheduledTaskListenerMode(listener) === "wake") {
+            const nowMs = DateTime.toEpochMillis(now);
+            if (!(yield* takeListenerCooldownSlot(task.id, nowMs, listener.cooldownSeconds ?? 0))) {
+              yield* refundRejectionSlot;
+              if (yield* takeDedupeLogSlot(task.id, nowMs)) {
+                yield* log("cooldown", { signatureVerified: signature !== null });
+              }
+              yield* observe("cooldown");
+              return yield* releaseClaim({
+                _tag: "accepted" as const,
+                deliveryId,
+                outcome: "cooldown" as const,
+              });
+            }
           }
 
           const runWindow = (yield* Ref.get(webhookRateWindows)).get(task.id);
@@ -2405,7 +2672,11 @@ export const layer = Layer.effect(
             Effect.map((bytes) => Buffer.from(bytes).toString("hex")),
             Effect.mapError((cause) => taskError("Could not generate frame id.", { cause })),
           );
-          const rendered = renderWebhookPrompt(task.prompt, request, frameId);
+          const rendered = renderWebhookPrompt(
+            webhookListenerPromptTemplate(schedule.listener, task.prompt),
+            request,
+            frameId,
+          );
           // Providers trim the prompt before checking, so whitespace around
           // it is free.
           if (rendered.prompt.trim().length > PROVIDER_SEND_TURN_MAX_INPUT_CHARS) {
@@ -2565,7 +2836,14 @@ export const layer = Layer.effect(
                 return {
                   task,
                   taskJson: task === snapshot ? null : yield* encodePendingTask(task),
-                  rendered: renderWebhookPrompt(task.prompt, request, frameId),
+                  rendered: renderWebhookPrompt(
+                    webhookListenerPromptTemplate(
+                      task.schedule.type === "webhook" ? task.schedule.listener : undefined,
+                      task.prompt,
+                    ),
+                    request,
+                    frameId,
+                  ),
                 };
               }).pipe(Effect.exit);
               if (Exit.isFailure(prepared)) {

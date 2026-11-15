@@ -1,14 +1,18 @@
 import {
   EnvironmentId,
   GroupChatId,
+  MAX_WEBHOOK_FILTERS,
   ModelSelection,
   OrchestratorMcpEnvironmentTarget,
   OrchestratorMcpFailure,
+  ScheduledTaskId,
+  ScheduledTaskWebhookFilter,
   ThreadId,
   Tot,
   TotAvatar,
   TotId,
   TotScope,
+  TrimmedNonEmptyString,
 } from "@t3tools/contracts";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Schema from "effect/Schema";
@@ -16,6 +20,7 @@ import { Tool, Toolkit } from "effect/ai";
 
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
+import * as ScheduledTaskService from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -87,6 +92,47 @@ const TotDesignAvatarTool = Tool.make("t3_tot_design_avatar", {
   success: Schema.Struct({ ok: Schema.Literal(true) }),
 }).annotate(Tool.Destructive, false);
 
+const TotWebhookListenerTool = Tool.make("t3_tot_webhook_listener", {
+  ...shared,
+  dependencies: [...shared.dependencies, ScheduledTaskService.ScheduledTaskService],
+  description:
+    "As a Tot, create a webhook listener that posts into a Tot's chat. `notify` (default) posts a compact line with no model call; `wake` starts a turn with the payload framed as untrusted data. Filters and a cooldown keep noisy sensors quiet. Returns the webhook URL, which is a secret: give it to the user and never log or repeat it elsewhere.",
+  parameters: Schema.Struct({
+    name: TrimmedNonEmptyString.check(Schema.isMaxLength(80)).annotate({
+      description: "Shown in chat, such as 'front-door-motion'.",
+    }),
+    tot: Schema.optional(TotId).annotate({ description: "Default: you." }),
+    mode: Schema.optional(Schema.Literals(["notify", "wake"])).annotate({
+      description: "Default: notify.",
+    }),
+    messageTemplate: Schema.optional(
+      TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+    ).annotate({
+      description:
+        "Notify: the whole line. Wake: the prompt. Uses {{body.path}}, {{headers.name}}, {{query.name}}, {{body}}, {{request}}, {{listener.name}}, {{time}}.",
+    }),
+    filters: Schema.optional(
+      Schema.Array(ScheduledTaskWebhookFilter).check(Schema.isMaxLength(MAX_WEBHOOK_FILTERS)),
+    ).annotate({
+      description: "All must match, such as {path:'body.action',op:'equals',value:'on'}.",
+    }),
+    cooldownSeconds: Schema.optional(
+      Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 86_400 })),
+    ).annotate({ description: "Drops repeats inside this window and logs them as cooldown." }),
+    notify: Schema.optional(Schema.Boolean).annotate({
+      description: "Also mark the thread unread so clients badge it.",
+    }),
+  }),
+  success: Schema.Struct({
+    listenerId: ScheduledTaskId,
+    name: Schema.String,
+    mode: Schema.Literals(["notify", "wake"]),
+    webhookUrl: Schema.NullOr(Schema.String),
+    webhookPath: Schema.String,
+    link: Schema.String,
+  }),
+}).annotate(Tool.Destructive, false);
+
 const TotCreateTool = Tool.make("t3_tot_create", {
   ...shared,
   description:
@@ -114,5 +160,6 @@ export const TotToolkit = Toolkit.make(
   TotWatchTool,
   GroupChatSayTool,
   TotDesignAvatarTool,
+  TotWebhookListenerTool,
   TotCreateTool,
 );
