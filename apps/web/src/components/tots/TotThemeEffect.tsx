@@ -3,14 +3,24 @@ import { useEffect, useRef, useState } from "react";
 
 import { useClientSettings } from "~/hooks/useSettings";
 import { observeResize } from "~/lib/observeResize";
+import type { SessionPhase } from "~/types";
 
 import { buildEffectDocument } from "./totThemeEffect.logic";
+
+type EffectContext = {
+  usedTokens: number | null;
+  maxTokens: number | null;
+  usedPercentage: number | null;
+  working: boolean;
+  phase: SessionPhase;
+};
 
 type EffectMessage =
   | { type: "pointer"; x: number; y: number; inside: boolean }
   | { type: "resize"; width: number; height: number; dpr: number }
   | { type: "motion"; reduced: boolean }
-  | { type: "visibility"; hidden: boolean };
+  | { type: "visibility"; hidden: boolean }
+  | ({ type: "context" } & EffectContext);
 
 const FRAME_STYLE = {
   position: "absolute",
@@ -26,17 +36,41 @@ const FRAME_STYLE = {
 } as const;
 
 /** A Tot's theme effect, drawn over the conversation area. See TotThemeEffect.md. */
-export function TotThemeEffect(props: { threadId: string; script: string | undefined }) {
+export function TotThemeEffect(props: {
+  threadId: string;
+  script: string | undefined;
+  contextWindow: {
+    usedTokens: number;
+    maxTokens?: number | null;
+    usedPercentage: number | null;
+  } | null;
+  working: boolean;
+  phase: SessionPhase;
+}) {
   const enabled = useClientSettings((settings) => settings.totThemeEffects);
   if (!enabled || !props.script || parseTotThreadId(props.threadId) === null) return null;
   // Keyed by thread so navigating away always tears the old document down.
-  return <EffectFrame key={props.threadId} script={props.script} />;
+  return (
+    <EffectFrame
+      key={props.threadId}
+      script={props.script}
+      context={{
+        usedTokens: props.contextWindow?.usedTokens ?? null,
+        maxTokens: props.contextWindow?.maxTokens ?? null,
+        usedPercentage: props.contextWindow?.usedPercentage ?? null,
+        working: props.working,
+        phase: props.phase,
+      }}
+    />
+  );
 }
 
-function EffectFrame({ script }: { script: string }) {
+function EffectFrame({ script, context }: { script: string; context: EffectContext }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   // Bumped by each load (including a new srcdoc) so the initial state is posted again.
   const [loads, setLoads] = useState(0);
+  // Replaced by the effect below, so a context change reaches the frame without restarting it.
+  const sendContext = useRef<(next: EffectContext) => void>(() => {});
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- forwards DOM input to the sandboxed iframe
   useEffect(() => {
@@ -86,6 +120,21 @@ function EffectFrame({ script }: { script: string }) {
       pointer = null;
       queue({ type: "pointer", x: 0, y: 0, inside: false });
     };
+    let sentContext = "";
+    sendContext.current = (next) => {
+      const message: EffectMessage = {
+        type: "context",
+        usedTokens: next.usedTokens,
+        maxTokens: next.maxTokens,
+        usedPercentage: next.usedPercentage,
+        working: next.working,
+        phase: next.phase,
+      };
+      const serialized = JSON.stringify(message);
+      if (serialized === sentContext) return;
+      sentContext = serialized;
+      queue(message);
+    };
 
     // observeResize reports the initial size.
     motion();
@@ -96,6 +145,7 @@ function EffectFrame({ script }: { script: string }) {
     area.addEventListener("pointermove", move, { passive: true });
     area.addEventListener("pointerleave", leave, { passive: true });
     return () => {
+      sendContext.current = () => {};
       cancelAnimationFrame(raf);
       stopResize();
       motionQuery.removeEventListener("change", motion);
@@ -104,6 +154,11 @@ function EffectFrame({ script }: { script: string }) {
       area.removeEventListener("pointerleave", leave);
     };
   }, [loads]);
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- forwards the session's context to the sandboxed iframe
+  useEffect(() => {
+    if (loads > 0) sendContext.current(context);
+  }, [context, loads]);
 
   return (
     <iframe
