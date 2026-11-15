@@ -7,6 +7,7 @@ import {
 import {
   type EnvironmentId,
   type EnvironmentMachineKind,
+  type ExecutionEnvironmentPlatformOs,
   type ProjectEntry,
   type ProviderDriverKind,
   type ProviderInstanceId,
@@ -14,6 +15,8 @@ import {
   type ScopedThreadRef,
   type ServerProviderSkill,
   type ServerProviderSlashCommand,
+  type Tot,
+  type TotId,
 } from "@t3tools/contracts";
 import {
   BlocksIcon,
@@ -24,7 +27,7 @@ import {
   UserRoundIcon,
   type LucideIcon,
 } from "lucide-react";
-import { memo, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, memo, useLayoutEffect, useRef, useState } from "react";
 
 import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../composer-logic";
 import { cn } from "~/lib/utils";
@@ -36,6 +39,7 @@ import { PierreEntryIcon } from "./PierreEntryIcon";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { ComposerBanner } from "./ComposerBanner";
 import { resolvePullRequestState } from "../pullRequest/pullRequestPresentation";
+import { TotAvatar as TotFace } from "../tots/TotAvatar";
 
 export type ComposerCommandItem =
   | {
@@ -86,9 +90,21 @@ export type ComposerCommandItem =
     }
   | {
       id: string;
+      type: "tot";
+      totId: TotId;
+      name: string;
+      avatar: Tot["avatar"];
+      environmentId: EnvironmentId;
+      thread: ScopedThreadRef;
+      label: string;
+      description: string;
+    }
+  | {
+      id: string;
       type: "environment";
       environmentId: EnvironmentId;
       machine: EnvironmentMachineKind;
+      os?: ExecutionEnvironmentPlatformOs;
       label: string;
       description: string;
     }
@@ -149,18 +165,38 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
             className="max-h-72 min-h-0 scroll-pb-6"
           >
             <CommandGroup>
-              {props.items.map((item) => (
-                <ComposerCommandMenuItem
-                  key={item.id}
-                  optionId={composerSuggestionOptionId(props.listId, item.id)}
-                  item={item}
-                  triggerKind={props.triggerKind}
-                  resolvedTheme={props.resolvedTheme}
-                  isActive={props.activeItemId === item.id}
-                  onHighlight={props.onHighlightedItemChange}
-                  onSelect={props.onSelect}
-                />
-              ))}
+              {props.items.map((item, index) => {
+                const section =
+                  props.triggerKind === "path"
+                    ? composerItemSectionLabel(props.triggerKind, item)
+                    : null;
+                const previousSection =
+                  index === 0
+                    ? null
+                    : composerItemSectionLabel(props.triggerKind, props.items[index - 1]!);
+                return (
+                  <Fragment key={item.id}>
+                    {section !== null && section !== previousSection ? (
+                      <div
+                        role="presentation"
+                        aria-hidden="true"
+                        className="px-2 pt-1.5 pb-0.5 font-sans text-3xs font-medium tracking-wide text-secondary-label uppercase"
+                      >
+                        {section}
+                      </div>
+                    ) : null}
+                    <ComposerCommandMenuItem
+                      optionId={composerSuggestionOptionId(props.listId, item.id)}
+                      item={item}
+                      triggerKind={props.triggerKind}
+                      resolvedTheme={props.resolvedTheme}
+                      isActive={props.activeItemId === item.id}
+                      onHighlight={props.onHighlightedItemChange}
+                      onSelect={props.onSelect}
+                    />
+                  </Fragment>
+                );
+              })}
             </CommandGroup>
           </CommandList>
         ) : (
@@ -176,7 +212,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                   (props.triggerKind === "skill"
                     ? "No skills found. Try / to browse provider commands."
                     : props.triggerKind === "path"
-                      ? "No matching files or folders."
+                      ? "No matching mentions."
                       : "No matching command."))}
             </p>
           </div>
@@ -237,6 +273,9 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
       ) : null}
       {props.item.type === "thread" ? (
         <MessagesSquareIcon aria-hidden="true" className="size-4 shrink-0 text-secondary-label" />
+      ) : null}
+      {props.item.type === "tot" ? (
+        <TotFace avatar={props.item.avatar} state="idle" animation="still" size={16} />
       ) : null}
       {props.item.type === "environment" ? (
         <EnvironmentMachineIcon
@@ -303,8 +342,30 @@ export function composerSuggestionOptionId(listId: string, itemId: string): stri
   return `${listId}-${encodeURIComponent(JSON.stringify(itemId))}`;
 }
 
+/** The `@` picker's headings. Only path-trigger results are grouped; commands are one list. */
+function composerItemSectionLabel(
+  triggerKind: ComposerTriggerKind | null,
+  item: ComposerCommandItem,
+): string | null {
+  if (triggerKind !== "path") return null;
+  switch (item.type) {
+    case "tot":
+      return "Tots";
+    case "environment":
+      return "Environments";
+    case "thread":
+      return "Threads";
+    case "model":
+      return "Models";
+    case "path":
+      return "Files and folders";
+    default:
+      return null;
+  }
+}
+
 const LISTBOX_LABEL_BY_TRIGGER: Record<ComposerTriggerKind, string> = {
-  path: "Files and folders",
+  path: "Mentions",
   "pull-request": "Pull requests",
   "slash-command": "Commands",
   skill: "Skills",
