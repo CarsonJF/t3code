@@ -166,7 +166,10 @@ it.effect("a thread a Tot launched reports once when it completes", () => {
 it.effect("watching everything leaves another Tot's threads to that Tot", () => {
   const yuis = ThreadId.make("tot-launched:yui:c1");
   const plain = ThreadId.make("thread:plain");
-  const { reports, layer, step, flush } = makeHarness([home({ watchAll: true }), yui]);
+  const { reports, layer, step, flush } = makeHarness([
+    home({ watchAll: true, watchReports: "explicit" }),
+    yui,
+  ]);
   return Effect.gen(function* () {
     yield* step(shell(yuis, "running"));
     yield* step(shell(yuis, "completed"));
@@ -180,7 +183,7 @@ it.effect("watching everything leaves another Tot's threads to that Tot", () => 
 
 it.effect("a Tot hears about the run it started in another Tot, not later runs there", () => {
   const { reports, layer, step, flush } = makeHarness([
-    home({ watches: [watch(yuiThread, "sent", "run-1")] }),
+    home({ watchReports: "explicit", watches: [watch(yuiThread, "sent", "run-1")] }),
     yui,
   ]);
   return Effect.gen(function* () {
@@ -192,6 +195,126 @@ it.effect("a Tot hears about the run it started in another Tot, not later runs t
     yield* step(shell(yuiThread, "completed", "run-2"));
     yield* flush;
     expect(reports).toHaveLength(1);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("by default a Tot hears about only the threads it launched", () => {
+  const launched = ThreadId.make("tot-launched:home:c1");
+  const asked = ThreadId.make("thread:asked");
+  const { reports, layer, step, flush } = makeHarness([
+    home({
+      watches: [
+        watch(launched, "launched"),
+        watch(asked, "requested"),
+        watch(yuiThread, "sent", "run-1"),
+      ],
+    }),
+    yui,
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running", "run-launched"));
+    yield* step(shell(launched, "completed", "run-launched"));
+    yield* step(shell(asked, "running", "run-asked"));
+    yield* step(shell(asked, "completed", "run-asked"));
+    yield* step(shell(yuiThread, "running", "run-1"));
+    yield* step(shell(yuiThread, "completed", "run-1"));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([expect.stringContaining(launched)]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("watching everything by default counts only the threads this Tot launched", () => {
+  const launched = ThreadId.make("tot-launched:home:c2");
+  const anotherTots = ThreadId.make("tot-launched:yui:c1");
+  const plain = ThreadId.make("thread:plain");
+  const { reports, layer, step, flush } = makeHarness([home({ watchAll: true }), yui]);
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running", "run-launched"));
+    yield* step(shell(launched, "completed", "run-launched"));
+    yield* step(shell(anotherTots, "running", "run-other"));
+    yield* step(shell(anotherTots, "completed", "run-other"));
+    yield* step(shell(plain, "running", "run-plain"));
+    yield* step(shell(plain, "completed", "run-plain"));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([expect.stringContaining(launched)]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("explicit watch reports cover launched, requested and sent watches", () => {
+  const launched = ThreadId.make("tot-launched:home:c3");
+  const asked = ThreadId.make("thread:asked");
+  const { reports, layer, step, flush } = makeHarness([
+    home({
+      watchReports: "explicit",
+      watches: [
+        watch(launched, "launched"),
+        watch(asked, "requested"),
+        watch(yuiThread, "sent", "run-1"),
+      ],
+    }),
+    yui,
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running", "run-launched"));
+    yield* step(shell(launched, "completed", "run-launched"));
+    yield* step(shell(asked, "running", "run-asked"));
+    yield* step(shell(asked, "completed", "run-asked"));
+    yield* step(shell(yuiThread, "running", "run-1"));
+    yield* step(shell(yuiThread, "completed", "run-1"));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining(launched),
+      expect.stringContaining(asked),
+      expect.stringContaining(yuiThread),
+    ]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("watch reports off delivers nothing and keeps the watches", () => {
+  const launched = ThreadId.make("tot-launched:home:c4");
+  const asked = ThreadId.make("thread:asked");
+  const { state, reports, layer, step, flush } = makeHarness([
+    home({
+      watchReports: "off",
+      watchAll: true,
+      watches: [
+        watch(launched, "launched"),
+        watch(asked, "requested"),
+        watch(yuiThread, "sent", "run-1"),
+      ],
+    }),
+    yui,
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running", "run-launched"));
+    yield* step(shell(launched, "completed", "run-launched"));
+    yield* step(shell(asked, "running", "run-asked"));
+    yield* step(shell(asked, "completed", "run-asked"));
+    yield* step(shell(yuiThread, "running", "run-1"));
+    yield* step(shell(yuiThread, "completed", "run-1"));
+    yield* flush;
+    expect(reports).toHaveLength(0);
+    expect(state.tots[0]!.watches).toHaveLength(3);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("switching watch reports on resumes a stored watch", () => {
+  const asked = ThreadId.make("thread:asked");
+  const { state, reports, layer, step, flush } = makeHarness([
+    home({ watches: [watch(asked, "requested")] }),
+    yui,
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(asked, "running", "run-1"));
+    yield* step(shell(asked, "completed", "run-1"));
+    yield* flush;
+    expect(reports).toHaveLength(0);
+    expect(state.tots[0]!.watches).toHaveLength(1);
+    state.tots = [home({ watchReports: "explicit", watches: [watch(asked, "requested")] }), yui];
+    yield* step(shell(asked, "running", "run-2"));
+    yield* step(shell(asked, "completed", "run-2"));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([expect.stringContaining(asked)]);
   }).pipe(Effect.provide(layer));
 });
 
