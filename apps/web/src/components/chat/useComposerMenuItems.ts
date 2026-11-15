@@ -8,6 +8,7 @@ import {
 } from "@t3tools/client-runtime/composerThreadItems";
 import { useAtomValue } from "@effect/atom-react";
 import { useState } from "react";
+import { parseTotThreadId } from "@t3tools/contracts";
 import type {
   EnvironmentId,
   ProjectId,
@@ -33,9 +34,14 @@ import {
   getProviderSlashCommandsForSlashMenu,
 } from "@t3tools/client-runtime/providerSkills";
 import { searchProviderSkills } from "../../providerSkillSearch";
-import { useVisibleThreadShells } from "~/state/entities";
-import { useEnvironmentIdentities, useEnvironmentMachines } from "~/state/environments";
+import { useServerConfigs, useVisibleThreadShells } from "~/state/entities";
+import {
+  useConnectedEnvironmentIds,
+  useEnvironmentIdentities,
+  useEnvironmentMachines,
+} from "~/state/environments";
 import { offersLinkedEnvironmentsAtom } from "~/state/peerLinks";
+import { useTots } from "~/state/tots";
 import {
   pullRequestEnvironment,
   usePullRequestList,
@@ -48,6 +54,7 @@ import {
   rankPullRequestMatches,
 } from "../pullRequest/pullRequestList.logic";
 import type { ComposerCommandItem } from "./ComposerCommandMenu";
+import { matchComposerTotItems, orderComposerMentionItems } from "./composerTotItems";
 import { matchComposerModelItems } from "./composerModelMentions";
 import type { ModelEsque } from "./providerIconUtils";
 import type { ProviderInstanceEntry } from "../../providerInstances";
@@ -133,7 +140,14 @@ export function useComposerMenuItems({
   // The user's machines feed `@` machine matches; the catalog summary is cheap and stable.
   const environmentIdentities = useEnvironmentIdentities();
   const environmentMachines = useEnvironmentMachines();
+  const connectedEnvironmentIds = useConnectedEnvironmentIds();
+  const serverConfigs = useServerConfigs();
+  const tots = useTots();
   const offersMachines = useAtomValue(offersLinkedEnvironmentsAtom(environmentId));
+  const isTotChat = activeThreadId !== null && parseTotThreadId(activeThreadId) !== null;
+  const environmentLabels = new Map(
+    environmentIdentities.map((identity) => [identity.environmentId, identity.label]),
+  );
   const mentionableEnvironments = environmentIdentities.map((identity) => ({
     ...identity,
     machine: environmentMachines.get(identity.environmentId) ?? ("server" as const),
@@ -205,38 +219,67 @@ export function useComposerMenuItems({
   const items = ((): ComposerCommandItem[] => {
     if (!composerTrigger) return [];
     if (composerTrigger.kind === "path") {
-      return [
-        ...matchComposerThreadItems({
-          shells: environmentThreadShells,
-          environmentId,
-          linkedEnvironments,
-          excludeThreadId: activeThreadId,
-          query: composerTrigger.query,
-          now,
-        }),
-        // An answer to an agent's question carries thread links, not machines.
-        ...(questionAttachmentTarget === null && offersMachines
+      const query = composerTrigger.query;
+      const threadItems = matchComposerThreadItems({
+        // A Tot is a thread, but the picker lists it as a Tot.
+        shells: environmentThreadShells.filter((shell) => parseTotThreadId(shell.id) === null),
+        environmentId,
+        linkedEnvironments,
+        excludeThreadId: activeThreadId,
+        query,
+        now,
+      });
+      const totItems = matchComposerTotItems({
+        tots,
+        environmentId,
+        excludeThreadId: activeThreadId,
+        environmentLabels,
+        query,
+      });
+      // An answer to an agent's question carries thread links, not machines.
+      const environmentItems =
+        questionAttachmentTarget === null && (offersMachines || isTotChat)
           ? matchComposerEnvironmentItems({
               environments: mentionableEnvironments,
               environmentId,
-              query: composerTrigger.query,
+              includeOwnEnvironment: true,
+              query,
+            }).map((environment) => {
+              const os = serverConfigs.get(environment.environmentId)?.environment.platform.os;
+              const description = [
+                environment.environmentId === environmentId ? "This machine" : "Machine",
+                ...(os === undefined || os === "unknown" ? [] : [os]),
+                ...(connectedEnvironmentIds.includes(environment.environmentId) ? [] : ["offline"]),
+              ].join(" · ");
+              return {
+                ...environment,
+                ...(os === undefined || os === "unknown" ? {} : { os }),
+                description,
+              };
             })
-          : []),
-        ...matchComposerModelItems({
-          instanceEntries: modelMentions.instanceEntries,
-          modelOptionsByInstance: modelMentions.modelOptionsByInstance,
-          query: composerTrigger.query,
-        }),
-        ...workspaceEntries.entries.map((entry) => ({
-          id: `path:${entry.kind}:${entry.path}`,
-          type: "path" as const,
-          path: entry.path,
-          pathKind: entry.kind,
-          searchTarget: workspaceEntries.searchedTarget,
-          label: basenameOfPath(entry.path),
-          description: entry.path.slice(0, Math.max(0, entry.path.lastIndexOf("/"))),
-        })),
-      ];
+          : [];
+      const modelItems = matchComposerModelItems({
+        instanceEntries: modelMentions.instanceEntries,
+        modelOptionsByInstance: modelMentions.modelOptionsByInstance,
+        query,
+      });
+      const pathItems = workspaceEntries.entries.map((entry) => ({
+        id: `path:${entry.kind}:${entry.path}`,
+        type: "path" as const,
+        path: entry.path,
+        pathKind: entry.kind,
+        searchTarget: workspaceEntries.searchedTarget,
+        label: basenameOfPath(entry.path),
+        description: entry.path.slice(0, Math.max(0, entry.path.lastIndexOf("/"))),
+      }));
+      // In a Tot's own thread the other Tots and the machines come first.
+      return orderComposerMentionItems<ComposerCommandItem>({
+        isTotChat,
+        tots: totItems,
+        environments: environmentItems,
+        threads: threadItems,
+        rest: [...modelItems, ...pathItems],
+      });
     }
     if (composerTrigger.kind === "slash-command") {
       const builtInSlashCommandItems = [
@@ -429,9 +472,7 @@ export function useComposerMenuItems({
         ? `No pull request matches ${composerTrigger.query}.`
         : "No pull requests found in this repository.";
     }
-    return composerTriggerKind === "path"
-      ? "No matching files or folders."
-      : "No matching command.";
+    return composerTriggerKind === "path" ? "No matching mentions." : "No matching command.";
   })();
 
   return { items, isLoading, emptyState };
