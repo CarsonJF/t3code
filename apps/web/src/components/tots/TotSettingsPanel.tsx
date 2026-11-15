@@ -24,6 +24,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { TOT_THEME_TOKEN_NAMES } from "@t3tools/shared/totThemeTokens";
 import { EyeIcon, Globe2, PlayIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
@@ -319,6 +320,10 @@ function TotSettingsEditor(props: {
                   setDraft({ ...draft, theme: { ...draft.theme, css: event.target.value } })
                 }
               />
+              <span className="text-xs text-muted-foreground">
+                Mobile paints {TOT_THEME_TOKEN_NAMES.join(", ")} from <code>:root</code>; other
+                rules are web-only.
+              </span>
               <span className="self-end text-xs text-muted-foreground">
                 {draft.theme.css.length.toLocaleString()} / {TOT_THEME_MAX_LENGTH.toLocaleString()}
               </span>
