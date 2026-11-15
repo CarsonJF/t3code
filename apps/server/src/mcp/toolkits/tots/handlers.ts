@@ -1,6 +1,8 @@
-import { OrchestratorMcpFailure } from "@t3tools/contracts";
+import { DEFAULT_HOME_TOT, OrchestratorMcpFailure } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 
+import * as ProjectService from "../../../project/ProjectService.ts";
 import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -67,6 +69,58 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
           ),
         );
       return { ok: true as const };
+    }),
+  ),
+  t3_tot_create: McpToolAccess.reads((input) =>
+    Effect.gen(function* () {
+      const caller = yield* requireTotChange();
+      const tots = yield* TotService.TotService;
+      // A linked caller is held to the Tot of its id here, which must also own everything.
+      const self = (yield* tots.list).find((tot) => tot.id === caller.totId);
+      if (self?.scope !== "all")
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message: "Only a Tot whose scope is all can create Tots.",
+        });
+      const modelSelection = input.modelSelection ?? self.modelSelection;
+      if (modelSelection === null)
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: "Pass `modelSelection`; you have none to copy.",
+        });
+      const invalid = (error: { readonly message: string }) =>
+        new OrchestratorMcpFailure({ code: "invalid_request", message: error.message });
+      const created = yield* tots
+        .create({
+          name: input.name,
+          avatar: input.avatar ?? DEFAULT_HOME_TOT.avatar,
+          scope: input.scope,
+          instructions: input.instructions ?? "",
+          modelSelection,
+        })
+        .pipe(Effect.mapError(invalid));
+      const { threadId } = yield* tots.enable(created.id, modelSelection).pipe(
+        // Without a thread it would only be a Tot the user has to turn on.
+        Effect.tapError(() => tots.remove(created.id).pipe(Effect.ignore)),
+        Effect.mapError(invalid),
+      );
+      const projectId = (yield* tots.list).find((tot) => tot.id === created.id)?.projectId;
+      const project =
+        projectId === null || projectId === undefined
+          ? Option.none()
+          : yield* (yield* ProjectService.ProjectService)
+              .getById(projectId)
+              .pipe(Effect.orElseSucceed(Option.none));
+      const scope = yield* McpInvocationContext.McpInvocationContext;
+      return {
+        id: created.id,
+        link: McpInvocationContext.threadLinkFor(scope, threadId, created.name),
+        folder: Option.match(project, {
+          onNone: () => "",
+          onSome: (found) => found.workspaceRoot,
+        }),
+        scope: created.scope,
+      };
     }),
   ),
   t3_tot_watch: McpToolAccess.reads((input) =>
