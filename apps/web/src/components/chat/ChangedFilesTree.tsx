@@ -18,6 +18,10 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { observeResize } from "~/lib/observeResize";
+import {
+  changedFilesCardExpanded,
+  rememberChangedFilesCardExpanded,
+} from "./changedFilesCardExpansion";
 
 const EMPTY_DIRECTORY_OVERRIDES: Record<string, boolean> = {};
 const VIRTUALIZE_AFTER_ROWS = 250;
@@ -54,19 +58,53 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
   const syncTimelineLayout = useSyncLayout();
   const hiddenFileCount = totals.count - files.length;
   const hasDirectories = files.some((file) => /[/\\]/.test(file.path));
+  const [expanded, setExpanded] = useState(() => changedFilesCardExpanded(runId) ?? false);
+  const toggleExpanded = () => {
+    setExpanded((current) => {
+      const next = !current;
+      rememberChangedFilesCardExpanded(runId, next);
+      return next;
+    });
+    // Measure before paint instead of waiting for LegendList's deferred shrink measurement.
+    syncTimelineLayout();
+  };
 
   return (
     <div
       className="@container/changed-files mt-4 rounded-lg bg-secondary dark:bg-input/20"
       data-changed-files-state="tree"
+      data-changed-files-expanded={expanded ? "true" : "false"}
     >
       <div
         data-changed-files-header=""
-        className="sticky top-2 z-10 flex items-center justify-between gap-2 rounded-t-lg bg-secondary px-3 py-2 dark:bg-background dark:bg-linear-to-b dark:from-input/20 dark:to-input/20"
+        className={cn(
+          "sticky top-2 z-10 flex items-center justify-between gap-2 bg-secondary px-3 py-2 dark:bg-background dark:bg-linear-to-b dark:from-input/20 dark:to-input/20",
+          expanded ? "rounded-t-lg" : "rounded-lg",
+        )}
       >
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-foreground">
-          <span>
-            {totals.count.toLocaleString()} changed file{totals.count === 1 ? "" : "s"}
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={expanded ? "Collapse changed files" : "Expand changed files"}
+          data-scroll-anchor-ignore
+          onClick={toggleExpanded}
+          className={cn(
+            "absolute inset-0 z-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+            expanded ? "rounded-t-lg" : "rounded-lg",
+          )}
+        />
+        <div className="pointer-events-none relative z-10 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-foreground">
+          <span className="flex items-center gap-1.5">
+            <ChevronRightIcon
+              aria-hidden="true"
+              className={cn(
+                "size-3.5 shrink-0 text-muted-foreground/70 transition-transform",
+                expanded && "rotate-90",
+              )}
+            />
+            <span>
+              {totals.count.toLocaleString()} changed file{totals.count === 1 ? "" : "s"}
+            </span>
           </span>
           {hasNonZeroStat(totals) && (
             <DiffStatLabel
@@ -77,8 +115,8 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
             />
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {hasDirectories && (
+        <div className="relative z-10 flex shrink-0 items-center gap-1">
+          {hasDirectories && expanded && (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -127,28 +165,32 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
           </Tooltip>
         </div>
       </div>
-      <ChangedFilesTree
-        key={`${runId}:${allDirectoriesExpanded}`}
-        runId={runId}
-        files={files}
-        allDirectoriesExpanded={allDirectoriesExpanded}
-        resolvedTheme={resolvedTheme}
-        onOpenTurnDiff={onOpenTurnDiff}
-        onFileContextMenu={onFileContextMenu}
-      />
-      {hiddenFileCount > 0 && (
-        <div className="px-3 pb-2">
-          <Button
-            type="button"
-            size="xs"
-            variant="ghost-muted"
-            onClick={() => onOpenTurnDiff(runId, files[0]?.path)}
-          >
-            {hiddenFileCount.toLocaleString()} more file{hiddenFileCount === 1 ? "" : "s"} in the
-            full diff
-          </Button>
-        </div>
-      )}
+      {expanded ? (
+        <>
+          <ChangedFilesTree
+            key={`${runId}:${allDirectoriesExpanded}`}
+            runId={runId}
+            files={files}
+            allDirectoriesExpanded={allDirectoriesExpanded}
+            resolvedTheme={resolvedTheme}
+            onOpenTurnDiff={onOpenTurnDiff}
+            onFileContextMenu={onFileContextMenu}
+          />
+          {hiddenFileCount > 0 && (
+            <div className="px-3 pb-2">
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost-muted"
+                onClick={() => onOpenTurnDiff(runId, files[0]?.path)}
+              >
+                {hiddenFileCount.toLocaleString()} more file{hiddenFileCount === 1 ? "" : "s"} in
+                the full diff
+              </Button>
+            </div>
+          )}
+        </>
+      ) : null}
     </div>
   );
 });
