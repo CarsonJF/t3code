@@ -119,6 +119,7 @@ import {
   splitCodexArtifactTemplateMarkdown,
 } from "@t3tools/shared/codexMarkdownDirectives";
 import { CHAT_LIST_ANCHOR_OFFSET, resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
+import type { TotThemeTokens } from "@t3tools/shared/totThemeTokens";
 import { imageMimeType } from "@t3tools/shared/image";
 import { videoMimeType } from "@t3tools/shared/video";
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
@@ -336,6 +337,7 @@ import { useOpenLocalPreview } from "../browser/useOpenLocalPreview";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { useMessageTimeFormatter } from "./useMessageTimeFormatter";
 import { useAnimateTotAvatars, useTotFace, useTots } from "../../state/tots";
+import { totThemeColor, useTotThemeTokens } from "../tots/useTotThemeTokens";
 import { TotLiveFace } from "../tots/TotLiveFace";
 import { TOT_THREAD_HEADER_HEIGHT, TotThreadHeader } from "../tots/TotThreadHeader";
 
@@ -1547,28 +1549,57 @@ function MarkdownDetailsFold(props: {
   );
 }
 
-function useMarkdownStyles(): MarkdownStyleSets {
+function useMarkdownStyles(tokens: TotThemeTokens): MarkdownStyleSets {
   const { appearance } = useAppearancePreferences();
   const nativeMarkdownTypography = resolveNativeMarkdownTypography(appearance.baseFontSize);
   const theme = useUniwindTheme();
-  const markdownBodyColor = theme["--color-md-body"];
-  const markdownStrongColor = theme["--color-md-strong"];
-  const markdownLinkColor = theme["--color-md-link"];
+  const markdownBodyColor = totThemeColor(tokens, "--tot-text", theme["--color-md-body"]);
+  const markdownStrongColor = totThemeColor(tokens, "--tot-text", theme["--color-md-strong"]);
+  const markdownLinkColor = totThemeColor(tokens, "--tot-accent", theme["--color-md-link"]);
+  const markdownMutedColor = totThemeColor(tokens, "--tot-muted", markdownBodyColor);
   const markdownBlockquoteBorder = theme["--color-md-blockquote-border"];
-  const markdownCodeBg = theme["--color-md-code-bg"];
-  const markdownCodeText = theme["--color-md-code-text"];
-  const markdownInlineCodeText = theme["--color-foreground-secondary"];
-  const markdownHrColor = theme["--color-md-hr"];
+  const markdownCodeBg = totThemeColor(tokens, "--tot-code-bg", theme["--color-md-code-bg"]);
+  const markdownCodeText = totThemeColor(tokens, "--tot-text", theme["--color-md-code-text"]);
+  const markdownInlineCodeText = totThemeColor(
+    tokens,
+    "--tot-text",
+    theme["--color-foreground-secondary"],
+  );
+  const markdownHrColor = totThemeColor(tokens, "--tot-border", theme["--color-md-hr"]);
   // Native chip drawing parses opaque hex only, and this role is translucent.
   const contextChipBorderColor = flattenThemeColor(
     theme["--color-border"],
     theme["--color-user-bubble"],
   );
-  const markdownUserBodyColor = theme["--color-user-bubble-foreground"];
+  const markdownUserBodyColor = totThemeColor(
+    tokens,
+    "--tot-text",
+    theme["--color-user-bubble-foreground"],
+  );
+  const markdownUserBubbleColor = totThemeColor(
+    tokens,
+    "--tot-surface",
+    theme["--color-user-bubble"],
+  );
+  const markdownUserMutedColor = totThemeColor(tokens, "--tot-muted", markdownUserBodyColor);
+  const markdownUserLinkColor = totThemeColor(tokens, "--tot-accent", markdownLinkColor);
   const markdownUserCodeBg = theme["--color-md-user-code-bg"];
-  const markdownUserCodeText = theme["--color-md-user-code-text"];
-  const markdownUserInlineCodeText = theme["--color-user-bubble-foreground-muted"];
-  const markdownUserFenceBg = theme["--color-md-user-fence-bg"];
+  const markdownUserCodeText = totThemeColor(
+    tokens,
+    "--tot-text",
+    theme["--color-md-user-code-text"],
+  );
+  const markdownUserInlineCodeText = totThemeColor(
+    tokens,
+    "--tot-muted",
+    theme["--color-user-bubble-foreground-muted"],
+  );
+  const markdownUserFenceBg = totThemeColor(
+    tokens,
+    "--tot-code-bg",
+    theme["--color-md-user-fence-bg"],
+  );
+  const markdownUserDividerColor = totThemeColor(tokens, "--tot-border", markdownUserBodyColor);
   const regularFontFamily = FONT_FAMILIES.regular;
   const boldFontFamily = FONT_FAMILIES.bold;
 
@@ -1577,15 +1608,15 @@ function useMarkdownStyles(): MarkdownStyleSets {
       nativeTextStyle: {
         color: markdownUserBodyColor,
         strongColor: markdownUserBodyColor,
-        mutedColor: markdownUserBodyColor,
-        linkColor: themeColorWithContrast(markdownLinkColor, theme["--color-user-bubble"]),
+        mutedColor: markdownUserMutedColor,
+        linkColor: themeColorWithContrast(markdownUserLinkColor, markdownUserBubbleColor),
         inlineCodeColor: markdownUserInlineCodeText,
         codeColor: markdownUserCodeText,
         codeBackgroundColor: markdownUserCodeBg,
         codeBlockBackgroundColor: markdownUserFenceBg,
         fileTextColor: markdownUserBodyColor,
         quoteMarkerColor: markdownUserBodyColor,
-        dividerColor: markdownUserBodyColor,
+        dividerColor: markdownUserDividerColor,
         contextChipBorderColor,
         fontSize: nativeMarkdownTypography.fontSize,
         lineHeight: nativeMarkdownTypography.lineHeight,
@@ -1599,7 +1630,7 @@ function useMarkdownStyles(): MarkdownStyleSets {
       nativeTextStyle: {
         color: markdownBodyColor,
         strongColor: markdownStrongColor,
-        mutedColor: markdownBodyColor,
+        mutedColor: markdownMutedColor,
         linkColor: markdownLinkColor,
         inlineCodeColor: markdownInlineCodeText,
         codeColor: markdownCodeText,
@@ -3145,6 +3176,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const tot = useTots().find(
     (entry) => entry.environmentId === props.environmentId && entry.tot.threadId === props.threadId,
   );
+  const totTheme = useTotThemeTokens(props.environmentId, props.threadId);
   const totFace = useTotFace(tot ?? null);
   const animateTot = useAnimateTotAvatars();
   const workflowOpening = useWorkflowOpening(props.detailRef);
@@ -3295,7 +3327,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     [androidButtonSize, androidIconSize],
   );
   const screenColor = theme["--color-screen"];
-  const userBubbleColor = theme["--color-user-bubble"];
+  const userBubbleColor = totThemeColor(totTheme, "--tot-surface", theme["--color-user-bubble"]);
   const openSkillInstructions = (path: string) => {
     void Haptics.selectionAsync();
     navigation.navigate("ThreadFile", {
@@ -3777,7 +3809,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       />
     ) : null;
   };
-  const markdownStyles = useMarkdownStyles();
+  const markdownStyles = useMarkdownStyles(totTheme);
   const renderReasoning = (text: string) => (
     <AssistantMarkdownContent
       markdown={text}
@@ -4499,7 +4531,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
               height: totHeaderHeight,
             }}
           >
-            <TotThreadHeader entry={tot} animate={animateTot} />
+            <TotThreadHeader entry={tot} animate={animateTot} tokens={totTheme} />
           </View>
         ) : null}
         {feedPlaceholderVisible ? (
