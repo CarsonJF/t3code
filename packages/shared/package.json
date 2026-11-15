@@ -43,6 +43,10 @@
       "types": "./src/themeCss.ts",
       "import": "./src/themeCss.ts"
     },
+    "./totTheme": {
+      "types": "./src/totTheme.ts",
+      "import": "./src/totTheme.ts"
+    },
     "./themePreview": {
       "types": "./src/themePreview.ts",
       "import": "./src/themePreview.ts"
