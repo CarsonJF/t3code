@@ -25,6 +25,8 @@ Tots always run in full access, and they can approve requests in your other thre
 - Home can hand work to another Tot and hears back when that work ends.
 - Tots never delete threads or projects. They archive or settle them.
 
+**Watch reports**, in a Tot's panel on its own thread, chooses what it hears about: **Launched threads only** (the default) reports only threads the Tot started, **Every watch** also reports threads it asked to watch and runs it sent into another Tot's thread, and **Off** stops reports without deleting the watches, so turning them back on resumes them.
+
 ## Other machines
 
 Tots live on one server and reach your other machines through linked environments. Turn on **Linked environments** in **Settings → Labs** on each machine, and link them at full access so a Tot can act and approve there.
