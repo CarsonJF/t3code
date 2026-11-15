@@ -33,6 +33,8 @@ type ContextWindow = {
 const FIXTURE = `
   fx.on("resize", (m) => parent.postMessage({ echo: m }, "*"));
   fx.on("pointer", (m) => parent.postMessage({ echo: m }, "*"));
+  fx.on("pointerdown", (m) => parent.postMessage({ echo: m }, "*"));
+  fx.on("pointerup", (m) => parent.postMessage({ echo: m }, "*"));
   fx.on("context", (m) => parent.postMessage({ echo: m }, "*"));
   let parentDocument = "readable";
   try { parent.document.title; } catch { parentDocument = "blocked"; }
@@ -123,6 +125,98 @@ describe("TotThemeEffect", () => {
     await vi.waitFor(() => expect(messages.echoes("pointer")).toHaveLength(1));
     // The iframe's own spoofed pointer and ready messages changed nothing.
     expect(messages.echoes("pointer")[0]).toEqual({ type: "pointer", x: 30, y: 5, inside: true });
+  });
+
+  it("posts a pointerdown in area-local px with its button", async () => {
+    using messages = setup();
+    await using screen = await render(<Area threadId={THREAD} script={FIXTURE} />);
+    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1));
+
+    const area = screen.container.querySelector<HTMLElement>("[data-testid=area]")!;
+    const rect = area.getBoundingClientRect();
+    area.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        clientX: rect.left + 40,
+        clientY: rect.top + 12,
+        button: 2,
+      }),
+    );
+    await vi.waitFor(() => expect(messages.echoes("pointerdown")).toHaveLength(1));
+    expect(messages.echoes("pointerdown")[0]).toEqual({
+      type: "pointerdown",
+      x: 40,
+      y: 12,
+      button: 2,
+      inside: true,
+    });
+  });
+
+  it("posts a pointerup in the frame it shares with its pointerdown", async () => {
+    using messages = setup();
+    await using screen = await render(<Area threadId={THREAD} script={FIXTURE} />);
+    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1));
+
+    const area = screen.container.querySelector<HTMLElement>("[data-testid=area]")!;
+    const rect = area.getBoundingClientRect();
+    area.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        clientX: rect.left + 7,
+        clientY: rect.top + 8,
+      }),
+    );
+    area.dispatchEvent(
+      new PointerEvent("pointerup", {
+        bubbles: true,
+        clientX: rect.left + 9,
+        clientY: rect.top + 10,
+      }),
+    );
+    await vi.waitFor(() => expect(messages.echoes("pointerup")).toHaveLength(1));
+    expect(messages.echoes("pointerdown")[0]).toEqual({
+      type: "pointerdown",
+      x: 7,
+      y: 8,
+      button: 0,
+      inside: true,
+    });
+    expect(messages.echoes("pointerup")[0]).toEqual({
+      type: "pointerup",
+      x: 9,
+      y: 10,
+      button: 0,
+      inside: true,
+    });
+  });
+
+  it("ignores presses outside the area", async () => {
+    using messages = setup();
+    await using screen = await render(<Area threadId={THREAD} script={FIXTURE} />);
+    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1));
+
+    const area = screen.container.querySelector<HTMLElement>("[data-testid=area]")!;
+    const rect = area.getBoundingClientRect();
+    for (const type of ["pointerdown", "pointerup"] as const) {
+      screen.container.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          clientX: rect.left + 5,
+          clientY: rect.top + 5,
+        }),
+      );
+    }
+    // A move flushes this frame, so a press queued from the outside would surface with it.
+    area.dispatchEvent(
+      new PointerEvent("pointermove", {
+        bubbles: true,
+        clientX: rect.left + 5,
+        clientY: rect.top + 5,
+      }),
+    );
+    await vi.waitFor(() => expect(messages.echoes("pointer")).toHaveLength(1));
+    expect(messages.echoes("pointerdown")).toHaveLength(0);
+    expect(messages.echoes("pointerup")).toHaveLength(0);
   });
 
   it("posts the session context once the effect loads", async () => {
