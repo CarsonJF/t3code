@@ -1,8 +1,11 @@
 import {
   EnvironmentId,
   GroupChatId,
+  ModelSelection,
+  OrchestratorMcpEnvironmentTarget,
   OrchestratorMcpFailure,
   ThreadId,
+  Tot,
   TotAvatar,
   TotId,
   TotScope,
@@ -12,6 +15,7 @@ import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
 
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../../../project/ProjectService.ts";
 import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -23,6 +27,7 @@ const shared = {
     McpInvocationContext.McpInvocationContext,
     ThreadManagementService.ThreadManagementService,
     SecureRandom.SecureRandom,
+    ProjectService.ProjectService,
     TotService.TotService,
     GroupChatService.GroupChatService,
   ],
@@ -82,9 +87,32 @@ const TotDesignAvatarTool = Tool.make("t3_tot_design_avatar", {
   success: Schema.Struct({ ok: Schema.Literal(true) }),
 }).annotate(Tool.Destructive, false);
 
+const TotCreateTool = Tool.make("t3_tot_create", {
+  ...shared,
+  description:
+    "As a Tot with scope `all`, create and turn on a new Tot, same as the app does. Its scope is set explicitly. It defaults to your model.",
+  parameters: Schema.Struct({
+    environmentId: OrchestratorMcpEnvironmentTarget,
+    name: Tot.fields.name,
+    scope: TotScope,
+    instructions: Schema.optional(
+      Schema.String.annotate({ description: "Personality for its AGENTS.md, in Markdown." }),
+    ),
+    avatar: Schema.optional(TotAvatar),
+    modelSelection: Schema.optional(ModelSelection),
+  }),
+  success: Schema.Struct({
+    id: TotId,
+    link: Schema.String,
+    folder: Schema.String,
+    scope: TotScope,
+  }),
+}).annotate(Tool.Destructive, false);
+
 export const TotToolkit = Toolkit.make(
   TotListTool,
   TotWatchTool,
   GroupChatSayTool,
   TotDesignAvatarTool,
+  TotCreateTool,
 );
