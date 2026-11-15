@@ -1,11 +1,13 @@
 import {
   parseTotThreadId,
   TOT_THEME_MAX_LENGTH,
+  totWatchReportsOf,
   type ScheduledTask,
   type ScheduledTaskWebhookFilter,
   type Tot,
   type TotAvatar,
   type TotScope,
+  type TotWatchReports,
 } from "@t3tools/contracts";
 import { totThemeProblem } from "@t3tools/shared/totTheme";
 
@@ -20,6 +22,7 @@ export interface TotSettingsDraft {
   readonly scope: TotScope;
   readonly instructions: string;
   readonly theme: TotThemeDraft;
+  readonly watchReports: TotWatchReports;
 }
 
 export type TotSettingsDraftErrors = Partial<
@@ -33,6 +36,7 @@ export function totSettingsDraftFromTot(tot: Tot): TotSettingsDraft {
     scope: tot.scope,
     instructions: tot.instructions,
     theme: { css: tot.theme?.css ?? "", effect: tot.theme?.effect ?? "" },
+    watchReports: totWatchReportsOf(tot),
   };
 }
 
@@ -66,6 +70,7 @@ export function totSettingsDraftKey(draft: TotSettingsDraft): string {
     scope: normalizedScope(draft.scope),
     instructions: draft.instructions,
     theme: draft.theme,
+    watchReports: draft.watchReports,
   });
 }
 
@@ -101,8 +106,28 @@ export function totSettingsDraftUpdate(draft: TotSettingsDraft): TotSettingsDraf
     scope: draft.scope,
     instructions: draft.instructions,
     theme: { css: draft.theme.css, effect: draft.theme.effect },
+    watchReports: draft.watchReports,
   };
 }
+
+/** The watch-reports choices: label in the select, and the one-line help shown under it. */
+export const WATCH_REPORTS: Record<
+  TotWatchReports,
+  { readonly label: string; readonly help: string }
+> = {
+  launched: {
+    label: "Launched threads only",
+    help: "Reports only threads this Tot starts.",
+  },
+  explicit: {
+    label: "Every watch",
+    help: "Also reports threads it chose to watch and runs it sent to other threads.",
+  },
+  off: {
+    label: "Off",
+    help: "No reports. Its watches are kept and resume if you turn reports back on.",
+  },
+};
 
 /** A Tot's routines target its own project, or one of the threads it has had. */
 export function scheduledTaskBelongsToTot(
