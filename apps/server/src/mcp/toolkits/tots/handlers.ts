@@ -1,4 +1,10 @@
-import { DEFAULT_HOME_TOT, OrchestratorMcpFailure } from "@t3tools/contracts";
+import {
+  DEFAULT_HOME_TOT,
+  OrchestratorMcpFailure,
+  type Tot,
+  type TotThemePatch,
+} from "@t3tools/contracts";
+import { totThemeProblem } from "@t3tools/shared/totTheme";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -13,6 +19,21 @@ import * as McpToolAccess from "../../McpToolAccess.ts";
 import { requireTotChange } from "../../totCaller.ts";
 import { readCaller } from "../../threadAccess.ts";
 import { TotToolkit } from "./tools.ts";
+
+/** Sizes and a summary only: the stored CSS and opaque effect text are never echoed. */
+const themeResult = (tot: Tot) => {
+  const cssLength = tot.theme?.css?.length ?? 0;
+  const effectLength = tot.theme?.effect?.length ?? 0;
+  return {
+    totId: tot.id,
+    cssLength,
+    effectLength,
+    summary: [
+      cssLength === 0 ? "No CSS" : `${cssLength} characters of CSS`,
+      effectLength === 0 ? "no effect" : `an effect of ${effectLength} characters`,
+    ].join(", "),
+  };
+};
 
 export const layer = McpToolAccess.toLayer(TotToolkit, {
   t3_tot_list: McpToolAccess.reads(() =>
@@ -72,6 +93,52 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
           ),
         );
       return { ok: true as const };
+    }),
+  ),
+  t3_tot_theme_set: McpToolAccess.reads((input) =>
+    Effect.gen(function* () {
+      const caller = yield* requireTotChange();
+      if (caller.via !== "local")
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message: "Your theme lives with you here; set it from your own environment.",
+        });
+      // The caller's own Tot is the only target: this tool takes no Tot id.
+      const patch: TotThemePatch = {
+        ...(input.css === undefined ? {} : { css: input.css }),
+        ...(input.effect === undefined ? {} : { effect: input.effect }),
+      };
+      const problem = totThemeProblem(patch);
+      if (problem !== null)
+        return yield* new OrchestratorMcpFailure({ code: "invalid_request", message: problem });
+      const tot = yield* (yield* TotService.TotService)
+        .setTheme(caller.totId, patch)
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new OrchestratorMcpFailure({ code: "invalid_request", message: error.message }),
+          ),
+        );
+      return themeResult(tot);
+    }),
+  ),
+  t3_tot_theme_read: McpToolAccess.reads(() =>
+    Effect.gen(function* () {
+      const caller = yield* requireTotChange();
+      if (caller.via !== "local")
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message: "Your theme lives with you here; read it from your own environment.",
+        });
+      const self = (yield* (yield* TotService.TotService).list).find(
+        (tot) => tot.id === caller.totId,
+      );
+      if (self === undefined)
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message: "This thread is no longer a Tot's current thread.",
+        });
+      return themeResult(self);
     }),
   ),
   t3_tot_webhook_listener: McpToolAccess.reads((input) =>
