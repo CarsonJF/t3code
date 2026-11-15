@@ -435,6 +435,27 @@ export function AppearanceSettingsPanel() {
           }
         />
         <SettingsRow
+          {...searchableSetting("tot-theme-effects")}
+          description="Play a Tot's theme effect, such as sparkles, while its thread is open. Effects run sandboxed with no network access."
+          resetAction={
+            settings.totThemeEffects !== DEFAULT_UNIFIED_SETTINGS.totThemeEffects ? (
+              <SettingResetButton
+                label="theme effects"
+                onClick={() =>
+                  updateSettings({ totThemeEffects: DEFAULT_UNIFIED_SETTINGS.totThemeEffects })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.totThemeEffects}
+              onCheckedChange={(checked) => updateSettings({ totThemeEffects: Boolean(checked) })}
+              aria-label="Theme effects"
+            />
+          }
+        />
+        <SettingsRow
           {...searchableSetting("tot-toasts")}
           description="Show a toast when a Tot replies and you are not looking at its thread."
           resetAction={
