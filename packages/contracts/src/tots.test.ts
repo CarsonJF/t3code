@@ -10,16 +10,19 @@ import {
   parseTotLaunchedThreadId,
   parseTotThreadId,
   TOT_FACE_ACTION,
+  Tot,
   TotId,
   totLaunchedThreadId,
   totSlug,
   totThreadId,
-  type Tot,
+  totWatchReportsOf,
+  type Tot as TotRecord,
 } from "./tots.ts";
 
 const yui = TotId.make("yui");
 const decodeServerSettings = Schema.decodeSync(ServerSettings);
 const decodeClientSettings = Schema.decodeSync(ClientSettingsSchema);
+const decodeTot = Schema.decodeSync(Tot);
 
 describe("totSlug", () => {
   it("turns a name into a stable id", () => {
@@ -66,10 +69,29 @@ describe("Tot settings", () => {
     expect(decodeClientSettings({}).animateTotAvatars).toBe(true);
     expect(decodeClientSettings({}).totThemeEffects).toBe(true);
   });
+
+  it("treats a Tot saved before watch reports as launched", () => {
+    const saved = decodeTot({
+      id: yui,
+      name: "Yui",
+      avatar: { color: "#0A7EA4" },
+      scope: "all",
+      instructions: "",
+      projectId: null,
+      threadId: null,
+      modelSelection: null,
+      watchAll: false,
+      watches: [],
+    });
+    expect(saved.watchReports).toBeUndefined();
+    expect(totWatchReportsOf(saved)).toBe("launched");
+    expect(totWatchReportsOf({ watchReports: "explicit" })).toBe("explicit");
+    expect(totWatchReportsOf({ watchReports: "off" })).toBe("off");
+  });
 });
 
 describe("isQuietTotThread", () => {
-  const tots = (enabled: boolean): ReadonlyArray<Tot> => [
+  const tots = (enabled: boolean): ReadonlyArray<TotRecord> => [
     {
       ...DEFAULT_HOME_TOT,
       id: yui,
