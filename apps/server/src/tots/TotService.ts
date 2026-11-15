@@ -13,6 +13,7 @@ import {
   type TotMemory,
   type TotMemoryFile,
   type TotThreadResult,
+  type TotThemePatch,
   type TotUpdateInput,
   type TotWatch,
   TOT_MAX_DESIGNS,
@@ -23,6 +24,7 @@ import {
   totSlug,
   totThreadId,
 } from "@t3tools/contracts";
+import { totThemeProblem } from "@t3tools/shared/totTheme";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
@@ -69,6 +71,11 @@ export class TotService extends Context.Service<
     readonly askForAvatar: (id: TotId, prompt: string) => Effect.Effect<void, TotError>;
     /** A Tot's own design: it becomes the Tot's face and joins its saved options. */
     readonly saveDesign: (id: TotId, avatar: TotAvatar) => Effect.Effect<Tot, TotError>;
+    /**
+     * Merges a theme write into the Tot's own theme. One field updates without
+     * erasing the other; `""` or null clears. `effect` stays opaque text.
+     */
+    readonly setTheme: (id: TotId, theme: TotThemePatch) => Effect.Effect<Tot, TotError>;
     readonly addWatch: (id: TotId, watch: TotWatch) => Effect.Effect<void, TotError>;
     readonly removeWatch: (
       id: TotId,
@@ -130,6 +137,21 @@ const make = Effect.gen(function* () {
   });
   const replace = (next: Tot) =>
     writeTots((tots) => tots.map((tot) => (tot.id === next.id ? next : tot)));
+
+  /**
+   * A theme write merges: an absent field keeps its stored value, and `""` or
+   * null clears that field alone. `effect` is opaque text: stored, never read.
+   */
+  const withTheme = (tot: Tot, patch: TotThemePatch): Tot => {
+    const css = patch.css === undefined ? tot.theme?.css : (patch.css ?? "");
+    const effect = patch.effect === undefined ? tot.theme?.effect : (patch.effect ?? "");
+    const { theme: _previous, ...rest } = tot;
+    const theme = {
+      ...(css === undefined || css === "" ? {} : { css }),
+      ...(effect === undefined || effect === "" ? {} : { effect }),
+    };
+    return Object.keys(theme).length === 0 ? rest : { ...rest, theme };
+  };
 
   const liveShell = (threadId: ThreadId) =>
     threads.getThreadShell(threadId).pipe(
@@ -311,7 +333,11 @@ const make = Effect.gen(function* () {
 
   const update = Effect.fn("TotService.update")(function* (input: TotUpdateInput) {
     const tot = yield* requireTot(input.id);
-    const next: Tot = {
+    if (input.theme !== undefined) {
+      const problem = totThemeProblem(input.theme);
+      if (problem !== null) return yield* fail(problem);
+    }
+    const base: Tot = {
       ...tot,
       ...(input.name === undefined ? {} : { name: input.name }),
       ...(input.avatar === undefined ? {} : { avatar: input.avatar }),
@@ -319,6 +345,7 @@ const make = Effect.gen(function* () {
       ...(input.instructions === undefined ? {} : { instructions: input.instructions }),
       ...(input.modelSelection === undefined ? {} : { modelSelection: input.modelSelection }),
     };
+    const next = input.theme === undefined ? base : withTheme(base, input.theme);
     yield* replace(next);
     if (next.projectId !== null) yield* ensureProject(next);
     if (next.name !== tot.name) yield* rename(next);
@@ -415,6 +442,15 @@ const make = Effect.gen(function* () {
     return next;
   }, locked);
 
+  const setTheme = Effect.fn("TotService.setTheme")(function* (id: TotId, patch: TotThemePatch) {
+    const tot = yield* requireTot(id);
+    const problem = totThemeProblem(patch);
+    if (problem !== null) return yield* fail(problem);
+    const next = withTheme(tot, patch);
+    yield* replace(next);
+    return next;
+  }, locked);
+
   const addWatch = Effect.fn("TotService.addWatch")(function* (id: TotId, watch: TotWatch) {
     const tot = yield* requireTot(id);
     const same = (existing: TotWatch) =>
@@ -495,6 +531,7 @@ const make = Effect.gen(function* () {
     writeMemory,
     askForAvatar,
     saveDesign,
+    setTheme,
     addWatch,
     removeWatch,
     setWatchAll,
