@@ -1,14 +1,17 @@
 import { useAtomValue } from "@effect/atom-react";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   selectTots,
+  totFaceInputFromShell,
+  totFaceState,
   totHostOrder,
   withoutTotProjects,
   type EnvironmentTot,
 } from "@t3tools/client-runtime/tots";
-import type { EnvironmentId, ServerSettings } from "@t3tools/contracts";
+import type { EnvironmentId, ServerSettings, TotFaceState } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
 
-import { useProjects } from "./entities";
+import { useProjects, useThreadShell } from "./entities";
 import { mobilePreferencesAtom } from "./preferences";
 import { connectedEnvironmentIdsAtom, environmentPresentations } from "./presentation";
 import { serverEnvironment } from "./server";
@@ -25,6 +28,16 @@ const totsAtom = Atom.make((get): ReadonlyArray<EnvironmentTot> => {
 
 export function useTots(): ReadonlyArray<EnvironmentTot> {
   return useAtomValue(totsAtom);
+}
+
+/** The face a Tot shows: its status light, or "sleep" while it has no thread here. */
+export function useTotFace(entry: EnvironmentTot | null): TotFaceState {
+  const ref =
+    entry === null || entry.tot.threadId === null
+      ? null
+      : scopeThreadRef(entry.environmentId, entry.tot.threadId);
+  const shell = useThreadShell(ref);
+  return entry === null ? "sleep" : totFaceState(totFaceInputFromShell(entry.tot, shell));
 }
 
 export interface TotHost {
