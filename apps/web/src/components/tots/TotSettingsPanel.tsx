@@ -10,6 +10,7 @@ import { totSkinSeriesOf, type TotSkinSeries } from "@t3tools/client-runtime/tot
 import {
   AuthOrchestrationOperateScope,
   parseTotThreadId,
+  TOT_THEME_MAX_LENGTH,
   type EnvironmentId,
   type ScheduledTask,
   type ScopedThreadRef,
@@ -294,6 +295,56 @@ function TotSettingsEditor(props: {
               placeholder="Warm and brief. Owns everything Cardinal Systems."
               onChange={(event) => setDraft({ ...draft, instructions: event.target.value })}
             />
+          </PanelSection>
+
+          <Separator />
+
+          <PanelSection
+            title="Theme"
+            description="This Tot's own conversation only; the sidebar and other threads keep the app's theme."
+          >
+            <label className="flex flex-col gap-1">
+              <span className="font-medium text-xs">CSS</span>
+              <Textarea
+                aria-label="Tot theme CSS"
+                className="min-h-28 resize-y"
+                value={draft.theme.css}
+                disabled={!canEdit}
+                placeholder={".messages-timeline-scroll { background: #101820; }"}
+                onChange={(event) =>
+                  setDraft({ ...draft, theme: { ...draft.theme, css: event.target.value } })
+                }
+              />
+              <span className="self-end text-xs text-muted-foreground">
+                {draft.theme.css.length.toLocaleString()} / {TOT_THEME_MAX_LENGTH.toLocaleString()}
+              </span>
+              {errors.themeCss ? (
+                <p className="text-destructive-foreground text-xs">{errors.themeCss}</p>
+              ) : null}
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-medium text-xs">Effect</span>
+              {/* Opaque text: this editor stores it and shows it; nothing here runs it. */}
+              <span className="text-xs text-muted-foreground">
+                Stored for the effect layer; not run here.
+              </span>
+              <Textarea
+                aria-label="Tot theme effect"
+                className="min-h-20 resize-y"
+                value={draft.theme.effect}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  setDraft({ ...draft, theme: { ...draft.theme, effect: event.target.value } })
+                }
+              />
+              <span className="self-end text-xs text-muted-foreground">
+                {draft.theme.effect.length.toLocaleString()} /{" "}
+                {TOT_THEME_MAX_LENGTH.toLocaleString()}
+              </span>
+              {errors.themeEffect ? (
+                <p className="text-destructive-foreground text-xs">{errors.themeEffect}</p>
+              ) : null}
+            </label>
           </PanelSection>
 
           <Separator />

@@ -151,3 +151,5 @@ Faces move in a Tot's own thread, in the Tots tab, and when you hover them in th
 ## Themes
 
 A Tot can wear its own theme: pick one under **Theme** when you edit it. Projects have a **Theme** row in their settings, and **Appearance → Group themes** sets one per thread group. A thread uses its Tot's theme, else its project's, else its group's, else the app's own. These choices are kept on the device. Picking **Same as the app** (or **Same as the project**) removes one.
+
+A Tot can also restyle its own conversation with CSS: open its **Theme** section in its settings, or ask it in its thread. The CSS is scoped to that Tot's conversation and applies only while its thread is open; the sidebar and other threads keep the app's theme. The **Effect** box beside it is stored for the effect layer and is not run by T3 Code.
