@@ -318,6 +318,7 @@ import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
 import { useThreadScopedThemeStyle } from "../hooks/useScopedThemes";
 import { GroupChatHero } from "./tots/GroupChatHero";
+import { TotThemeEffect } from "./tots/TotThemeEffect";
 import { TotThemeStyles } from "./tots/TotThemeStyles";
 import { TotHeaderTint, TotThreadHero } from "./tots/TotThreadHero";
 import { totConversationAttributes } from "./tots/totThreadScope";
@@ -3637,6 +3638,10 @@ export default function ChatView(props: ChatViewProps) {
               <TotThemeStyles
                 environmentId={activeThread.environmentId}
                 threadId={activeThread.id}
+              />
+              <TotThemeEffect
+                threadId={activeThread.id}
+                script={settings.tots.find((tot) => tot.id === activeTotId)?.theme?.effect}
               />
               {isTotThread ? (
                 <TotThreadHero
