@@ -782,6 +782,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("notification sound alert completion input approval desktop")],
   },
   {
+    id: "notification-sound",
+    title: "Notification sound",
+    to: "/settings/general",
+    searchTerms: ["notification sound alert tone chime preview none mute"],
+  },
+  {
+    id: "notification-volume",
+    title: "Notification volume",
+    to: "/settings/general",
+    searchTerms: ["notification volume loud quiet sound alert"],
+  },
+  {
     id: "in-app-notifications",
     title: msg("In-app notifications"),
     to: "/settings/general",
