@@ -243,6 +243,16 @@ it.effect("renaming Home keeps its id and renames its thread and project", () =>
   }).pipe(Effect.provide(layer));
 });
 
+it.effect("saves a Tot's watch reports through the update path", () => {
+  const { layer } = makeTots();
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    const updated = yield* tots.update({ id: HOME_TOT_ID, watchReports: "off" });
+    expect(updated.watchReports).toBe("off");
+    expect((yield* tots.list)[0]!.watchReports).toBe("off");
+  }).pipe(Effect.provide(layer));
+});
+
 it.effect("a report for a Tot thread that was replaced wakes no one", () => {
   const { layer, sent } = makeTots();
   return Effect.gen(function* () {
