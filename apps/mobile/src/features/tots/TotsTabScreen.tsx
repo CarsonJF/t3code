@@ -1,8 +1,5 @@
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   TOT_FACE_STATE_LABELS as STATE_LABELS,
-  totFaceInputFromShell,
-  totFaceState,
   type EnvironmentTot,
 } from "@t3tools/client-runtime/tots";
 import { useAtomValue } from "@effect/atom-react";
@@ -21,9 +18,14 @@ import { ListRowLayout } from "../../components/ui/ListRowLayout";
 import { ListSection } from "../../components/ui/ListSection";
 import { RowPressable } from "../../components/ui/RowPressable";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
-import { useThreadShell } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
-import { useAnimateTotAvatars, useTotHosts, useTots, type TotHost } from "../../state/tots";
+import {
+  useAnimateTotAvatars,
+  useTotFace,
+  useTotHosts,
+  useTots,
+  type TotHost,
+} from "../../state/tots";
 import { useWorkspaceSettledContentWidth } from "../layout/workspace-content-width";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
@@ -36,13 +38,6 @@ const NO_SETTINGS_ATOM = Atom.make<ServerSettings | null>(null).pipe(
 
 // The unfolded Fold and tablets: hero beside the list, as wide as a desktop settings column.
 const WIDE_LAYOUT_MIN_WIDTH = 600;
-
-function useTotFace(entry: EnvironmentTot) {
-  const ref =
-    entry.tot.threadId === null ? null : scopeThreadRef(entry.environmentId, entry.tot.threadId);
-  const shell = useThreadShell(ref);
-  return totFaceState(totFaceInputFromShell(entry.tot, shell));
-}
 
 /** Opens the Tot's thread, or its editor while it is off, like the desktop sidebar row. */
 function TotListRow(props: { readonly entry: EnvironmentTot; readonly machine: string | null }) {
