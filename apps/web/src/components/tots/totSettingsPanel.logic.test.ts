@@ -91,6 +91,18 @@ describe("tot settings draft", () => {
       "Yui",
     );
   });
+
+  it("edits watch reports, launched until set", () => {
+    const draft = totSettingsDraftFromTot(tot);
+    expect(draft.watchReports).toBe("launched");
+    expect(totSettingsDraftKey({ ...draft, watchReports: "off" })).not.toBe(
+      totSettingsDraftKey(draft),
+    );
+    expect(totSettingsDraftUpdate({ ...draft, watchReports: "off" }).watchReports).toBe("off");
+    expect(totSettingsDraftFromTot({ ...tot, watchReports: "explicit" }).watchReports).toBe(
+      "explicit",
+    );
+  });
 });
 
 describe("tot theme draft", () => {
