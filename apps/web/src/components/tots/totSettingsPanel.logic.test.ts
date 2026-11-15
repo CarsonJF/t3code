@@ -3,6 +3,7 @@ import {
   ProjectId,
   ThreadId,
   TotId,
+  TOT_THEME_MAX_LENGTH,
   totThreadId,
   type ScheduledTask,
   type ScheduledTaskWebhookFilter,
@@ -89,6 +90,51 @@ describe("tot settings draft", () => {
     expect(totSettingsDraftUpdate({ ...totSettingsDraftFromTot(tot), name: "  Yui  " }).name).toBe(
       "Yui",
     );
+  });
+});
+
+describe("tot theme draft", () => {
+  it("reads a stored theme into a draft and tracks edits", () => {
+    const themed: Tot = {
+      ...tot,
+      theme: { css: ":root { color: red; }", effect: "glow" },
+    };
+    const draft = totSettingsDraftFromTot(themed);
+    expect(draft.theme).toEqual({ css: ":root { color: red; }", effect: "glow" });
+    expect(
+      totSettingsDraftKey({ ...draft, theme: { ...draft.theme, css: ":root { color: blue; }" } }),
+    ).not.toBe(totSettingsDraftKey(draft));
+  });
+
+  it("leaves a field empty to clear it, without touching the other", () => {
+    const draft = totSettingsDraftFromTot({
+      ...tot,
+      theme: { css: ":root { color: red; }", effect: "glow" },
+    });
+    expect(totSettingsDraftUpdate({ ...draft, theme: { ...draft.theme, css: "" } }).theme).toEqual({
+      css: "",
+      effect: "glow",
+    });
+    expect(totSettingsDraftFromTot(tot).theme).toEqual({ css: "", effect: "" });
+  });
+
+  it("refuses CSS or an effect over the cap, and CSS that loads files", () => {
+    const draft = totSettingsDraftFromTot(tot);
+    expect(
+      totSettingsDraftErrors({ ...draft, theme: { ...draft.theme, css: "a".repeat(20_001) } }),
+    ).toMatchObject({ themeCss: expect.stringContaining(TOT_THEME_MAX_LENGTH.toLocaleString()) });
+    expect(
+      totSettingsDraftErrors({ ...draft, theme: { ...draft.theme, effect: "a".repeat(20_001) } }),
+    ).toMatchObject({
+      themeEffect: expect.stringContaining(TOT_THEME_MAX_LENGTH.toLocaleString()),
+    });
+    expect(
+      totSettingsDraftErrors({
+        ...draft,
+        theme: { ...draft.theme, css: "@import url(https://example.com/a.css);" },
+      }),
+    ).toMatchObject({ themeCss: "CSS cannot load files. Use data: or #id for url()." });
+    expect(totSettingsDraftErrors(draft)).toEqual({});
   });
 });
 
