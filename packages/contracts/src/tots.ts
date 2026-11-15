@@ -63,6 +63,14 @@ export type TotScope = typeof TotScope.Type;
 export const TotWatchReason = Schema.Literals(["launched", "requested", "sent"]);
 export type TotWatchReason = typeof TotWatchReason.Type;
 
+/**
+ * Which findings reach this Tot: `launched` only threads it started, `explicit`
+ * every stored watch too, `off` none. Absent means `launched`.
+ */
+export const TOT_WATCH_REPORTS = ["launched", "explicit", "off"] as const;
+export const TotWatchReports = Schema.Literals(TOT_WATCH_REPORTS);
+export type TotWatchReports = typeof TotWatchReports.Type;
+
 export const TotWatch = Schema.Struct({
   environmentId: EnvironmentId,
   threadId: ThreadId,
@@ -111,11 +119,17 @@ export const Tot = Schema.Struct({
   modelSelection: Schema.NullOr(ModelSelection),
   watchAll: Schema.Boolean,
   watches: Schema.Array(TotWatch),
+  /** Persisted; absent means `launched`, so older Tots decode unchanged. */
+  watchReports: Schema.optional(TotWatchReports),
   /** Faces the Tot designed for itself, newest first, kept as options. */
   designs: Schema.optional(Schema.Array(TotAvatar).check(Schema.isMaxLength(TOT_MAX_DESIGNS))),
   theme: Schema.optional(TotTheme),
 });
 export type Tot = typeof Tot.Type;
+
+/** The mode in effect for a Tot: `launched` until it is set. */
+export const totWatchReportsOf = (tot: Pick<Tot, "watchReports">): TotWatchReports =>
+  tot.watchReports ?? "launched";
 
 export const DEFAULT_HOME_TOT: Tot = {
   id: HOME_TOT_ID,
@@ -221,6 +235,7 @@ export const TotUpdateInput = Schema.Struct({
   instructions: Schema.optional(Tot.fields.instructions),
   modelSelection: Schema.optional(ModelSelection),
   theme: Schema.optional(TotThemePatch),
+  watchReports: Schema.optional(TotWatchReports),
 });
 export type TotUpdateInput = typeof TotUpdateInput.Type;
 
