@@ -1,6 +1,8 @@
 import { TotId, totThreadId } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import type { SessionPhase } from "~/types";
+
 import { render } from "../../../test/render";
 
 const settings = vi.hoisted(() => ({ totThemeEffects: true }));
@@ -19,10 +21,19 @@ import { TotThemeEffect } from "./TotThemeEffect";
 const THREAD = totThreadId(TotId.make("bob"), "one");
 const OTHER_THREAD = totThreadId(TotId.make("bob"), "two");
 
+const CONTEXT_WINDOW = { usedTokens: 25_000, maxTokens: 200_000, usedPercentage: 12.5 };
+
+type ContextWindow = {
+  usedTokens: number;
+  maxTokens: number | null;
+  usedPercentage: number | null;
+};
+
 // Echoes what the host sends, and reports what the sandbox refuses it.
 const FIXTURE = `
   fx.on("resize", (m) => parent.postMessage({ echo: m }, "*"));
   fx.on("pointer", (m) => parent.postMessage({ echo: m }, "*"));
+  fx.on("context", (m) => parent.postMessage({ echo: m }, "*"));
   let parentDocument = "readable";
   try { parent.document.title; } catch { parentDocument = "blocked"; }
   parent.postMessage({ parentDocument }, "*");
@@ -51,10 +62,22 @@ function setup() {
   };
 }
 
-const Area = (props: { threadId: string; script?: string }) => (
+const Area = (props: {
+  threadId: string;
+  script?: string;
+  contextWindow?: ContextWindow | null;
+  working?: boolean;
+  phase?: SessionPhase;
+}) => (
   <div data-testid="area" style={{ position: "relative", width: 300, height: 200 }}>
     <p>Message</p>
-    <TotThemeEffect threadId={props.threadId} script={props.script} />
+    <TotThemeEffect
+      threadId={props.threadId}
+      script={props.script}
+      contextWindow={props.contextWindow ?? null}
+      working={props.working ?? false}
+      phase={props.phase ?? "ready"}
+    />
   </div>
 );
 
@@ -100,6 +123,109 @@ describe("TotThemeEffect", () => {
     await vi.waitFor(() => expect(messages.echoes("pointer")).toHaveLength(1));
     // The iframe's own spoofed pointer and ready messages changed nothing.
     expect(messages.echoes("pointer")[0]).toEqual({ type: "pointer", x: 30, y: 5, inside: true });
+  });
+
+  it("posts the session context once the effect loads", async () => {
+    using messages = setup();
+    await using _screen = await render(
+      <Area
+        threadId={THREAD}
+        script={FIXTURE}
+        contextWindow={CONTEXT_WINDOW}
+        working={true}
+        phase="running"
+      />,
+    );
+    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1));
+    expect(messages.echoes("context")[0]).toEqual({
+      type: "context",
+      usedTokens: 25_000,
+      maxTokens: 200_000,
+      usedPercentage: 12.5,
+      working: true,
+      phase: "running",
+    });
+  });
+
+  it("posts context again only when one of its values changes", async () => {
+    using messages = setup();
+    await using screen = await render(
+      <Area threadId={THREAD} script={FIXTURE} contextWindow={CONTEXT_WINDOW} />,
+    );
+    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1));
+
+    await screen.rerender(
+      <Area
+        threadId={THREAD}
+        script={FIXTURE}
+        contextWindow={{ usedTokens: 150_000, maxTokens: 200_000, usedPercentage: 75 }}
+        working={true}
+        phase="running"
+      />,
+    );
+    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(2));
+    expect(messages.echoes("context")[1]).toMatchObject({
+      usedTokens: 150_000,
+      maxTokens: 200_000,
+      usedPercentage: 75,
+      working: true,
+      phase: "running",
+    });
+  });
+
+  it("posts no context message when the values do not change", async () => {
+    using messages = setup();
+    await using screen = await render(
+      <Area threadId={THREAD} script={FIXTURE} contextWindow={CONTEXT_WINDOW} />,
+    );
+    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1));
+
+    await screen.rerender(
+      <Area
+        threadId={THREAD}
+        script={FIXTURE}
+        contextWindow={{ ...CONTEXT_WINDOW }}
+        working={false}
+        phase="ready"
+      />,
+    );
+    // A pointer message flushes the same frame queue, so a stale context message would show up.
+    const area = screen.container.querySelector<HTMLElement>("[data-testid=area]")!;
+    const rect = area.getBoundingClientRect();
+    area.dispatchEvent(
+      new PointerEvent("pointermove", {
+        bubbles: true,
+        clientX: rect.left + 5,
+        clientY: rect.top + 5,
+      }),
+    );
+    await vi.waitFor(() => expect(messages.echoes("pointer")).toHaveLength(1));
+    expect(messages.echoes("context")).toHaveLength(1);
+  });
+
+  it("sends numbers and the phase name, never conversation content", async () => {
+    using messages = setup();
+    await using _screen = await render(
+      <Area threadId={THREAD} script={FIXTURE} contextWindow={CONTEXT_WINDOW} />,
+    );
+    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1));
+    const message = messages.echoes("context")[0] as Record<string, unknown>;
+    expect(Object.keys(message).sort()).toEqual([
+      "maxTokens",
+      "phase",
+      "type",
+      "usedPercentage",
+      "usedTokens",
+      "working",
+    ]);
+    expect(
+      [message.usedTokens, message.maxTokens, message.usedPercentage].every(
+        (value) => typeof value === "number" || value === null,
+      ),
+    ).toBe(true);
+    expect(typeof message.working).toBe("boolean");
+    expect(typeof message.phase).toBe("string");
+    expect(JSON.stringify(message)).not.toContain("Message");
   });
 
   it("stops listening once the effect unmounts", async () => {
