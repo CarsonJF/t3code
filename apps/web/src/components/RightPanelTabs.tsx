@@ -52,6 +52,7 @@ import {
   Globe2,
   MessagesSquare,
   Plus,
+  Settings2Icon,
   TerminalSquare,
   Volume2Icon,
   VolumeOffIcon,
@@ -631,6 +632,8 @@ function surfaceTitle(
         surface,
         resolve(msg("Thread on {label}", { label: surface.label })),
       );
+    case "tot-settings":
+      return resolve(msg("Tot settings"));
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return resolve(msg("Browser"));
@@ -725,6 +728,8 @@ function SurfaceIcon({
       return <SideChatTabIcon environmentId={environmentId} threadId={surface.threadId} />;
     case "linked-thread":
       return <MessagesSquare className="size-3 shrink-0" />;
+    case "tot-settings":
+      return <Settings2Icon className="size-3 shrink-0" />;
     case "device":
       return surface.target?.platform === "ios" ? (
         <AppleIcon className="size-3 shrink-0" />

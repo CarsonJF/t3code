@@ -30,6 +30,8 @@ export interface PanelLayoutControlsProps {
   threadPanelPresentation: ThreadPanelPresentation;
   threadPanelPopoverHandle?: ReturnType<typeof PopoverCreateHandle>;
   threadPanelShortcutLabel: string | null;
+  /** The thread details control's label; Tot threads use it for their settings. */
+  threadPanelLabel?: string | undefined;
   rightPanelAvailable: boolean;
   rightPanelOpen: boolean;
   rightPanelShortcutLabel: string | null;
@@ -50,6 +52,7 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   threadPanelPresentation,
   threadPanelPopoverHandle,
   threadPanelShortcutLabel,
+  threadPanelLabel,
   rightPanelAvailable,
   rightPanelOpen,
   rightPanelShortcutLabel,
@@ -59,12 +62,13 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   onToggleRightPanel,
 }: PanelLayoutControlsProps) {
   const gt = useGT();
+  const resolvedThreadPanelLabel = threadPanelLabel ?? gt("Toggle thread details");
   const threadPanelToggle = (
     <Toggle
       className="relative shrink-0 [-webkit-app-region:no-drag]"
       pressed={threadPanelOpen}
       onPressedChange={threadPanelPresentation === "popover" ? undefined : onToggleThreadPanel}
-      aria-label={gt("Toggle thread details panel")}
+      aria-label={gt("{label} panel", { label: resolvedThreadPanelLabel })}
       variant="ghost"
       size="sm"
     >
@@ -82,8 +86,11 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
       </TooltipTrigger>
       <TooltipPopup side="bottom">
         {threadPanelShortcutLabel
-          ? gt("Toggle thread details ({shortcut})", { shortcut: threadPanelShortcutLabel })
-          : gt("Toggle thread details")}
+          ? gt("{label} ({shortcut})", {
+              label: resolvedThreadPanelLabel,
+              shortcut: threadPanelShortcutLabel,
+            })
+          : resolvedThreadPanelLabel}
       </TooltipPopup>
     </Tooltip>
   );
