@@ -3,6 +3,13 @@ import type { ClientSettings } from "@t3tools/contracts/settings";
 
 import completionUrl from "./assets/notification-completion.mp3";
 import inputUrl from "./assets/notification-input.mp3";
+import { getClientSettings } from "./hooks/useSettings";
+import {
+  isSynthSound,
+  notificationGain,
+  playSynthSound,
+  synthDuration,
+} from "./notificationSounds";
 
 type NotificationMode = ClientSettings["notificationMode"];
 export const NOTIFICATION_MODE_LABELS = {
@@ -115,21 +122,44 @@ export function unlockNotificationAudio() {
 export async function playNotificationSound(
   kind: "completion" | "input",
   shouldPlay: () => boolean,
+  preview?: { sound: ClientSettings["notificationSound"]; volume: number },
 ) {
   if (!audioContext || audioContext.state !== "running") return;
   const context = audioContext;
+  const settings = getClientSettings();
+  const sound = preview?.sound ?? settings.notificationSound;
+  const gain = notificationGain(preview?.volume ?? settings.notificationVolume);
+  if (sound === "none" || gain === 0) return;
   const url = kind === "completion" ? completionUrl : inputUrl;
+  const slot = isSynthSound(sound) ? `${sound}:${kind}` : url;
   try {
-    const decoded = await loadNotificationBuffer(context, url);
+    const decoded = isSynthSound(sound) ? undefined : await loadNotificationBuffer(context, url);
     if (!shouldPlay() || context.state !== "running") return;
     // Coalesce same-sound bursts after decode to avoid clipping; input and completion alerts keep separate slots.
-    if (context.currentTime < (playingUntil.get(url) ?? 0)) return;
-    const source = context.createBufferSource();
-    source.buffer = decoded;
-    source.connect(context.destination);
-    source.start();
-    playingUntil.set(url, context.currentTime + decoded.duration);
+    if (context.currentTime < (playingUntil.get(slot) ?? 0)) return;
+    const volume = context.createGain();
+    volume.gain.value = gain;
+    volume.connect(context.destination);
+    if (isSynthSound(sound)) {
+      playSynthSound(context, sound, kind, volume);
+      playingUntil.set(slot, context.currentTime + synthDuration(sound, kind));
+    } else if (decoded) {
+      const source = context.createBufferSource();
+      source.buffer = decoded;
+      source.connect(volume);
+      source.start();
+      playingUntil.set(slot, context.currentTime + decoded.duration);
+    }
   } catch {
     // A failed load is retried on the next alert.
   }
+}
+
+export async function previewNotificationSound(
+  sound: ClientSettings["notificationSound"],
+  volume: number,
+) {
+  unlockNotificationAudio();
+  await audioContext?.resume().catch(() => undefined);
+  await playNotificationSound("completion", () => true, { sound, volume });
 }

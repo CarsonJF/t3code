@@ -280,6 +280,23 @@ export const NotificationMode = Schema.Literals([
 ]);
 export type NotificationMode = typeof NotificationMode.Type;
 
+export const NotificationSound = Schema.Literals([
+  "classic",
+  "chime",
+  "bubble",
+  "soft-bell",
+  "gentle",
+  "none",
+]);
+export type NotificationSound = typeof NotificationSound.Type;
+export const MIN_NOTIFICATION_VOLUME = 0;
+export const MAX_NOTIFICATION_VOLUME = 100;
+export const NotificationVolume = Schema.Int.check(
+  Schema.isBetween({ minimum: MIN_NOTIFICATION_VOLUME, maximum: MAX_NOTIFICATION_VOLUME }),
+);
+export type NotificationVolume = typeof NotificationVolume.Type;
+const DEFAULT_NOTIFICATION_VOLUME: NotificationVolume = 40;
+
 export const QuitConfirmationMode = Schema.Literals(["direct", "hold", "double-click"]);
 export type QuitConfirmationMode = typeof QuitConfirmationMode.Type;
 const DEFAULT_QUIT_CONFIRMATION_MODE: QuitConfirmationMode = "hold";
@@ -410,6 +427,12 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed("off" as const)),
   ),
   inAppNotificationsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  notificationSound: NotificationSound.pipe(
+    Schema.withDecodingDefault(Effect.succeed("classic" as const)),
+  ),
+  notificationVolume: NotificationVolume.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_NOTIFICATION_VOLUME)),
+  ),
   diffColorScheme: DiffColorScheme.pipe(
     Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
   ),
@@ -2044,6 +2067,8 @@ export function requiredScopesForProjectMutation(
 export const ClientSettingsPatch = Schema.Struct({
   notificationMode: Schema.optionalKey(NotificationMode),
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
+  notificationSound: Schema.optionalKey(NotificationSound),
+  notificationVolume: Schema.optionalKey(NotificationVolume),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   chatWidth: Schema.optionalKey(ChatWidth),
   effortDisplay: Schema.optionalKey(EffortDisplay),
