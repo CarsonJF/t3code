@@ -28,6 +28,12 @@ describe("renderTotAgents", () => {
     assert.include(text, "aincrad");
     assert.include(text, "Cardinal Systems");
     assert.include(text, "hand it to Home");
+    assert.include(text, "**Default to a new thread for real work.**");
+    assert.include(text, "one job per thread");
+    assert.include(
+      text,
+      "Never end a turn while a check or long command you started is still running",
+    );
   });
 
   it("replaces only the T3 blocks and keeps the user's own text", () => {
