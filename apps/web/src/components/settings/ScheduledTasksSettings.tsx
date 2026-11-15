@@ -369,6 +369,7 @@ function deliveryOutcomeVariant(outcome: string) {
     outcome === "coalesced" ||
     outcome === "disabled" ||
     outcome === "rate_limited" ||
+    outcome === "cooldown" ||
     outcome === "expired"
   ) {
     return "warning";
