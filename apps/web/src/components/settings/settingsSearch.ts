@@ -383,6 +383,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["tots faces motion animation boopface avatar"],
   },
   {
+    id: "tot-theme-effects",
+    title: "Theme effects",
+    to: "/settings/appearance",
+    searchTerms: ["tots theme effect sparkles animation canvas script"],
+  },
+  {
     id: "panel-animations",
     title: "Panel animations",
     to: "/settings/appearance",
