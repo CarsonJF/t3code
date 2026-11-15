@@ -16028,6 +16028,46 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   });
 
   /**
+   * A runless system notice. `message.dispatch` normally starts or queues a run,
+   * but a listener notice is only a timeline line: no run, no message, no queue.
+   */
+  const dispatchSystemNotice = Effect.fn("orchestrationV2.systemNotice")(function* (
+    command: Extract<OrchestrationV2Command, { type: "message.dispatch" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) {
+    const projection = yield* getProjectionWithPendingEvents(command.threadId, events);
+    const now = yield* DateTime.now;
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "turn-item.updated",
+      threadId: command.threadId,
+      providerInstanceId: projection.thread.providerInstanceId,
+      occurredAt: now,
+      payload: {
+        id: idAllocator.derive.userTurnItem({ messageId: command.messageId }),
+        threadId: command.threadId,
+        runId: null,
+        nodeId: null,
+        providerThreadId: null,
+        providerTurnId: null,
+        nativeItemRef: null,
+        parentItemId: null,
+        ordinal: yield* nextTurnItemOrdinal(projection),
+        status: "completed",
+        title: null,
+        startedAt: now,
+        completedAt: now,
+        updatedAt: now,
+        type: "system_notice",
+        message: command.text,
+        level: "info",
+      },
+    });
+  });
+
+  /**
    * A message in a group chat room. The room never runs an agent: its members answer from
    * their own threads, so the message is recorded with no run, no provider turn and no queue.
    */
@@ -16352,6 +16392,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         yield* dispatchThreadProjectAdoptFolder(command, events);
         break;
       case "message.dispatch": {
+        if (command.systemNotice === true) {
+          yield* dispatchSystemNotice(command, events);
+          break;
+        }
         if (isGroupChatThreadId(command.threadId)) {
           yield* dispatchRoomMessage(command, events);
           break;
