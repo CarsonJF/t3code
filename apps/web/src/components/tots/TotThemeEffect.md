@@ -25,14 +25,17 @@ Before your script runs, the page has a full-size `<canvas id="fx">` already siz
 
 The host sends at most one message of each type per animation frame:
 
-| type         | fields                                                                   |
-| ------------ | ------------------------------------------------------------------------ |
-| `pointer`    | `x`, `y` in CSS px from the frame's top left; `inside: false` on leaving |
-| `resize`     | `width`, `height` in CSS px, `dpr`                                       |
-| `motion`     | `reduced`: the user prefers reduced motion                               |
-| `visibility` | `hidden`: the app is in the background                                   |
+| type         | fields                                                                                                                                             |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pointer`    | `x`, `y` in CSS px from the frame's top left; `inside: false` on leaving                                                                           |
+| `resize`     | `width`, `height` in CSS px, `dpr`                                                                                                                 |
+| `motion`     | `reduced`: the user prefers reduced motion                                                                                                         |
+| `visibility` | `hidden`: the app is in the background                                                                                                             |
+| `context`    | `usedTokens`, `maxTokens`, `usedPercentage` (`null` when unknown), `working`, `phase` (`"disconnected"`, `"connecting"`, `"ready"` or `"running"`) |
 
-Pointer messages arrive only while the pointer moves over the conversation area. Draw nothing while idle: run `requestAnimationFrame` only while something is animating, stop when `hidden` is true, and keep motion minimal (or skip it) when `reduced` is true.
+Pointer messages arrive only while the pointer moves over the conversation area. A `context` message arrives once after the frame loads and then only when one of its values changes, never once per frame. It carries numbers and the phase name only: never message text, prompts or tool output.
+
+Draw nothing while idle: run `requestAnimationFrame` only while something is animating, stop when `hidden` is true, and keep motion minimal (or skip it) when `reduced` is true.
 
 ## Example
 
@@ -50,4 +53,17 @@ const draw = (m) => {
   ctx.fill();
 };
 fx.on("pointer", draw);
+```
+
+Snow that gets heavier as the context window fills:
+
+```js
+// 0 at an empty window, 1 when it is full.
+let intensity = 0;
+
+fx.on("context", (m) => {
+  intensity = (m.usedPercentage ?? 0) / 100;
+});
+
+// Scale how many flakes you spawn, or how fast they fall, by `intensity`.
 ```
