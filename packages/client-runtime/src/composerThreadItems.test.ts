@@ -145,4 +145,24 @@ describe("matchComposerEnvironmentItems", () => {
       }),
     ).toEqual([]);
   });
+
+  it("adds the composer's own machine when asked, for the Tot chat", () => {
+    expect(
+      matchComposerEnvironmentItems({
+        environments,
+        environmentId: EnvironmentId.make("env-here"),
+        includeOwnEnvironment: true,
+        query: "lap",
+      }),
+    ).toEqual([
+      {
+        id: "environment:env-here",
+        type: "environment",
+        environmentId: "env-here",
+        machine: "laptop",
+        label: "Laptop",
+        description: "Machine",
+      },
+    ]);
+  });
 });
