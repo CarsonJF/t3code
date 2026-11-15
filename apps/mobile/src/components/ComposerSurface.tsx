@@ -174,6 +174,10 @@ export function ComposerSurface(props: {
   readonly style: ViewStyle;
   readonly animateLayout?: boolean;
   readonly tone?: "warning";
+  /** A Tot theme's surface, replacing the app's glass or fallback colour. */
+  readonly surfaceColor?: string | undefined;
+  /** A Tot theme's border, recolouring the host's existing hairline. */
+  readonly borderColor?: string | undefined;
 }) {
   const colors = useUniwindTheme();
   const targetBorderRadius =
@@ -210,13 +214,19 @@ export function ComposerSurface(props: {
     >
       <AnimatedGlassSurface
         chrome="none"
-        fallbackColor={colors["--color-composer-surface"]}
+        fallbackColor={props.surfaceColor ?? colors["--color-composer-surface"]}
         fallbackClassName="border border-composer-border"
         glassEffectStyle="regular"
         pointerEvents="none"
         tintColor="transparent"
         layout={layoutTransition}
-        style={[{ position: "absolute", inset: 0 }, animatedShapeStyle]}
+        style={[
+          { position: "absolute", inset: 0 },
+          ...(props.borderColor === undefined
+            ? []
+            : [{ borderColor: props.borderColor, borderWidth: 1 }]),
+          animatedShapeStyle,
+        ]}
       >
         {null}
       </AnimatedGlassSurface>
@@ -224,7 +234,13 @@ export function ComposerSurface(props: {
         collapsable={false}
         className={props.tone === "warning" ? "bg-warning" : undefined}
         layout={layoutTransition}
-        style={[props.style, animatedShapeStyle]}
+        style={[
+          props.style,
+          animatedShapeStyle,
+          ...(props.surfaceColor === undefined || props.tone !== undefined
+            ? []
+            : [{ backgroundColor: props.surfaceColor }]),
+        ]}
       >
         {props.children}
       </Animated.View>
