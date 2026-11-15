@@ -155,12 +155,58 @@ const ScheduledTaskWebhookFilters = Schema.Array(ScheduledTaskWebhookFilter)
     description: "All must match. Max 16. Omitted: keep stored. [] clears.",
   });
 
+/** A static header check for senders that cannot compute an HMAC, such as Home Assistant. */
+const ScheduledTaskWebhookBearer = Schema.Struct({
+  header: TrimmedNonEmptyString.annotate({
+    description: "Header carrying the secret, such as authorization.",
+  }),
+}).annotate({
+  description: "Static bearer check. `Authorization: Bearer <secret>` or the raw secret.",
+});
+type ScheduledTaskWebhookBearer = typeof ScheduledTaskWebhookBearer.Type;
+
+const MAX_WEBHOOK_LISTENER_COOLDOWN_SECONDS = 86_400;
+
+/**
+ * A listener delivers a webhook into its bound thread. `notify` posts a compact
+ * line with no model call; `wake` starts a turn with the payload framed as data.
+ */
+export const ScheduledTaskWebhookListener = Schema.Struct({
+  mode: Schema.optional(Schema.Literals(["notify", "wake"])).annotate({
+    description: "Default: notify.",
+  }),
+  /** Whole notice line in notify mode, prompt template in wake mode. */
+  messageTemplate: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))).annotate(
+    {
+      description: "Uses {{body.path}}, {{headers.name}}, {{query.name}}, {{body}}, {{request}}.",
+    },
+  ),
+  /** Dropped deliveries while inside the window are logged as `cooldown`. */
+  cooldownSeconds: Schema.optional(
+    Schema.Int.check(
+      Schema.isBetween({ minimum: 0, maximum: MAX_WEBHOOK_LISTENER_COOLDOWN_SECONDS }),
+    ),
+  ).annotate({ description: "0 turns the cooldown off." }),
+  /** Also marks the bound thread unread so clients badge it. */
+  notify: Schema.optional(Schema.Boolean),
+}).annotate({ description: "Deliver into the bound thread instead of starting a fresh run." });
+export type ScheduledTaskWebhookListener = typeof ScheduledTaskWebhookListener.Type;
+
+/** Servers before listeners omit `mode`; a listener without one notifies. */
+export function scheduledTaskListenerMode(
+  listener: ScheduledTaskWebhookListener,
+): "notify" | "wake" {
+  return listener.mode ?? "notify";
+}
+
 const ScheduledTaskWebhookSchedule = Schema.Struct({
   type: Schema.Literal("webhook"),
   signature: Schema.NullOr(ScheduledTaskWebhookSignature),
+  bearer: Schema.optional(Schema.NullOr(ScheduledTaskWebhookBearer)),
   maxDeliveryAgeMinutes: Schema.optional(Schema.NullOr(WebhookMaxDeliveryAgeMinutes)),
   dedupe: Schema.optional(ScheduledTaskWebhookDedupe),
   filters: Schema.optional(ScheduledTaskWebhookFilters),
+  listener: Schema.optional(ScheduledTaskWebhookListener),
 }).annotate({
   description: "Run on each webhook request.",
 });
@@ -182,12 +228,31 @@ const ScheduledTaskUpsertWebhookSchedule = Schema.Struct({
   ).annotate({
     description: "Omit for URL token only.",
   }),
+  bearer: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        ...ScheduledTaskWebhookBearer.fields,
+        secret: Schema.optional(TrimmedNonEmptyString).annotate({
+          description: "Default: stored secret.",
+        }),
+        secretRef: Schema.optional(SecretRef).annotate({
+          description: "From `request_secret`. Instead of `secret`. Spent by this save.",
+        }),
+      }),
+    ),
+  ).annotate({
+    description:
+      "Static header check for senders that cannot sign, such as `{header:'authorization'}`. Instead of `signature`.",
+  }),
   maxDeliveryAgeMinutes: Schema.optional(Schema.NullOr(WebhookMaxDeliveryAgeMinutes)),
   dedupe: Schema.optional(ScheduledTaskWebhookDedupe),
   filters: Schema.optional(ScheduledTaskWebhookFilters),
+  listener: Schema.optional(Schema.NullOr(ScheduledTaskWebhookListener)).annotate({
+    description: "Deliver into the bound thread. Omit to keep; null to clear.",
+  }),
 }).annotate({
   description:
-    "Run per webhook request. Prompt can use {{body.path}}, {{headers.name}}, {{query.name}}, {{body}}, {{request}}.",
+    "Run per webhook request. Prompt can use {{body.path}}, {{headers.name}}, {{query.name}}, {{body}}, {{request}}. A listener posts into its bound thread instead.",
 });
 
 /** Accept legacy sub-minute schedules so users can still manage them. */
@@ -333,6 +398,7 @@ export const ScheduledTaskWebhookDeliveryOutcome = Schema.Literals([
   "rejected_signature",
   "disabled",
   "rate_limited",
+  "cooldown",
   "expired",
   "filtered",
 ]);
