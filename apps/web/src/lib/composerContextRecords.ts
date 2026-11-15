@@ -371,6 +371,7 @@ export function environmentContextReference(
 export function environmentContextRecord(
   environmentId: EnvironmentId,
   label: string,
+  os?: EnvironmentContextRecord["os"],
 ): EnvironmentContextRecord {
   return {
     version: 1,
@@ -378,6 +379,7 @@ export function environmentContextRecord(
     contextId: toKindScopedComposerContextId("environment", environmentId),
     label: sanitizeComposerContextLabel(label, "environment"),
     environmentId,
+    ...(os === undefined ? {} : { os }),
   };
 }
 
