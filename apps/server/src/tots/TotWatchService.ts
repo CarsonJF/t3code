@@ -9,6 +9,7 @@ import {
   type ThreadId,
   type Tot,
   type TotId,
+  totWatchReportsOf,
 } from "@t3tools/contracts";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
 import * as Context from "effect/Context";
@@ -31,6 +32,7 @@ import {
   watchTransition,
   type WatchedThreadState,
 } from "./totWatchTransitions.ts";
+import { deliversWatchReport } from "./totWatchReports.ts";
 
 /** Reports wait this long so several changes reach a Tot as one message. */
 const REPORT_BATCH_WINDOW = Duration.seconds(2);
@@ -164,13 +166,17 @@ const make = Effect.gen(function* () {
     const owner = parseTotLaunchedThreadId(threadId);
     for (const tot of yield* tots.list) {
       if (tot.threadId === null || tot.threadId === threadId) continue;
+      const mode = totWatchReportsOf(tot);
+      // Off keeps its watches: switching reports back on resumes them.
+      if (mode === "off") continue;
       const explicit = tot.watches.filter(
         (watch) => watch.environmentId === environmentId && watch.threadId === threadId,
       );
       const viaAll =
         tot.watchAll &&
         parseTotThreadId(threadId) === null &&
-        (owner === null || owner === tot.id) &&
+        // `launched` counts a watch-everything match only where this Tot launched the thread.
+        (mode === "explicit" ? owner === null || owner === tot.id : owner === tot.id) &&
         shell !== null &&
         inScope(tot, environmentId, shell);
       if (explicit.length === 0 && !viaAll) continue;
@@ -193,6 +199,15 @@ const make = Effect.gen(function* () {
         continue;
       }
       if (onlySent && !sentRun) continue;
+      if (
+        !deliversWatchReport({
+          mode,
+          reasons: explicit.map((watch) => watch.reason),
+          viaAll,
+        })
+      ) {
+        continue;
+      }
       const link = formatThreadLink({ environmentId, threadId }, shell?.title);
       outbox.push({
         totId: tot.id,
@@ -279,7 +294,12 @@ const make = Effect.gen(function* () {
       baseline = false;
       previous = next;
       const forThisRun = watch.reason !== "sent" || watch.runId === next.runId;
-      if (event !== null && event !== "ended" && forThisRun) {
+      const delivers = deliversWatchReport({
+        mode: totWatchReportsOf(tot),
+        reasons: [watch.reason],
+        viaAll: false,
+      });
+      if (event !== null && event !== "ended" && forThisRun && delivers) {
         outbox.push({
           totId,
           expectedThreadId: tot.threadId,
