@@ -509,6 +509,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.animateTotAvatars !== DEFAULT_UNIFIED_SETTINGS.animateTotAvatars
       ? ["Animate Tot avatars"]
       : []),
+    ...(settings.totThemeEffects !== DEFAULT_UNIFIED_SETTINGS.totThemeEffects
+      ? ["Theme effects"]
+      : []),
     ...(settings.totToasts !== DEFAULT_UNIFIED_SETTINGS.totToasts ? ["Tot toasts"] : []),
     ...(settings.panelAnimationDurationMs !== DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs
       ? [gt("Panel animations")]
@@ -701,6 +704,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       effortDisplay: DEFAULT_UNIFIED_SETTINGS.effortDisplay,
       mathRenderingEnabled: DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled,
       animateTotAvatars: DEFAULT_UNIFIED_SETTINGS.animateTotAvatars,
+      totThemeEffects: DEFAULT_UNIFIED_SETTINGS.totThemeEffects,
       totToasts: DEFAULT_UNIFIED_SETTINGS.totToasts,
       language: DEFAULT_UNIFIED_SETTINGS.language,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
