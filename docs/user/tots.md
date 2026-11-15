@@ -51,6 +51,80 @@ Turn on **Tot toasts** in Appearance settings to get a toast when a Tot replies,
 
 A Tot's replies are drawn in its color, with its face and name beside them.
 
+## Webhook listeners
+
+Ask a Tot to listen for something outside events, such as a doorbell, a CI job or a
+sensor: “Listen for my front-door motion webhook and tell me here.” The Tot creates a
+listener with `t3_tot_webhook_listener` and gives you its URL. A listener is an ordinary
+scheduled task on a webhook trigger, bound to the Tot's thread, so it follows the Tot to a
+fresh start and appears under **Settings → Scheduled tasks**.
+
+- **Notify** (the default) posts one compact line in the Tot's thread when the webhook
+  arrives, such as `Webhook: front-door-motion · 18:42 · Someone is at the front door`.
+  It starts no agent turn, uses no tokens and needs no provider credits. Pass
+  `notify: true` to the listener tool to also mark the thread unread, so the Tot shows its
+  dot; a runless notice does not raise a desktop or phone notification.
+- **Wake** starts a turn in the Tot's thread, so the Tot can react. The payload reaches it
+  as untrusted data, never as instructions. A turn that arrives while the Tot is busy waits
+  its turn.
+- **Filters** run first and keep unrelated requests out: a listener can require
+  `body.state` to equal `on`, for example. A request that fails a filter is logged as
+  filtered and posts nothing.
+- **Cooldown** drops repeats inside a window, such as 60 seconds for a chatty motion
+  sensor, and logs each drop as `cooldown` in the task's **Deliveries**. The URL token and
+  the built-in per-minute limits still apply.
+
+The URL is a secret. Anyone with it can post to the listener's thread. Rotate it from the
+task's menu if it leaks. A public URL needs a [T3 Connect](remote-access.md)
+managed tunnel; without one, the task shows only the URL's path. The URL token is the only
+authentication unless you add a **static header** check (`Authorization: Bearer <secret>`,
+or the raw secret) or an HMAC **signature**. The header check exists for senders such as
+Home Assistant that cannot compute an HMAC.
+
+### Home Assistant
+
+Add the URL to `configuration.yaml` as a `rest_command`. Keep the whole URL, including
+the last path segment, secret:
+
+```yaml
+rest_command:
+  t3_front_door:
+    url: "https://relay.t3.codes/v1/hooks/<endpoint>/<task>/<secret>"
+    method: POST
+    content_type: "application/json"
+    payload: '{"state": "on", "area": "front door"}'
+    # Only with a static header check:
+    # headers:
+    #   authorization: "Bearer <secret>"
+```
+
+Then call it from an automation:
+
+```yaml
+automation:
+  - alias: Tell the Tot someone is at the door
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.front_door_motion
+        to: "on"
+    actions:
+      - action: rest_command.t3_front_door
+```
+
+Home Assistant templates can fill the payload from the trigger, for example:
+
+```yaml
+payload: >-
+  {"state": "{{ trigger.to_state.state }}",
+   "area": "{{ trigger.to_state.attributes.friendly_name }}"}
+```
+
+The listener's optional message template can shape the chat line from the JSON body:
+`{{body.area}} is {{body.state}}` produces `Porch is on`. The default is
+`Webhook: <name> · <time> · <short payload summary>`. `{{listener.name}}` and `{{time}}`
+are also available. A wake listener uses the same placeholders in its prompt, and the Tot
+sees the whole request framed as untrusted data.
+
 ## Group chats
 
 A group chat is one shared thread you and several Tots talk in. Create one from **Settings → Tots → New group chat**, the command palette, or its entry in the Tots list. Pick two to eight Tots on the same machine and a moderator.
