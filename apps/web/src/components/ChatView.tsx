@@ -312,7 +312,9 @@ import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
 import { useThreadScopedThemeStyle } from "../hooks/useScopedThemes";
 import { GroupChatHero } from "./tots/GroupChatHero";
+import { TotThemeStyles } from "./tots/TotThemeStyles";
 import { TotHeaderTint, TotThreadHero } from "./tots/TotThreadHero";
+import { totConversationAttributes } from "./tots/totThreadScope";
 import { useSideChat } from "./chat/useSideChat";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
@@ -1053,8 +1055,8 @@ export default function ChatView(props: ChatViewProps) {
   })();
   const activeThreadRef = useActiveThreadRef(activeThread);
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
-  const isTotThread =
-    activeThreadRef !== null && parseTotThreadId(activeThreadRef.threadId) !== null;
+  const activeTotId = activeThreadRef === null ? null : parseTotThreadId(activeThreadRef.threadId);
+  const isTotThread = activeTotId !== null;
   const scopedThemeStyle = useThreadScopedThemeStyle(
     activeThread === undefined || activeThread === null
       ? null
@@ -3533,8 +3535,13 @@ export default function ChatView(props: ChatViewProps) {
             />
             <div
               {...conversationArea}
+              {...totConversationAttributes(activeThread.id)}
               className="relative flex min-h-0 flex-1 flex-col bg-background"
             >
+              <TotThemeStyles
+                environmentId={activeThread.environmentId}
+                threadId={activeThread.id}
+              />
               {isTotThread ? (
                 <TotThreadHero
                   environmentId={activeThread.environmentId}
