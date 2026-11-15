@@ -220,7 +220,10 @@ import {
 import { CollapsedComposerStopAction, ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerFooterPrimaryActions } from "./ComposerFooterControls";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
-import { resolveComposerMenuActiveItemId } from "./composerMenuHighlight";
+import {
+  resolveComposerMenuActiveItemId,
+  nextComposerMenuHighlightId,
+} from "./composerMenuHighlight";
 import { buildPullRequestReferenceContext } from "../pullRequest/pullRequestDetail.logic";
 import { getComposerPromptInjectionState, getComposerReasoningStep } from "./composerProviderState";
 import { readPromptUltrathink } from "./TraitsPicker";
@@ -2085,6 +2088,27 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       }
       return;
     }
+    if (item.type === "tot") {
+      if (trigger.kind !== "path") return;
+      // The Tot's settings carry its thread, so its chip does not wait for a loaded shell.
+      const record = threadContextRecord(item.thread, item.name);
+      const replacement = `${formatInlineContextReference(threadContextReference(record))} `;
+      const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+        snapshot.value,
+        trigger.rangeEnd,
+        replacement,
+      );
+      const applied = applyPromptReplacement(trigger.rangeStart, replacementRangeEnd, replacement, {
+        expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd),
+      });
+      if (applied) {
+        addComposerDraftThreadContexts(attachmentDraftTarget, [record], {
+          appendReference: false,
+        });
+        setComposerHighlightedItemId(null);
+      }
+      return;
+    }
     if (item.type === "model") {
       if (trigger.kind !== "path") return;
       const replacement = `${formatComposerModelMention(item.instanceId, item.model)} `;
@@ -2103,7 +2127,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     }
     if (item.type === "environment") {
       if (trigger.kind !== "path") return;
-      const record = environmentContextRecord(item.environmentId, item.label);
+      const record = environmentContextRecord(item.environmentId, item.label, item.os);
       const replacement = `${formatInlineContextReference(environmentContextReference(record))} `;
       const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
         snapshot.value,
@@ -2131,16 +2155,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const onComposerMenuItemHighlightedStable = useStableCallback(onComposerMenuItemHighlighted);
 
   const nudgeComposerMenuHighlight = (key: "ArrowDown" | "ArrowUp") => {
-    if (composerMenuItems.length === 0) return;
-    const highlightedIndex = composerMenuItems.findIndex(
-      (item) => item.id === composerHighlightedItemId,
-    );
-    const normalizedIndex = highlightedIndex >= 0 ? highlightedIndex : key === "ArrowDown" ? -1 : 0;
-    const offset = key === "ArrowDown" ? 1 : -1;
-    const nextIndex =
-      (normalizedIndex + offset + composerMenuItems.length) % composerMenuItems.length;
-    const nextItem = composerMenuItems[nextIndex];
-    setComposerHighlightedItemId(nextItem?.id ?? null);
+    const nextItemId = nextComposerMenuHighlightId({
+      items: composerMenuItems,
+      highlightedItemId: composerHighlightedItemId,
+      key,
+    });
+    if (nextItemId !== null) setComposerHighlightedItemId(nextItemId);
   };
 
   const blurMobileComposerAfterSend = () => {
