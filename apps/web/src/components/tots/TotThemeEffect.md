@@ -25,15 +25,17 @@ Before your script runs, the page has a full-size `<canvas id="fx">` already siz
 
 The host sends at most one message of each type per animation frame:
 
-| type         | fields                                                                                                                                             |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pointer`    | `x`, `y` in CSS px from the frame's top left; `inside: false` on leaving                                                                           |
-| `resize`     | `width`, `height` in CSS px, `dpr`                                                                                                                 |
-| `motion`     | `reduced`: the user prefers reduced motion                                                                                                         |
-| `visibility` | `hidden`: the app is in the background                                                                                                             |
-| `context`    | `usedTokens`, `maxTokens`, `usedPercentage` (`null` when unknown), `working`, `phase` (`"disconnected"`, `"connecting"`, `"ready"` or `"running"`) |
+| type          | fields                                                                                                                                             |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pointer`     | `x`, `y` in CSS px from the frame's top left; `inside: false` on leaving                                                                           |
+| `pointerdown` | `x`, `y` in CSS px from the frame's top left; `button` from the event                                                                              |
+| `pointerup`   | same as `pointerdown`, on release                                                                                                                  |
+| `resize`      | `width`, `height` in CSS px, `dpr`                                                                                                                 |
+| `motion`      | `reduced`: the user prefers reduced motion                                                                                                         |
+| `visibility`  | `hidden`: the app is in the background                                                                                                             |
+| `context`     | `usedTokens`, `maxTokens`, `usedPercentage` (`null` when unknown), `working`, `phase` (`"disconnected"`, `"connecting"`, `"ready"` or `"running"`) |
 
-Pointer messages arrive only while the pointer moves over the conversation area. A `context` message arrives once after the frame loads and then only when one of its values changes, never once per frame. It carries numbers and the phase name only: never message text, prompts or tool output.
+Pointer messages arrive only while the pointer moves over the conversation area. `pointerdown` and `pointerup` arrive for presses over it, and nothing is consumed: clicks, selection and scrolling still reach the conversation underneath. `button` follows `PointerEvent.button`: `0` primary, `2` secondary. A `context` message arrives once after the frame loads and then only when one of its values changes, never once per frame. It carries numbers and the phase name only: never message text, prompts or tool output.
 
 Draw nothing while idle: run `requestAnimationFrame` only while something is animating, stop when `hidden` is true, and keep motion minimal (or skip it) when `reduced` is true.
 
@@ -53,6 +55,14 @@ const draw = (m) => {
   ctx.fill();
 };
 fx.on("pointer", draw);
+```
+
+Bubbles at the press point:
+
+```js
+fx.on("pointerdown", (m) => {
+  spawnBubble(m.x, m.y, m.button); // 0 primary, 2 secondary
+});
 ```
 
 Snow that gets heavier as the context window fills:
