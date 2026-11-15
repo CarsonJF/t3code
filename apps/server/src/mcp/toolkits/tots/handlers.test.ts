@@ -7,8 +7,11 @@ import {
   RunId,
   ThreadId,
   type Tot,
+  type TotId,
   TotError,
   type TotCreateInput,
+  type TotTheme,
+  type TotThemePatch,
   type TotWatch,
 } from "@t3tools/contracts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
@@ -54,10 +57,30 @@ const harness = (callerThread: ThreadId) => {
   const watches: Array<TotWatch> = [];
   const created: Array<TotCreateInput> = [];
   const removed: Array<string> = [];
+  const themes = new Map<TotId, TotTheme>();
+  const themePatches: Array<{ readonly id: TotId; readonly patch: TotThemePatch }> = [];
   const listeners: Array<
     Parameters<ScheduledTaskService.ScheduledTaskService["Service"]["upsert"]>[0]
   > = [];
   const home: Tot = { ...DEFAULT_HOME_TOT, threadId: homeThread, modelSelection: model };
+  const stored = (tot: Tot): Tot => {
+    const theme = themes.get(tot.id);
+    return theme === undefined ? tot : { ...tot, theme };
+  };
+  const saveTheme = (id: TotId, patch: TotThemePatch): Tot => {
+    themePatches.push({ id, patch });
+    const current = [home, scopedYui].find((tot) => tot.id === id)!;
+    const previous = stored(current).theme;
+    const css = patch.css === undefined ? previous?.css : (patch.css ?? "");
+    const effect = patch.effect === undefined ? previous?.effect : (patch.effect ?? "");
+    const theme = {
+      ...(css === undefined || css === "" ? {} : { css }),
+      ...(effect === undefined || effect === "" ? {} : { effect }),
+    };
+    if (Object.keys(theme).length === 0) themes.delete(id);
+    else themes.set(id, theme);
+    return stored(current);
+  };
   const dependencies = Layer.mergeAll(
     Layer.succeed(McpInvocationContext.McpInvocationContext, {
       environmentId,
@@ -73,15 +96,16 @@ const harness = (callerThread: ThreadId) => {
     }),
     Layer.mock(GroupChatService.GroupChatService)({}),
     Layer.mock(TotService.TotService)({
-      list: Effect.sync(() => [home, scopedYui, ...created.map(asTot)]),
+      list: Effect.sync(() => [home, scopedYui, ...created.map(asTot)].map(stored)),
       totForThread: (threadId) =>
         Effect.succeed(
           threadId === homeThread
-            ? Option.some(home)
+            ? Option.some(stored(home))
             : threadId === scopedThread
-              ? Option.some(scopedYui)
+              ? Option.some(stored(scopedYui))
               : Option.none(),
         ),
+      setTheme: (id, patch) => Effect.sync(() => saveTheme(id, patch)),
       create: (input) =>
         created.some((tot) => tot.name === input.name) || input.name === "Yui"
           ? Effect.fail(new TotError({ message: "A Tot named like this already exists." }))
@@ -139,7 +163,13 @@ const harness = (callerThread: ThreadId) => {
     NodeCrypto.layer,
   );
   const call = (
-    name: "t3_tot_list" | "t3_tot_watch" | "t3_tot_create" | "t3_tot_webhook_listener",
+    name:
+      | "t3_tot_list"
+      | "t3_tot_watch"
+      | "t3_tot_create"
+      | "t3_tot_webhook_listener"
+      | "t3_tot_theme_set"
+      | "t3_tot_theme_read",
     params: Record<string, unknown>,
   ) =>
     Effect.gen(function* () {
@@ -153,7 +183,7 @@ const harness = (callerThread: ThreadId) => {
         .pipe(Stream.unwrap, Stream.runCollect, Effect.provide(dependencies));
       return result.at(-1)?.result;
     });
-  return { watches, created, removed, listeners, call };
+  return { watches, created, removed, listeners, themePatches, call };
 };
 
 it.effect("lists the Tots with a link to each one's thread", () =>
@@ -285,3 +315,63 @@ it.effect("only a Tot can create a listener", () =>
     expect(listeners).toHaveLength(0);
   }),
 );
+
+it.effect("a Tot sets its own theme, and clearing one field keeps the other", () => {
+  const { call, themePatches } = harness(homeThread);
+  const css = ":root { color: red; }";
+  return Effect.gen(function* () {
+    const set = yield* call("t3_tot_theme_set", { css, effect: "sparkles" });
+    expect(set).toMatchObject({ totId: "home", cssLength: css.length, effectLength: 8 });
+    // The opaque effect text is never echoed back.
+    expect(JSON.stringify(set)).not.toContain("sparkles");
+
+    const read = yield* call("t3_tot_theme_read", {});
+    expect(read).toMatchObject({ totId: "home", cssLength: css.length, effectLength: 8 });
+
+    const cleared = yield* call("t3_tot_theme_set", { css: "" });
+    expect(cleared).toMatchObject({ cssLength: 0, effectLength: 8 });
+    expect(themePatches).toMatchObject([
+      { id: "home", patch: { css, effect: "sparkles" } },
+      { id: "home", patch: { css: "" } },
+    ]);
+  });
+});
+
+it.effect("a Tot whose scope is all still edits only its own theme", () => {
+  const { call, themePatches } = harness(homeThread);
+  return Effect.gen(function* () {
+    const result = yield* call("t3_tot_theme_set", { effect: "glow" });
+    expect(result).toMatchObject({ totId: "home" });
+    expect(themePatches.map((entry) => entry.id)).toEqual(["home"]);
+  });
+});
+
+it.effect("refuses a theme over the cap or one that loads remote files", () => {
+  const { call, themePatches } = harness(homeThread);
+  return Effect.gen(function* () {
+    const tooLong = yield* call("t3_tot_theme_set", { css: "a".repeat(20_001) });
+    expect(tooLong).toMatchObject({
+      code: "invalid_request",
+      message: expect.stringContaining("20000"),
+    });
+    const remote = yield* call("t3_tot_theme_set", {
+      css: "@import url(https://example.com/a.css);",
+    });
+    expect(remote).toMatchObject({
+      code: "invalid_request",
+      message: expect.stringContaining("cannot load files"),
+    });
+    expect(themePatches).toHaveLength(0);
+  });
+});
+
+it.effect("only a Tot can read or set a theme", () => {
+  const { call, themePatches } = harness(ThreadId.make("thread:ordinary"));
+  return Effect.gen(function* () {
+    expect(yield* call("t3_tot_theme_set", { effect: "glow" })).toMatchObject({
+      code: "capability_denied",
+    });
+    expect(yield* call("t3_tot_theme_read", {})).toMatchObject({ code: "capability_denied" });
+    expect(themePatches).toHaveLength(0);
+  });
+});
