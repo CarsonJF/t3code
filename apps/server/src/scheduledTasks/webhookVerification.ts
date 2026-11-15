@@ -46,3 +46,20 @@ export const verifyWebhookSignature = Effect.fn("webhookVerification.verifyWebho
     );
   },
 );
+
+/** A static header check for senders that cannot compute an HMAC. */
+export const verifyWebhookBearer = Effect.fn("webhookVerification.verifyWebhookBearer")(
+  function* (input: {
+    readonly header: string;
+    readonly secret: string;
+    readonly headers: Readonly<Record<string, string>>;
+  }) {
+    const received = input.headers[input.header.toLowerCase()];
+    if (received === undefined) return false;
+    const value = received.trim();
+    const bearer = value.toLowerCase().startsWith("bearer ")
+      ? value.slice("bearer ".length)
+      : value;
+    return yield* constantTimeEquals(bearer, input.secret);
+  },
+);
