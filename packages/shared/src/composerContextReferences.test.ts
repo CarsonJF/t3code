@@ -4,6 +4,8 @@ import {
   EnvironmentId,
   MessageId,
   ThreadId,
+  TotId,
+  totThreadId,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -434,6 +436,52 @@ describe("provider projection", () => {
     expect(projected).toContain("environmentId: environment-vps");
     expect(projected).toContain("t3_environment_link with this environmentId");
     expect(projected).not.toMatch(/https?:/);
+    expect(projected).not.toContain("os:");
+  });
+
+  it("adds a mentioned machine's OS when the client sent one", () => {
+    const projected = projectComposerContextForProvider({
+      text: "[Asuna](t3-context://v1/environment/env_asuna)",
+      records: [
+        {
+          version: 1,
+          kind: "environment",
+          contextId: ctx("env_asuna"),
+          label: "Asuna",
+          environmentId: "1b29f23f-0e4d-4f4d-9f3e-000000000000" as never,
+          os: "linux",
+        },
+      ],
+    });
+    expect(projected).toContain("label: Asuna");
+    expect(projected).toContain("environmentId: 1b29f23f-0e4d-4f4d-9f3e-000000000000");
+    expect(projected).toContain("os: linux");
+  });
+
+  it("projects a Tot's thread with its Tot id and how to talk to it", () => {
+    const threadId = totThreadId(TotId.make("work-bot"), "1");
+    const projected = projectComposerContextForProvider({
+      text: "Ask [Work bot](t3-context://v1/thread/thread_tot)",
+      records: [
+        {
+          version: 1,
+          kind: "thread",
+          contextId: ctx("thread_tot"),
+          label: "Work bot",
+          environmentId: "environment-asuna" as never,
+          threadId,
+          title: "Work bot",
+        },
+      ],
+    });
+    expect(projected.startsWith("Ask [Thread: Work bot; ref=thread_tot]")).toBe(true);
+    expect(projected).toContain("title: Work bot");
+    expect(projected).toContain(`threadId: ${threadId}`);
+    expect(projected).toContain("environmentId: environment-asuna");
+    expect(projected).toContain("totId: work-bot");
+    expect(projected).toContain(
+      `t3_thread_send({"threadId":"${threadId}","environmentId":"environment-asuna"})`,
+    );
   });
 
   it("marks duplicate identities unavailable instead of choosing one payload", () => {

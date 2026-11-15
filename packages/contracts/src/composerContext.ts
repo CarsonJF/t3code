@@ -15,6 +15,7 @@ import {
   TurnItemId,
 } from "./baseSchemas.ts";
 import { GUEST_MESSAGE_MAX_LENGTH, GUEST_NAME_MAX_LENGTH } from "./guestShare.ts";
+import { ExecutionEnvironmentPlatformOs } from "./environment.ts";
 
 /** Image and file records reference `ChatAttachment` ids, never bytes. */
 
@@ -227,6 +228,8 @@ export const EnvironmentContextRecord = Schema.Struct({
   ...recordBase,
   kind: Schema.Literal("environment"),
   environmentId: EnvironmentId,
+  /** The machine's OS, when the client knew it; absent on older mentions. */
+  os: Schema.optionalKey(ExecutionEnvironmentPlatformOs),
 });
 export type EnvironmentContextRecord = typeof EnvironmentContextRecord.Type;
 
