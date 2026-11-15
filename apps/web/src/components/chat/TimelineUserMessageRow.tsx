@@ -100,6 +100,8 @@ import {
   resolvePreviewAnnotationImage,
   userMessageFileLabel,
 } from "./TimelineUserMessageRow.logic";
+import { WatchReportRow } from "./WatchReportRow";
+import { watchReportLines } from "./watchReport.logic";
 
 // Drawn inside the media so dark screenshots keep an edge on the dark background.
 const MEDIA_EDGE_CLASS_NAME =
@@ -311,6 +313,10 @@ export function UserMessageRow({ row }: { row: Extract<TimelineRow, { kind: "mes
 
 function UserMessageContent({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
+  const watchReport = watchReportLines(row.message.text);
+  if (watchReport !== null) {
+    return <WatchReportRow lines={watchReport} environmentId={ctx.activeThreadEnvironmentId} />;
+  }
   return ctx.workflowOpening?.messageId === row.message.id ? (
     <WorkflowOpeningBlock
       opening={ctx.workflowOpening}
