@@ -11,12 +11,14 @@ import {
   AuthOrchestrationOperateScope,
   parseTotThreadId,
   TOT_THEME_MAX_LENGTH,
+  TOT_WATCH_REPORTS,
   type EnvironmentId,
   type ScheduledTask,
   type ScopedThreadRef,
   type Tot,
   type TotScope,
   type TotWatch,
+  type TotWatchReports,
 } from "@t3tools/contracts";
 import {
   isAtomCommandInterrupted,
@@ -43,6 +45,7 @@ import { Checkbox } from "../ui/checkbox";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Separator } from "../ui/separator";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -50,6 +53,7 @@ import { toastManager } from "../ui/toast";
 import { TotAvatar } from "./TotAvatar";
 import { TotFaceEditor } from "./TotFaceEditor";
 import {
+  WATCH_REPORTS,
   scheduledTaskBelongsToTot,
   totSettingsDraftErrors,
   totSettingsDraftFromTot,
@@ -350,6 +354,14 @@ function TotSettingsEditor(props: {
           <Separator />
 
           <TotScheduledTasksSection environmentId={environmentId} tot={tot} />
+
+          <Separator />
+
+          <TotWatchReportsSection
+            value={draft.watchReports}
+            disabled={!canEdit}
+            onChange={(watchReports) => setDraft({ ...draft, watchReports })}
+          />
 
           <Separator />
 
@@ -686,6 +698,33 @@ function TotScheduledTaskRow(props: {
 function scheduleLabelForPanel(task: ScheduledTask, timeZone: string | undefined) {
   if (task.schedule.type === "webhook") return "Webhook";
   return scheduleLabel(task.schedule, timeZone, task.nextRunAt);
+}
+
+function TotWatchReportsSection(props: {
+  readonly value: TotWatchReports;
+  readonly disabled: boolean;
+  readonly onChange: (value: TotWatchReports) => void;
+}) {
+  const option = WATCH_REPORTS[props.value];
+  return (
+    <PanelSection title="Watch reports" description={option.help}>
+      <Select
+        value={props.value}
+        onValueChange={(value) => props.onChange(value as TotWatchReports)}
+      >
+        <SelectTrigger size="sm" aria-label="Watch reports" disabled={props.disabled}>
+          <SelectValue>{option.label}</SelectValue>
+        </SelectTrigger>
+        <SelectPopup alignItemWithTrigger={false}>
+          {TOT_WATCH_REPORTS.map((mode) => (
+            <SelectItem key={mode} value={mode}>
+              {WATCH_REPORTS[mode].label}
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+    </PanelSection>
+  );
 }
 
 function TotWatchesSection(props: { readonly environmentId: EnvironmentId; readonly tot: Tot }) {
