@@ -51,6 +51,7 @@ import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { useViewabilityAmount, type LegendListRef } from "@legendapp/list/react-native";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { TOT_FACE_STATE_LABELS } from "@t3tools/client-runtime/tots";
 import type { HandoffEndpoints } from "@t3tools/client-runtime/handoff";
 import {
   IDLE_COMPACTING_LABELS,
@@ -325,8 +326,9 @@ import { ZoomableImagePressable } from "./ZoomableImagePressable";
 import { openSettings } from "../settings/settings-navigation";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { useMessageTimeFormatter } from "./useMessageTimeFormatter";
-import { useAnimateTotAvatars, useTots } from "../../state/tots";
+import { useAnimateTotAvatars, useTotFace, useTots } from "../../state/tots";
 import { TotLiveFace } from "../tots/TotLiveFace";
+import { TOT_THREAD_HEADER_HEIGHT, TotThreadHeader } from "../tots/TotThreadHeader";
 
 const WIDE_MARKDOWN_BLOCK_OPTIONS = {
   // iOS blockquotes and selectable text measure separately; definite bubble width matches UIKit's drawing width.
@@ -2867,6 +2869,7 @@ function ThreadFeedPlaceholder(props: {
   readonly bottomInset: number;
   readonly detail: string;
   readonly horizontalPadding: number;
+  readonly status?: string;
   readonly title: string;
   readonly topInset: number;
   readonly visual?: ReactNode;
@@ -2886,6 +2889,9 @@ function ThreadFeedPlaceholder(props: {
       <View className="max-w-[320px] items-center gap-2">
         {props.visual}
         <Text className="text-center font-t3-bold text-lg text-foreground">{props.title}</Text>
+        {props.status === undefined ? null : (
+          <Text className="text-center text-xs text-foreground-muted">{props.status}</Text>
+        )}
         <Text className="text-center text-sm leading-normal text-foreground-secondary">
           {props.detail}
         </Text>
@@ -3029,6 +3035,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const tot = useTots().find(
     (entry) => entry.environmentId === props.environmentId && entry.tot.threadId === props.threadId,
   );
+  const totFace = useTotFace(tot ?? null);
   const animateTot = useAnimateTotAvatars();
   const workflowOpening = useWorkflowOpening(props.detailRef);
   const guestShare = useThreadGuestShare(props.detailRef);
@@ -4191,6 +4198,15 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     );
   }
 
+  const feedPlaceholderVisible =
+    presentedFeed.length === 0 &&
+    !props.worktreeSetup &&
+    props.activeWorkStartedAt === null &&
+    props.contentPresentation.kind === "ready";
+  // A Tot's empty thread names itself with the big face, so its pinned header stays off then.
+  const totHeaderHeight =
+    tot === undefined || feedPlaceholderVisible ? 0 : TOT_THREAD_HEADER_HEIGHT;
+
   return (
     <PresentationSource identifier={fileShareSourceIdentifier} style={{ flex: 1 }}>
       <View className="flex-1" onLayout={handleViewportLayout}>
@@ -4305,16 +4321,26 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             }
             contentContainerStyle={{
               ...(props.fitShortFeedToViewport ? { minHeight: "100%" } : {}),
-              paddingTop: FEED_PADDING_TOP,
+              paddingTop: FEED_PADDING_TOP + totHeaderHeight,
               paddingLeft: contentHorizontalPadding + contentLeftInset,
               paddingRight: contentHorizontalPadding + contentRightInset,
             }}
           />
         </View>
-        {presentedFeed.length === 0 &&
-        !props.worktreeSetup &&
-        props.activeWorkStartedAt === null &&
-        props.contentPresentation.kind === "ready" ? (
+        {tot !== undefined && totHeaderHeight > 0 ? (
+          <View
+            style={{
+              position: "absolute",
+              top: anchorTopInset,
+              left: contentLeftInset,
+              right: contentRightInset,
+              height: totHeaderHeight,
+            }}
+          >
+            <TotThreadHeader entry={tot} animate={animateTot} />
+          </View>
+        ) : null}
+        {feedPlaceholderVisible ? (
           <View
             pointerEvents="none"
             style={[StyleSheet.absoluteFill, { left: contentLeftInset, right: contentRightInset }]}
@@ -4329,13 +4355,14 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
                   }
                 : {
                     title: tot.tot.name,
+                    status: TOT_FACE_STATE_LABELS[totFace],
                     detail: gt(
                       "Tell it what you want done. It starts, watches and answers the threads in its scope for you.",
                     ),
                     visual: (
                       <TotLiveFace
                         avatar={tot.tot.avatar}
-                        state="idle"
+                        state={totFace}
                         size={112}
                         animate={animateTot}
                       />
