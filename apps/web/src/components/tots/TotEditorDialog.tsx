@@ -4,11 +4,10 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { isTotProject } from "@t3tools/client-runtime/tots";
 import { validateTotDraft, type TotDraftErrors } from "@t3tools/client-runtime/tots/editor";
-import { TOT_SKIN_SERIES, totSkinSeriesOf, totSkinsIn } from "@t3tools/client-runtime/tots/skins";
+import { totSkinSeriesOf } from "@t3tools/client-runtime/tots/skins";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   HOME_TOT_ID,
-  TOT_SHAPES,
   type EnvironmentId,
   type ProjectId,
   type TotAvatar as TotAvatarValue,
@@ -44,26 +43,12 @@ import {
 } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Switch } from "../ui/switch";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { TotAvatar } from "./TotAvatar";
+import { TotFaceEditor, totFaceOf, TOT_FACE_COLORS } from "./TotFaceEditor";
 import { closeTotEditor, type TotEditorTarget, useTotEditorTarget } from "./totEditorStore";
 import { useTotModelChoice } from "./useTotModelChoice";
-
-const COLOR_CHOICES = ["#0A7EA4", "#7C3AED", "#DB2777", "#EA580C", "#16A34A", "#475569"];
-
-const faceOf = (
-  color: string,
-  skin: number | null,
-  shape: TotShape,
-  antenna: boolean,
-): TotAvatarValue => ({
-  color,
-  ...(skin === null ? {} : { skin }),
-  ...(shape === "round" ? {} : { shape }),
-  ...(antenna ? { antenna } : {}),
-});
 
 /** Mounted once; opens for whatever asked for it. */
 export function TotEditorHost() {
@@ -107,12 +92,12 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
       : tots.find(
           (entry) => entry.environmentId === target.environmentId && entry.tot.id === editing.id,
         )?.tot.designs) ?? [];
-  const applyDesign = (design: TotAvatarValue) => {
-    setColor(design.color);
-    setSkin(design.skin ?? null);
-    setSkinSeries(totSkinSeriesOf(design.skin ?? null));
-    setShape(design.shape ?? "round");
-    setAntenna(design.antenna === true);
+  const applyFace = (face: TotAvatarValue) => {
+    setColor(face.color);
+    setSkin(face.skin ?? null);
+    setSkinSeries(totSkinSeriesOf(face.skin ?? null));
+    setShape(face.shape ?? "round");
+    setAntenna(face.antenna === true);
   };
   const askForDesign = async () => {
     if (editing === null || designPrompt.trim() === "") return;
@@ -134,7 +119,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const writeTotMemory = useAtomCommand(serverEnvironment.writeTotMemory, { reportFailure: false });
 
   const [name, setName] = useState(editing?.name ?? "");
-  const [color, setColor] = useState(editing?.avatar.color ?? COLOR_CHOICES[0]!);
+  const [color, setColor] = useState(editing?.avatar.color ?? TOT_FACE_COLORS[0]!);
   const [skin, setSkin] = useState<number | null>(editing?.avatar.skin ?? null);
   const [shape, setShape] = useState<TotShape>(editing?.avatar.shape ?? "round");
   const [antenna, setAntenna] = useState(editing?.avatar.antenna === true);
@@ -299,7 +284,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
                 <TotAvatar
-                  avatar={faceOf(color, skin, shape, antenna)}
+                  avatar={totFaceOf(color, skin, shape, antenna)}
                   state="idle"
                   animation={animate && !reducedMotion ? "full" : "still"}
                   size={56}
@@ -353,155 +338,73 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
 
               <fieldset className="flex flex-col gap-1.5">
                 <legend className="mb-1.5 font-medium text-sm">Face</legend>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {COLOR_CHOICES.map((choice) => (
-                    <button
-                      key={choice}
-                      type="button"
-                      aria-label={`Color ${choice}`}
-                      aria-pressed={color === choice}
-                      className="size-6 rounded-full border border-border aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-ring"
-                      style={{ backgroundColor: choice }}
-                      onClick={() => setColor(choice)}
-                    />
-                  ))}
-                  <Input
-                    aria-label="Color"
-                    className="w-24"
-                    value={color}
-                    aria-invalid={errors.color !== undefined}
-                    onChange={(event) => setColor(event.target.value)}
-                  />
-                </div>
-                <div
-                  className="flex flex-wrap items-center gap-1.5"
-                  aria-label="Shape"
-                  role="group"
+                <TotFaceEditor
+                  value={totFaceOf(color, skin, shape, antenna)}
+                  onChange={applyFace}
+                  skinSeries={skinSeries}
+                  onSkinSeriesChange={setSkinSeries}
+                  error={errors.color}
                 >
-                  {TOT_SHAPES.map((choice) => (
-                    <button
-                      key={choice}
-                      type="button"
-                      aria-label={`Shape ${choice}`}
-                      aria-pressed={shape === choice}
-                      className="rounded-md border border-transparent p-0.5 aria-pressed:border-ring"
-                      onClick={() => setShape(choice)}
-                    >
-                      <TotAvatar
-                        avatar={faceOf(color, skin, choice, antenna)}
-                        state="idle"
-                        animation="still"
-                        size={28}
-                      />
-                    </button>
-                  ))}
-                </div>
-                {editing === null ? null : (
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <Input
-                        aria-label="Describe a face"
-                        value={designPrompt}
-                        placeholder={`Ask ${editing.name} to design its own face…`}
-                        onChange={(event) => {
-                          setDesignPrompt(event.target.value);
-                          setDesignState("idle");
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={
-                          designState === "asking" ||
-                          designPrompt.trim() === "" ||
-                          editing.threadId === null
-                        }
-                        onClick={() => void askForDesign()}
-                      >
-                        Ask
-                      </Button>
-                    </div>
-                    {editing.threadId === null ? (
-                      <p className="text-muted-foreground text-xs">Turn {editing.name} on first.</p>
-                    ) : designState === "asked" ? (
-                      <p className="text-muted-foreground text-xs">
-                        Asked. {editing.name}'s design shows up below when it answers.
-                      </p>
-                    ) : null}
-                    {designFailure ? (
-                      <p className="text-destructive-foreground text-xs">{designFailure}</p>
-                    ) : null}
-                    {savedDesigns.length > 0 ? (
-                      <div
-                        className="flex flex-wrap items-center gap-1.5"
-                        role="group"
-                        aria-label="Designs"
-                      >
-                        {savedDesigns.map((design, index) => (
-                          <button
-                            key={`${design.color}${design.skin ?? ""}${design.shape ?? ""}${design.antenna === true}`}
-                            type="button"
-                            aria-label={`Use design ${index + 1}`}
-                            className="rounded-md border border-transparent p-0.5 hover:border-ring"
-                            onClick={() => applyDesign(design)}
-                          >
-                            <TotAvatar avatar={design} state="idle" animation="still" size={28} />
-                          </button>
-                        ))}
+                  {editing === null ? null : (
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          aria-label="Describe a face"
+                          value={designPrompt}
+                          placeholder={`Ask ${editing.name} to design its own face…`}
+                          onChange={(event) => {
+                            setDesignPrompt(event.target.value);
+                            setDesignState("idle");
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={
+                            designState === "asking" ||
+                            designPrompt.trim() === "" ||
+                            editing.threadId === null
+                          }
+                          onClick={() => void askForDesign()}
+                        >
+                          Ask
+                        </Button>
                       </div>
-                    ) : null}
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground text-xs">Antenna</span>
-                  <Switch aria-label="Antenna" checked={antenna} onCheckedChange={setAntenna} />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground text-xs">Skin</span>
-                  <Select
-                    value={String(skinSeries.series)}
-                    onValueChange={(value) =>
-                      setSkinSeries(
-                        TOT_SKIN_SERIES.find((series) => String(series.series) === value) ??
-                          skinSeries,
-                      )
-                    }
-                  >
-                    <SelectTrigger size="sm" className="w-48" aria-label="Skin series">
-                      <SelectValue>{skinSeries.title}</SelectValue>
-                    </SelectTrigger>
-                    <SelectPopup align="end" alignItemWithTrigger={false}>
-                      {TOT_SKIN_SERIES.map((series) => (
-                        <SelectItem key={series.series} value={String(series.series)}>
-                          {series.title}
-                        </SelectItem>
-                      ))}
-                    </SelectPopup>
-                  </Select>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {[null, ...totSkinsIn(skinSeries)].map((choice) => (
-                    <button
-                      key={choice ?? "flat"}
-                      type="button"
-                      aria-label={choice === null ? "No skin" : `Skin ${choice}`}
-                      aria-pressed={skin === choice}
-                      className="rounded-md border border-transparent p-0.5 aria-pressed:border-ring"
-                      onClick={() => setSkin(choice)}
-                    >
-                      <TotAvatar
-                        avatar={faceOf(color, choice, shape, antenna)}
-                        state="idle"
-                        animation="still"
-                        size={28}
-                      />
-                    </button>
-                  ))}
-                </div>
-                {errors.color ? (
-                  <p className="text-destructive-foreground text-xs">{errors.color}</p>
-                ) : null}
+                      {editing.threadId === null ? (
+                        <p className="text-muted-foreground text-xs">
+                          Turn {editing.name} on first.
+                        </p>
+                      ) : designState === "asked" ? (
+                        <p className="text-muted-foreground text-xs">
+                          Asked. {editing.name}'s design shows up below when it answers.
+                        </p>
+                      ) : null}
+                      {designFailure ? (
+                        <p className="text-destructive-foreground text-xs">{designFailure}</p>
+                      ) : null}
+                      {savedDesigns.length > 0 ? (
+                        <div
+                          className="flex flex-wrap items-center gap-1.5"
+                          role="group"
+                          aria-label="Designs"
+                        >
+                          {savedDesigns.map((design, index) => (
+                            <button
+                              key={`${design.color}${design.skin ?? ""}${design.shape ?? ""}${design.antenna === true}`}
+                              type="button"
+                              aria-label={`Use design ${index + 1}`}
+                              className="rounded-md border border-transparent p-0.5 hover:border-ring"
+                              onClick={() => applyFace(design)}
+                            >
+                              <TotAvatar avatar={design} state="idle" animation="still" size={28} />
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </TotFaceEditor>
               </fieldset>
 
               <fieldset className="flex flex-col gap-1.5">
