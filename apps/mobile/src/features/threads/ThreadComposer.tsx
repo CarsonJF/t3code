@@ -40,6 +40,7 @@ import {
 import Animated, { FadeIn, FadeOut, ReduceMotion } from "react-native-reanimated";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { themeColorWithAlpha } from "../../lib/mobileTheme";
+import { useTotThemeTokens } from "../tots/useTotThemeTokens";
 import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
 import { scopedThreadKey } from "../../lib/scopedEntities";
 import {
@@ -260,6 +261,7 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
   const messages = useMessages();
   const project = useProject(scopeProjectRef(props.environmentId, props.selectedThread.projectId));
   const { themeVariables: materialTheme } = useAppearancePreferences();
+  const totTheme = useTotThemeTokens(props.environmentId, props.selectedThread.id);
   const composerPanel = materialTheme["--color-composer-panel"];
   const navigation = useNavigation();
   const foregroundColor = useUniwindTheme()["--color-foreground"];
@@ -792,6 +794,8 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
 
         <ComposerSurface
           animateLayout={false}
+          surfaceColor={totTheme["--tot-surface"]}
+          borderColor={totTheme["--tot-border"]}
           style={{
             borderRadius: usesLargeControls ? 31 : 27,
             borderCurve: "circular",
