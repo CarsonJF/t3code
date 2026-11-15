@@ -17,6 +17,8 @@ type EffectContext = {
 
 type EffectMessage =
   | { type: "pointer"; x: number; y: number; inside: boolean }
+  | { type: "pointerdown"; x: number; y: number; button: number; inside: boolean }
+  | { type: "pointerup"; x: number; y: number; button: number; inside: boolean }
   | { type: "resize"; width: number; height: number; dpr: number }
   | { type: "motion"; reduced: boolean }
   | { type: "visibility"; hidden: boolean }
@@ -120,6 +122,22 @@ function EffectFrame({ script, context }: { script: string; context: EffectConte
       pointer = null;
       queue({ type: "pointer", x: 0, y: 0, inside: false });
     };
+    // Geometry too, since a captured pointer can release outside the area.
+    const press = (event: PointerEvent) => {
+      const rect = area.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null;
+      return { x, y, button: event.button, inside: true };
+    };
+    const down = (event: PointerEvent) => {
+      const point = press(event);
+      if (point) queue({ type: "pointerdown", ...point });
+    };
+    const up = (event: PointerEvent) => {
+      const point = press(event);
+      if (point) queue({ type: "pointerup", ...point });
+    };
     let sentContext = "";
     sendContext.current = (next) => {
       const message: EffectMessage = {
@@ -144,6 +162,8 @@ function EffectFrame({ script, context }: { script: string; context: EffectConte
     document.addEventListener("visibilitychange", visibility);
     area.addEventListener("pointermove", move, { passive: true });
     area.addEventListener("pointerleave", leave, { passive: true });
+    area.addEventListener("pointerdown", down, { passive: true });
+    area.addEventListener("pointerup", up, { passive: true });
     return () => {
       sendContext.current = () => {};
       cancelAnimationFrame(raf);
@@ -152,6 +172,8 @@ function EffectFrame({ script, context }: { script: string; context: EffectConte
       document.removeEventListener("visibilitychange", visibility);
       area.removeEventListener("pointermove", move);
       area.removeEventListener("pointerleave", leave);
+      area.removeEventListener("pointerdown", down);
+      area.removeEventListener("pointerup", up);
     };
   }, [loads]);
 
