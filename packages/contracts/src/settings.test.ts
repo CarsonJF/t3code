@@ -324,6 +324,19 @@ describe("ClientSettings notifications", () => {
     expect(decodeClientSettingsPatch({})).not.toHaveProperty("inAppNotificationsEnabled");
     expect(decodeClientSettingsPatch({})).not.toHaveProperty("notificationMode");
   });
+
+  it("gives existing settings the lower default volume and the classic sound", () => {
+    expect(decodeClientSettings({}).notificationVolume).toBe(40);
+    expect(decodeClientSettings({}).notificationSound).toBe("classic");
+    expect(decodeClientSettingsPatch({})).not.toHaveProperty("notificationVolume");
+  });
+
+  it("rejects out-of-range volumes and unknown sounds", () => {
+    expect(() => decodeClientSettingsPatch({ notificationVolume: 101 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ notificationVolume: -1 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ notificationSound: "airhorn" })).toThrow();
+    expect(decodeClientSettingsPatch({ notificationVolume: 0 }).notificationVolume).toBe(0);
+  });
 });
 
 describe("ClientSettings quit confirmation", () => {
