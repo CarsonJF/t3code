@@ -73,6 +73,31 @@ export type TotWatch = typeof TotWatch.Type;
 
 export const TOT_MAX_DESIGNS = 12;
 
+export const TOT_THEME_MAX_LENGTH = 20_000;
+
+/** A Tot's own theme. The app applies `css` to that Tot's conversation only. */
+export const TotTheme = Schema.Struct({
+  css: Schema.optional(Schema.String.check(Schema.isMaxLength(TOT_THEME_MAX_LENGTH))),
+  /**
+   * Opaque text for the effect layer: it reads this string. T3 Code stores and
+   * returns it only; nothing here runs, parses or executes it, and the settings
+   * editor is its only view.
+   */
+  effect: Schema.optional(Schema.String.check(Schema.isMaxLength(TOT_THEME_MAX_LENGTH))),
+});
+export type TotTheme = typeof TotTheme.Type;
+
+/** A theme write: an absent field keeps its stored value; `""` or null clears it. */
+export const TotThemePatch = Schema.Struct({
+  css: Schema.optional(
+    Schema.NullOr(Schema.String.check(Schema.isMaxLength(TOT_THEME_MAX_LENGTH))),
+  ),
+  effect: Schema.optional(
+    Schema.NullOr(Schema.String.check(Schema.isMaxLength(TOT_THEME_MAX_LENGTH))),
+  ),
+});
+export type TotThemePatch = typeof TotThemePatch.Type;
+
 export const Tot = Schema.Struct({
   id: TotId,
   name: TrimmedNonEmptyString.check(Schema.isMaxLength(40)),
@@ -88,6 +113,7 @@ export const Tot = Schema.Struct({
   watches: Schema.Array(TotWatch),
   /** Faces the Tot designed for itself, newest first, kept as options. */
   designs: Schema.optional(Schema.Array(TotAvatar).check(Schema.isMaxLength(TOT_MAX_DESIGNS))),
+  theme: Schema.optional(TotTheme),
 });
 export type Tot = typeof Tot.Type;
 
@@ -194,6 +220,7 @@ export const TotUpdateInput = Schema.Struct({
   scope: Schema.optional(TotScope),
   instructions: Schema.optional(Tot.fields.instructions),
   modelSelection: Schema.optional(ModelSelection),
+  theme: Schema.optional(TotThemePatch),
 });
 export type TotUpdateInput = typeof TotUpdateInput.Type;
 

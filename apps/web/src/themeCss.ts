@@ -26,7 +26,7 @@ function stripDeclarations(rule: CSSRule): boolean {
 }
 
 /** Keeps only rule shapes it can check, so a new at-rule that fetches is dropped by default. */
-function stripFetches(parent: RuleParent): void {
+export function stripFetches(parent: RuleParent): void {
   for (let index = parent.cssRules.length - 1; index >= 0; index--) {
     const rule = parent.cssRules[index];
     if (!rule) continue;
