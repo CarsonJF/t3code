@@ -162,6 +162,17 @@ describe("ComposerContextRecord", () => {
     expect(Option.isNone(decodeRecord({ ...base, kind: "image", label: "x" }))).toBe(true);
   });
 
+  it("reads a machine mention with or without its OS", () => {
+    expect(Option.getOrThrow(decodeRecord(knownRecords.environment))).toEqual(
+      knownRecords.environment,
+    );
+    expect(Option.getOrThrow(decodeRecord({ ...knownRecords.environment, os: "linux" }))).toEqual({
+      ...knownRecords.environment,
+      os: "linux",
+    });
+    expect(Option.isNone(decodeRecord({ ...knownRecords.environment, os: "beos" }))).toBe(true);
+  });
+
   it("bounds the serialized payload of future context kinds", () => {
     const unknown = { ...base, kind: "future-thing", label: "Future" };
     expect(Option.isSome(decodeRecord({ ...unknown, payload: "x".repeat(63_998) }))).toBe(true);
