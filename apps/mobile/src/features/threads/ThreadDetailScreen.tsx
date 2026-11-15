@@ -204,6 +204,7 @@ import {
 } from "./ThreadComposer";
 import { ComposerPopoverHost } from "./ComposerPopoverHost";
 import { ThreadFeed, type ThreadFeedHistoryControls } from "./ThreadFeed";
+import { useTotThemeTokens } from "../tots/useTotThemeTokens";
 import { WorkspaceMutationIdProvider } from "./WorkspaceMutationIdProvider";
 import { useThreadTurnSubagents } from "./ThreadAgentsSheet";
 import { ComposerQueuedEditBanner } from "./ComposerQueuedEdit";
@@ -1402,6 +1403,7 @@ function ThreadDetailBody(
   const showScrollToEndButton = !props.draftMode && contentPresentationKind === "ready" && !isAtEnd;
   const { themeAppearance } = useAppearancePreferences();
   const isDarkMode = themeAppearance === "dark";
+  const totTheme = useTotThemeTokens(props.environmentId, props.selectedThread.id);
 
   const handleFeedTouchStart = (event: GestureResponderEvent) => {
     feedTouchStartRef.current = {
@@ -1456,6 +1458,11 @@ function ThreadDetailBody(
               Platform.OS === "android"
                 ? "absolute inset-0 bg-thread-canvas"
                 : "absolute inset-0 bg-screen"
+            }
+            style={
+              totTheme["--tot-bg"] === undefined
+                ? undefined
+                : { backgroundColor: totTheme["--tot-bg"] }
             }
           />
           <RenderErrorBoundary

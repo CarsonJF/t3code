@@ -13,7 +13,7 @@ It cannot read the app, its storage or cookies, navigate, open windows, or reach
 - At most 20,000 characters, stored with the Tot.
 - No `eval` or `new Function`, and no external scripts.
 - The frame is torn down when the user leaves the thread or the effect changes.
-- Not shown on mobile.
+- Not shown on mobile. See `TotTheme.md` for the colour tokens mobile paints instead.
 
 ## API
 
