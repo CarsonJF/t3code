@@ -19,6 +19,7 @@ import * as Stream from "effect/Stream";
 
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as ScheduledTaskService from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -53,6 +54,9 @@ const harness = (callerThread: ThreadId) => {
   const watches: Array<TotWatch> = [];
   const created: Array<TotCreateInput> = [];
   const removed: Array<string> = [];
+  const listeners: Array<
+    Parameters<ScheduledTaskService.ScheduledTaskService["Service"]["upsert"]>[0]
+  > = [];
   const home: Tot = { ...DEFAULT_HOME_TOT, threadId: homeThread, modelSelection: model };
   const dependencies = Layer.mergeAll(
     Layer.succeed(McpInvocationContext.McpInvocationContext, {
@@ -96,10 +100,46 @@ const harness = (callerThread: ThreadId) => {
       getThreadShell: (threadId) =>
         Effect.succeed(liveThreadShell(threadId, { activeRunId: RunId.make("run") })),
     }),
+    Layer.mock(ScheduledTaskService.ScheduledTaskService)({
+      upsert: (input) =>
+        Effect.sync(() => {
+          listeners.push(input);
+          return {
+            task: {
+              id: "scheduled-task:listener",
+              title: input.title,
+              prompt: input.prompt,
+              enabled: true,
+              schedule: input.schedule,
+              projectId: input.projectId,
+              threadId: input.threadId ?? null,
+              threadMode: "continue",
+              workspaceStrategy: input.workspaceStrategy,
+              modelSelection: input.modelSelection,
+              runtimeMode: input.runtimeMode,
+              interactionMode: input.interactionMode,
+              createdBy: "agent",
+              creationSource: "mcp",
+              createdAt: "2024-01-01T00:00:00.000Z",
+              updatedAt: "2024-01-01T00:00:00.000Z",
+              nextRunAt: null,
+              lastRunAt: null,
+              lastRunStatus: "never",
+              lastRunError: null,
+              runCount: 0,
+              webhook: {
+                path: `/api/hooks/${input.id ?? "scheduled-task:listener"}/token`,
+                url: `https://relay.example.com/v1/hooks/0123456789abcdef/${input.id ?? "scheduled-task:listener"}/token`,
+                hasSecret: false,
+              },
+            },
+          } as never;
+        }),
+    }),
     NodeCrypto.layer,
   );
   const call = (
-    name: "t3_tot_list" | "t3_tot_watch" | "t3_tot_create",
+    name: "t3_tot_list" | "t3_tot_watch" | "t3_tot_create" | "t3_tot_webhook_listener",
     params: Record<string, unknown>,
   ) =>
     Effect.gen(function* () {
@@ -113,7 +153,7 @@ const harness = (callerThread: ThreadId) => {
         .pipe(Stream.unwrap, Stream.runCollect, Effect.provide(dependencies));
       return result.at(-1)?.result;
     });
-  return { watches, created, removed, call };
+  return { watches, created, removed, listeners, call };
 };
 
 it.effect("lists the Tots with a link to each one's thread", () =>
@@ -184,5 +224,64 @@ it.effect("a name already taken is refused", () =>
       code: "invalid_request",
       message: expect.stringContaining("already exists"),
     });
+  }),
+);
+
+it.effect("a Tot creates a notify listener in its own thread and gets the URL", () =>
+  Effect.gen(function* () {
+    const { call, listeners } = harness(homeThread);
+    const result = yield* call("t3_tot_webhook_listener", {
+      name: "front-door-motion",
+      cooldownSeconds: 30,
+      filters: [{ path: "body.state", op: "equals", value: "on" }],
+    });
+    expect(result).toMatchObject({
+      name: "front-door-motion",
+      mode: "notify",
+      webhookUrl: expect.stringContaining("https://relay.example.com/v1/hooks/"),
+      link: expect.stringContaining("t3-thread://"),
+    });
+    expect(listeners).toMatchObject([
+      {
+        title: "front-door-motion",
+        threadId: homeThread,
+        projectId: "project:mcp-test",
+        threadMode: "continue",
+        workspaceStrategy: { type: "root" },
+        schedule: {
+          type: "webhook",
+          filters: [{ path: "body.state", op: "equals", value: "on" }],
+          listener: { mode: "notify", cooldownSeconds: 30 },
+        },
+      },
+    ]);
+  }),
+);
+
+it.effect("a wake listener frames the payload for the Tot", () =>
+  Effect.gen(function* () {
+    const { call, listeners } = harness(homeThread);
+    yield* call("t3_tot_webhook_listener", { name: "doorbell", mode: "wake" });
+    expect(listeners[0]?.prompt).toContain("untrusted data");
+    expect(listeners[0]?.prompt).toContain("{{request}}");
+    expect(listeners[0]?.schedule).toMatchObject({ listener: { mode: "wake" } });
+  }),
+);
+
+it.effect("only a Tot whose scope is all can listen for another Tot", () =>
+  Effect.gen(function* () {
+    const { call, listeners } = harness(scopedThread);
+    const result = yield* call("t3_tot_webhook_listener", { name: "doorbell", tot: "home" });
+    expect(result).toMatchObject({ code: "capability_denied" });
+    expect(listeners).toHaveLength(0);
+  }),
+);
+
+it.effect("only a Tot can create a listener", () =>
+  Effect.gen(function* () {
+    const { call, listeners } = harness(ThreadId.make("thread:ordinary"));
+    const result = yield* call("t3_tot_webhook_listener", { name: "doorbell" });
+    expect(result).toMatchObject({ code: "capability_denied" });
+    expect(listeners).toHaveLength(0);
   }),
 );
