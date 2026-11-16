@@ -36,6 +36,20 @@ describe("renderTotFace", () => {
     expect(pixelAt(png, 0, 0)[3]).toBe(0);
   });
 
+  it("draws the Tot's own shape instead of the default rounded head", () => {
+    const flower = read(renderTotFace({ color: "#ff5fa8", shape: "flower" }));
+    const round = read(renderTotFace({ color: "#ff5fa8" }));
+    // The outline comes from the app's own points, so a shaped head must differ
+    // from the rounded one across a real area, not just an antialiased edge.
+    let differs = 0;
+    for (let offset = 3; offset < flower.data.length; offset += 4) {
+      if (Math.abs((flower.data[offset] ?? 0) - (round.data[offset] ?? 0)) > 128) differs += 1;
+    }
+    expect(differs).toBeGreaterThan(100);
+    expect(pixelAt(flower, 64, 72)).toEqual([255, 95, 168, 255]);
+    expect(pixelAt(round, 64, 72)).toEqual([255, 95, 168, 255]);
+  });
+
   it("keeps the head transparent where a corner is not rounded", () => {
     const png = read(renderTotFace(home));
 
