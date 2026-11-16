@@ -1,18 +1,61 @@
-import { EnvironmentId, ThreadId, type ThreadGroupsState } from "@t3tools/contracts";
+import type { ThreadRunSummary, ThreadRuntimeSummary } from "@t3tools/client-runtime/state/models";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import {
+  EnvironmentId,
+  ProviderInstanceId,
+  RunId,
+  ThreadId,
+  type OrchestrationV2RunStatus,
+  type ThreadGroupsState,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { scopedThreadKey } from "../../lib/scopedEntities";
 import { makeThreadShellFixture } from "../../test-fixtures";
-import { withThreadGroupSections } from "./thread-group-sections";
+import { resolveThreadGroupHeaderStatuses, withThreadGroupSections } from "./thread-group-sections";
 import type { ThreadListV2ListItem } from "./threadListV2";
 
 const environmentId = EnvironmentId.make("environment-1");
+const updatedAt = "2026-01-01T00:00:00.000Z";
+const providerInstanceId = ProviderInstanceId.make("codex");
 
-function threadItem(id: string, options: { pinned?: boolean } = {}): ThreadListV2ListItem {
-  const thread = makeThreadShellFixture({ environmentId, id: ThreadId.make(id), title: id });
+function statusThread(
+  id: string,
+  overrides: Partial<EnvironmentThreadShell> = {},
+): EnvironmentThreadShell {
+  return makeThreadShellFixture({
+    environmentId,
+    id: ThreadId.make(id),
+    title: id,
+    ...overrides,
+  });
+}
+
+const runtime = (status: ThreadRuntimeSummary["status"]): ThreadRuntimeSummary => ({
+  status,
+  activeRunId: null,
+  providerInstanceId,
+  providerName: null,
+  lastError: null,
+  updatedAt,
+});
+
+const run = (status: OrchestrationV2RunStatus, completedAt: string | null): ThreadRunSummary => ({
+  runId: RunId.make(`run-${status}`),
+  status,
+  requestedAt: null,
+  startedAt: null,
+  completedAt,
+  assistantMessageId: null,
+});
+
+function threadItemForThread(
+  thread: EnvironmentThreadShell,
+  options: { pinned?: boolean } = {},
+): ThreadListV2ListItem {
   return {
     type: "v2-thread",
-    key: `v2-thread:${environmentId}:${id}`,
+    key: `v2-thread:${thread.environmentId}:${thread.id}`,
     item: {
       thread,
       variant: "card",
@@ -29,6 +72,13 @@ function threadItem(id: string, options: { pinned?: boolean } = {}): ThreadListV
     canMoveUp: true,
     canMoveDown: true,
   };
+}
+
+function threadItem(id: string, options: { pinned?: boolean } = {}): ThreadListV2ListItem {
+  return threadItemForThread(
+    makeThreadShellFixture({ environmentId, id: ThreadId.make(id), title: id }),
+    options,
+  );
 }
 
 const settledShelf: ThreadListV2ListItem = {
@@ -128,6 +178,38 @@ describe("withThreadGroupSections", () => {
     ]);
   });
 
+  it("summarizes a collapsed group's waiting threads and drops the summary when open", () => {
+    const thread = statusThread("input", { hasPendingUserInput: true });
+    const input = threadItemForThread(thread);
+    const groups = [{ id: "status", name: "Status" }];
+    const byEnvironment = new Map([
+      [
+        environmentId,
+        {
+          groups,
+          projectDefaults: {},
+          threadOverrides: { [thread.id]: "status" },
+        } satisfies ThreadGroupsState,
+      ],
+    ]);
+    const section = (collapsedGroupIds: string[]) =>
+      withThreadGroupSections({
+        items: [input],
+        byEnvironment,
+        groups,
+        collapsedGroupIds,
+        selectedThreadKey: null,
+        includeEmptyGroups: false,
+        searching: false,
+      }).find((item) => item.type === "v2-thread-group");
+    const collapsed = section(["status"]);
+    const open = section([]);
+    expect(collapsed?.type === "v2-thread-group" && collapsed.statuses).toEqual([
+      { status: "input", count: 1 },
+    ]);
+    expect(open?.type === "v2-thread-group" && open.statuses).toEqual([]);
+  });
+
   it("shows empty groups only when asked", () => {
     expect(keys(build())).not.toContain("v2-thread-group:empty");
     expect(keys(build({ includeEmptyGroups: true }))).toContain("v2-thread-group:empty");
@@ -146,5 +228,43 @@ describe("withThreadGroupSections", () => {
       items,
     );
     expect(withThreadGroupSections({ ...input, groups: [], searching: false })).toBe(items);
+  });
+});
+
+describe("resolveThreadGroupHeaderStatuses", () => {
+  it("counts a collapsed group's threads, most urgent first", () => {
+    const threads = [
+      statusThread("working", {
+        runtime: runtime("running"),
+        latestRun: run("running", null),
+      }),
+      statusThread("done", {
+        runtime: runtime("completed"),
+        latestRun: run("completed", "2026-01-02T00:00:00.000Z"),
+        lastVisitedAt: updatedAt,
+      }),
+      statusThread("input-a", { hasPendingUserInput: true }),
+      statusThread("input-b", { hasPendingUserInput: true }),
+      statusThread("approval", { hasPendingApprovals: true }),
+      statusThread("request", { pendingGuestMessageCount: 1 }),
+      statusThread("failed", {
+        runtime: runtime("failed"),
+        latestRun: run("failed", "2026-01-02T00:00:00.000Z"),
+        lastVisitedAt: null,
+      }),
+      statusThread("idle", {
+        runtime: runtime("idle"),
+        latestRun: run("completed", updatedAt),
+      }),
+    ];
+
+    expect(resolveThreadGroupHeaderStatuses(threads)).toEqual([
+      { status: "approval", count: 1 },
+      { status: "input", count: 2 },
+      { status: "request", count: 1 },
+      { status: "failed", count: 1 },
+      { status: "working", count: 1 },
+      { status: "done", count: 1 },
+    ]);
   });
 });
