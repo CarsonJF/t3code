@@ -8,8 +8,9 @@ import { createFileLogger, describeError } from "./log.ts";
 import { extractPairingCode, formatMintedToken, mintMcpToken } from "./mintToken.ts";
 import { createBridgeService } from "./service.ts";
 import { createT3Client } from "./t3Client.ts";
+import { listTotFaces } from "./tots.ts";
 
-const HELP = `Discord DM bridge for T3 Code Tots.
+const HELP = `Discord bridge for T3 Code Tots.
 
 Usage:
   npm start                 Run the bridge (DISCORD_TOKEN required)
@@ -21,6 +22,11 @@ Environment:
   DISCORD_ALLOWED_USER_IDS  Comma-separated Discord user ids; everyone else is ignored
   T3_MCP_URL                The environment's MCP endpoint, such as http://127.0.0.1:3773/mcp
   T3_MCP_TOKEN              Bearer token from \`npm run mint-token\`
+
+Guild mode (optional):
+  DISCORD_GUILD_ID          A server id: one text channel per Tot, each with its own webhook
+  CHANNEL_TOT_MAP           Pin channels that already exist: channelId=totId pairs
+  DISCORD_AVATAR_DIR        Where rendered Tot faces are cached (default .webhook-avatars)
 
 Runbook: docs/discord-tot-bridge.md`;
 
@@ -69,6 +75,8 @@ const serve = async (dryRun: boolean): Promise<number | null> => {
     mcpUrl: config.t3McpUrl,
     allowedUsers: config.allowedUserIds.size,
     logFile: config.logFile,
+    guildId: config.guildId,
+    pinnedChannels: config.channelTotMap.size,
   });
 
   const sleep = (ms: number): Promise<void> =>
@@ -107,6 +115,16 @@ const serve = async (dryRun: boolean): Promise<number | null> => {
         sleep,
         defaultTotName: config.defaultTotName,
       }),
+    ...(config.guildId === null
+      ? {}
+      : {
+          guild: {
+            guildId: config.guildId,
+            channelTotMap: config.channelTotMap,
+            avatarCacheDir: config.avatarCacheDir,
+            listTots: () => listTotFaces(t3),
+          },
+        }),
   });
 
   let stopping = false;
