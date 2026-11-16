@@ -115,6 +115,10 @@ const GROUP_STATUS: Record<
     label: "working",
     presentation: THREAD_STATUS_PRESENTATION.working,
   },
+  waiting: {
+    label: "waiting",
+    presentation: THREAD_STATUS_PRESENTATION.waiting,
+  },
   done: {
     label: "done",
     presentation: DONE_STATUS_PRESENTATION,
