@@ -29,12 +29,12 @@ import { use, useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { RefreshControl } from "../../components/ui/RefreshControl";
 import Animated, { FadeIn, ReduceMotion } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { useReduceMotionEnabled } from "../../lib/appState";
 import { AppText as Text } from "../../components/ui/AppText";
 import { useWorkspaceSettledContentWidth } from "../layout/workspace-content-width";
+import { useWorkspaceListBottomInset } from "../layout/workspace/workspace-list-insets";
 import { cn } from "../../lib/cn";
 import type { MessageResolver } from "../../i18n/messages";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
@@ -103,8 +103,8 @@ function UsageScreen(props: {
     label: m(option.label),
     accessibilityLabel: m(option.accessibilityLabel),
   }));
-  const insets = useSafeAreaInsets();
   const headerOnly = use(NativeWorkspaceTabActivityContext)?.headerOnly === true;
+  const bottomInset = useWorkspaceListBottomInset({ automaticBottomInset: true });
   const [selection, setSelection] = useState(() => ({
     params: props.tabParam,
     view: (props.tabParam === "usage" ? "cost" : "limits") as UsageView,
@@ -255,7 +255,7 @@ function UsageScreen(props: {
           showsVerticalScrollIndicator={false}
           className="flex-1"
           contentContainerClassName="px-5 pt-4"
-          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
+          contentContainerStyle={{ paddingBottom: bottomInset }}
           onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
           refreshControl={
             showingLimits || canReadDiagnostics ? (
