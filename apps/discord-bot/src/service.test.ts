@@ -203,6 +203,95 @@ describe("autocomplete", () => {
   });
 });
 
+describe("handleChannelText", () => {
+  it("sends to the channel's Tot instead of the sticky one", async () => {
+    const { fake, channel, service } = build(settle("Hello channel!"));
+    await service.handleCommand("user-1", { kind: "use", name: "squirt" });
+
+    await service.handleChannelText("1001", "tot-home", "Hi channel");
+
+    expect(fake.callsOf("t3_thread_send")[0]).toMatchObject({
+      threadId: "thread-home",
+      message: "Hi channel",
+    });
+    expect(channel.edits.at(-1)?.text).toBe("Hello channel!");
+  });
+
+  it("answers a question asked in the channel", async () => {
+    const { fake, channel, service } = build({
+      frames: [
+        { status: "running", pending: 1 },
+        { status: "running", pending: 1 },
+        { status: "completed", text: "Built it." },
+      ],
+      pendingRequestIds: ["request-1"],
+      questions: [
+        {
+          id: "q1",
+          header: "Branch",
+          question: "Which branch should I use?",
+          options: [{ label: "main" }, { label: "a new branch", value: "feat/x" }],
+        },
+      ],
+    });
+
+    const running = service.handleChannelText("1001", "tot-home", "Ship it");
+    await channel.waitForSend((text) => text.includes("Which branch"));
+
+    await service.handleChannelText("1001", "tot-home", "2");
+
+    expect(
+      fake.callsOf("t3_pending_request").find((call) => call.action === "respond"),
+    ).toMatchObject({ answers: { q1: "feat/x" } });
+    expect(channel.sent).toContain("Answered Branch: feat/x.");
+    await running;
+  });
+
+  it("says when the channel's Tot is off", async () => {
+    const { fake, channel, service } = build({
+      ...settle("ok"),
+      tots: [{ ...tots[0]!, threadId: null, enabled: false }, tots[1]!],
+    });
+
+    await service.handleChannelText("1001", "tot-home", "Hi");
+
+    expect(channel.sent.at(-1)).toContain("Home is not running.");
+    expect(fake.callsOf("t3_thread_send")).toHaveLength(0);
+  });
+
+  it("says when the channel names a Tot that is gone", async () => {
+    const { fake, channel, service } = build(settle("ok"));
+
+    await service.handleChannelText("1001", "tot-gone", "Hi");
+
+    expect(channel.sent.at(-1)).toBe("There is no Tot tot-gone on this T3 server.");
+    expect(fake.callsOf("t3_thread_send")).toHaveLength(0);
+  });
+});
+
+describe("handleChannelStop", () => {
+  it("stops that channel's Tot", async () => {
+    const { fake, service } = build(settle("ok"));
+
+    const reply = await service.handleChannelStop("1001", "tot-squirt");
+
+    expect(reply.text).toBe("Stopped Squirt.");
+    expect(fake.callsOf("t3_thread_interrupt")[0]).toEqual({
+      threadId: "thread-squirt",
+      stop: true,
+    });
+  });
+
+  it("answers for a Tot that is not there", async () => {
+    const { fake, service } = build(settle("ok"));
+
+    const reply = await service.handleChannelStop("1001", "tot-gone");
+
+    expect(reply.text).toBe("There is no Tot tot-gone on this T3 server.");
+    expect(fake.callsOf("t3_thread_interrupt")).toHaveLength(0);
+  });
+});
+
 describe("formatTotList", () => {
   it("says when nothing is set up", () => {
     expect(formatTotList([], undefined)).toContain("No Tots are set up");

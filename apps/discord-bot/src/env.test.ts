@@ -1,3 +1,6 @@
+// @effect-diagnostics nodeBuiltinImport:off - Asserts the cache path a plain Node service resolves.
+import * as NodePath from "node:path";
+
 import { describe, expect, it } from "vite-plus/test";
 
 import { ConfigError, dryRunUserId, readConfig } from "./env.ts";
@@ -79,5 +82,63 @@ describe("readConfig", () => {
     );
 
     expect(config.logFile).toBe("/var/log/tot-bridge.log");
+  });
+});
+
+describe("guild mode", () => {
+  it("stays off without DISCORD_GUILD_ID", () => {
+    const config = readConfig(complete, "serve");
+
+    expect(config.guildId).toBeNull();
+    expect(config.channelTotMap.size).toBe(0);
+  });
+
+  it("reads the server id and the channels pinned to Tots", () => {
+    const config = readConfig(
+      {
+        ...complete,
+        DISCORD_GUILD_ID: "123456789012345678",
+        CHANNEL_TOT_MAP: "1001=home, 1002=squirt",
+      },
+      "serve",
+    );
+
+    expect(config.guildId).toBe("123456789012345678");
+    expect([...config.channelTotMap]).toEqual([
+      ["1001", "home"],
+      ["1002", "squirt"],
+    ]);
+  });
+
+  it("rejects a guild id that is not a server id", () => {
+    expect(problemsOf({ ...complete, DISCORD_GUILD_ID: "my-server" }, "serve")).toEqual([
+      expect.stringContaining("DISCORD_GUILD_ID"),
+    ]);
+  });
+
+  it("reports a channel map it cannot read", () => {
+    expect(
+      problemsOf(
+        { ...complete, DISCORD_GUILD_ID: "123", CHANNEL_TOT_MAP: "general=home" },
+        "serve",
+      ),
+    ).toEqual([expect.stringContaining("CHANNEL_TOT_MAP")]);
+  });
+
+  it("does not let a channel map stand alone", () => {
+    expect(problemsOf({ ...complete, CHANNEL_TOT_MAP: "1001=home" }, "serve")).toEqual([
+      expect.stringContaining("only applies when DISCORD_GUILD_ID"),
+    ]);
+  });
+
+  it("caches faces under the environment and moves them when asked", () => {
+    expect(readConfig(complete, "serve").avatarCacheDir).toBe(
+      NodePath.join(".webhook-avatars", "127.0.0.1-3773"),
+    );
+
+    expect(
+      readConfig({ ...complete, DISCORD_AVATAR_DIR: "/var/cache/tot-faces" }, "serve")
+        .avatarCacheDir,
+    ).toBe(NodePath.join("/var/cache/tot-faces", "127.0.0.1-3773"));
   });
 });
