@@ -2,10 +2,54 @@ import {
   splitThreadsByGroup,
   type ThreadGroupsByEnvironment,
 } from "@t3tools/client-runtime/thread-groups";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import type { ThreadGroup } from "@t3tools/contracts";
 
 import { scopedThreadKey } from "../../lib/scopedEntities";
-import type { ThreadListV2ListItem, ThreadListV2ThreadListItem } from "./threadListV2";
+import type {
+  ThreadGroupHeaderStatus,
+  ThreadGroupHeaderStatusCount,
+} from "./thread-group-header-item";
+import {
+  resolveThreadListV2RowStatus,
+  threadHasUnseenCompletion,
+  type ThreadListV2ListItem,
+  type ThreadListV2ThreadListItem,
+} from "./threadListV2";
+
+const GROUP_STATUS_ORDER: ReadonlyArray<ThreadGroupHeaderStatus> = [
+  "approval",
+  "input",
+  "request",
+  "failed",
+  "working",
+  "done",
+];
+
+/** Per-status counts for a collapsed header, most urgent first. Waiting stays quiet, like rows. */
+export function resolveThreadGroupHeaderStatuses(
+  threads: ReadonlyArray<EnvironmentThreadShell>,
+): ThreadGroupHeaderStatusCount[] {
+  const counts = new Map<ThreadGroupHeaderStatus, number>();
+  for (const thread of threads) {
+    const raw = resolveThreadListV2RowStatus(thread);
+    const status: ThreadGroupHeaderStatus | null =
+      raw === "limited"
+        ? "failed"
+        : raw === "ready"
+          ? threadHasUnseenCompletion(thread)
+            ? "done"
+            : null
+          : raw === "waiting"
+            ? null
+            : raw;
+    if (status !== null) counts.set(status, (counts.get(status) ?? 0) + 1);
+  }
+  return GROUP_STATUS_ORDER.flatMap((status) => {
+    const count = counts.get(status);
+    return count === undefined ? [] : [{ status, count }];
+  });
+}
 
 const isShelfHeader = (item: ThreadListV2ListItem) =>
   item.type === "v2-working-shelf" ||
@@ -49,6 +93,7 @@ export function withThreadGroupSections(input: {
       group,
       count: threads.length,
       expanded,
+      statuses: expanded ? [] : resolveThreadGroupHeaderStatuses(threads),
     });
     for (const thread of threads) {
       const item = itemByThread.get(thread)!;
