@@ -53,6 +53,7 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
               : McpInvocationContext.threadLinkFor(scope, tot.threadId, tot.name),
           scope: tot.scope,
           watchAll: tot.watchAll,
+          avatar: tot.avatar,
         })),
       };
     }),
