@@ -17,6 +17,7 @@ import {
   resolveTotAnimation,
   selectTots,
   totHostOrder,
+  totOwningThread,
   withoutTotProjects,
   totFaceInputFromShell,
   totFaceState,
@@ -134,6 +135,42 @@ describe("selectTots", () => {
     ]);
     const untouched = [sameIdElsewhere, other];
     expect(withoutTotProjects(untouched, environmentTots)).toBe(untouched);
+  });
+
+  it("finds the Tot a thread belongs to, and only on its own machine", () => {
+    const home = { ...DEFAULT_HOME_TOT, threadId: ThreadId.make("tot:home:n") };
+    const entries = [
+      { environmentId: asuna, tot: home },
+      { environmentId: promini, tot: yui },
+    ];
+    expect(
+      totOwningThread(entries, { environmentId: asuna, id: ThreadId.make("tot:home:n") }),
+    ).toBe(entries[0]);
+    expect(
+      totOwningThread(entries, { environmentId: asuna, id: ThreadId.make("tot:yui:n") }),
+    ).toBeNull();
+    expect(
+      totOwningThread(entries, { environmentId: promini, id: ThreadId.make("thread-1") }),
+    ).toBeNull();
+    expect(totOwningThread(entries, null)).toBeNull();
+  });
+
+  it("keeps a turned-off Tot's thread, matched by its project", () => {
+    const yuiProject = ProjectId.make("project:yui");
+    const off = { ...yui, threadId: null, projectId: yuiProject };
+    const entries = [{ environmentId: asuna, tot: off }];
+    const oldThread = {
+      environmentId: asuna,
+      id: ThreadId.make("tot:yui:old"),
+      projectId: yuiProject,
+    };
+    expect(totOwningThread(entries, oldThread)).toBe(entries[0]);
+    expect(totOwningThread(entries, { ...oldThread, environmentId: promini })).toBeNull();
+    expect(totOwningThread(entries, { environmentId: asuna, id: oldThread.id })).toBeNull();
+
+    // A Tot turned back on has a new thread; its old one is no longer its own.
+    const running = { ...off, threadId: ThreadId.make("tot:yui:new") };
+    expect(totOwningThread([{ environmentId: asuna, tot: running }], oldThread)).toBeNull();
   });
 
   it("offers every connected machine as a Tot's home, the one hosting Tots first", () => {
