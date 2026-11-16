@@ -2,9 +2,10 @@
 
 A small service that lets you talk to a [Tot](./internals/tots.md) from Discord
 direct DMs, or from a text channel of its own in one server, in the same thread
-the app shows. It posts your message through the environment's MCP endpoint,
-follows the turn, edits one message as the answer streams in, and answers
-questions the Tot asks.
+the app shows. It posts your message through a machine's MCP endpoint, follows
+the turn, edits one message as the answer streams in, and answers questions the
+Tot asks. One bridge can serve Tots from several machines at once; see
+[Several machines](#several-machines).
 
 It is a separate process (`apps/discord-bot`), not part of the desktop app.
 Nothing in the app changes when it is off.
@@ -13,11 +14,12 @@ Nothing in the app changes when it is off.
 
 - **Plain DMs go to your current Tot.** The first time, that is Home. `/tot use
   <name>` makes another Tot sticky for your Discord user id; the app and other
-  people are unaffected.
+  people are unaffected. With several machines, `/tot use office:Home` picks
+  one by machine.
 - **In a server, each Tot can have a channel.** With `DISCORD_GUILD_ID` set, the
-  bridge makes a `tot-<id>` channel for every Tot and posts there through a
-  webhook wearing the Tot's name and face. See [One channel per
-  Tot](#one-channel-per-tot).
+  bridge makes a `tot-<id>` channel for every Tot on every configured machine
+  and posts there through a webhook wearing the Tot's name and face. See [One
+  channel per Tot](#one-channel-per-tot).
 - **The turn is a normal T3 turn.** Same provider, model, tools, and permission
   mode as the Tot's thread in the app, because it is that thread. You can watch
   it in the app and keep the conversation there.
@@ -47,8 +49,9 @@ Nothing in the app changes when it is off.
 - **Start a Tot that is off.** Turn it on in the app first; the DM says so.
 - **Read a thread inside a Tot channel.** Threads are not mapped; only the
   channel itself is.
-- **Reach a linked machine's Tots on its own.** The bridge acts on the
-  environment its token belongs to.
+- **Reach a machine that is not configured.** The bridge acts on the machines in
+  `T3_ENVIRONMENTS`, or on the one its token belongs to in the single form.
+  Something else entirely is out of reach.
 
 ## Set it up
 
@@ -93,9 +96,9 @@ name and **Copy User ID**. That number goes in `DISCORD_ALLOWED_USER_IDS`.
 
 ### 4. Mint a T3 token
 
-The bridge signs in to the environment's MCP endpoint the same way any outside
-agent does: once, with a pairing code, for a 30-day client session. On the
-machine that runs the T3 server:
+The bridge signs in to a machine's MCP endpoint the same way any outside agent
+does: once, with a pairing code, for a 30-day client session. On the machine
+that runs the T3 server:
 
 ```sh
 t3 auth pairing create --json
@@ -117,7 +120,8 @@ act on a thread with broader modes than itself.
 
 Instead of `t3 auth pairing create`, the app's **Use T3 Code in another app
 (MCP)** dialog issues the same kind of code, and either code works in
-`npm run mint-token`.
+`npm run mint-token`. With several machines, mint one token per machine; see
+[Mint one token per machine](#mint-one-token-per-machine).
 
 ### 5. Configure and run
 
@@ -129,7 +133,7 @@ npm run dry-run       # optional: type DMs on stdin, nothing reaches Discord
 npm start
 ```
 
-`.env`:
+`.env`, for one machine:
 
 ```sh
 DISCORD_TOKEN=...
@@ -139,30 +143,37 @@ T3_MCP_TOKEN=...
 
 # Optional: one channel per Tot in this server. See "One channel per Tot".
 DISCORD_GUILD_ID=
-# Optional: keep channels that already exist, as channelId=totId pairs.
+# Optional: keep channels that already exist, as channelId=totId or channelId=label:totId pairs.
 CHANNEL_TOT_MAP=
 # Optional: where Tot faces are cached. Default .webhook-avatars.
 DISCORD_AVATAR_DIR=
 ```
 
+For several machines, use `T3_ENVIRONMENTS` instead of `T3_MCP_URL` and
+`T3_MCP_TOKEN`; [Several machines](#several-machines) has the shape and what
+happens to channels when one is offline.
+
 Guild mode is off while `DISCORD_GUILD_ID` is empty, and everything below works
 without it.
 
-`T3_MCP_URL` is the environment's `/mcp` address: the port the server listens
-on, or its T3 Connect or Tailscale HTTPS address if the bridge runs elsewhere.
-The bridge needs no inbound port.
+`T3_MCP_URL` is one machine's `/mcp` address: the port the server listens on,
+or its T3 Connect or Tailscale HTTPS address if the bridge runs elsewhere. The
+bridge needs no inbound port.
 
 `npm run dry-run` reads lines from stdin and prints every message it would send
-or edit, while still talking to the real T3 server. It needs `T3_MCP_URL` and
-`T3_MCP_TOKEN` only, so routing, streaming, and questions can be exercised
-without a bot token. `/tot list`, `/tot use <name>`, `/tot new`, and `/tot stop`
-work there too.
+or edit, while still talking to the real T3 servers. It needs the T3 settings
+only, so routing, streaming, and questions can be exercised without a bot
+token. `/tot list`, `/tot use <name>`, `/tot new`, and `/tot stop` work there
+too.
 
 Logs go to `discord-tot-bridge.log` in the working directory, one JSON line per
-event: user id, channel id, Tot id, thread id, tool names, outcomes. Message
-text and credentials are never written. Guild setup logs `guild.channel_ready`,
-`guild.channel_skipped` and `guild.channel_failed` per channel. Set
-`DISCORD_BOT_LOG_FILE` to move the file.
+event: user id, channel id, machine, Tot id, thread id, tool names, outcomes.
+Message text and credentials are never written. Health is per machine:
+`environment.ready` says how many Tots it has and how many are on, and
+`environment.failed` says why it could not be read and how many refreshes in a
+row have failed. Guild setup logs `guild.channel_ready`, `guild.channel_skipped`
+and `guild.channel_failed` per channel. Set `DISCORD_BOT_LOG_FILE` to move the
+file.
 
 ### 6. Keep it running with systemd
 
@@ -187,8 +198,9 @@ looping.
 | In the DM                                         | What happens                                              |
 | ------------------------------------------------- | --------------------------------------------------------- |
 | any text                                          | Sent to the current Tot                                   |
-| `/tot list`                                       | Tots here, which one this DM reaches, which are off       |
+| `/tot list`                                       | Tots by machine, which one this DM reaches, which are off |
 | `/tot use <name>`                                 | Makes that Tot the current one; autocomplete offers names |
+| `/tot use <machine>:<name>`                       | Picks one machine when two have a Tot of that name        |
 | `/tot new`                                        | The next message starts a fresh session in that thread    |
 | `/tot stop` or `/stop`                            | Interrupts the turn and holds queued messages             |
 | a number, `1,3`, or text while a question is open | Answers the Tot's question                                |
@@ -230,15 +242,17 @@ can talk to a Tot without a DM per person. It is opt-in: while
 
 ### What it creates
 
-For every Tot on this environment, on every start:
+For every Tot on every configured machine, on every start:
 
 - **A text channel named `tot-<totId>`**, such as `tot-home` or `tot-t3bot`. A
-  channel with that name is reused; one is created only when none has it.
+  channel with that name is reused; one is created only when none has it. When
+  two machines have a Tot with the same id, each becomes
+  `tot-<label>-<id>`; [Several machines](#several-machines) has the rule.
 - **One webhook in that channel**, named after the Tot, with the Tot's face as
   its avatar: a 128×128 PNG drawn from the Tot's colour and two-eye face, cached
-  in `.webhook-avatars/<environment>/<totId>.png`. Set `DISCORD_AVATAR_DIR` to
-  cache elsewhere, for example when the service's working directory is
-  read-only.
+  in `.webhook-avatars/<machine>/<totId>.png`, from that Tot's own machine. Set
+  `DISCORD_AVATAR_DIR` to cache elsewhere, for example when the service's
+  working directory is read-only.
 
 Replies are posted through that webhook, so they carry the Tot's name and face
 rather than the bot's. The placeholder ("Home is working…"), its streaming edits
@@ -252,8 +266,10 @@ ignored.
 
 Setup is idempotent and never renames or deletes a channel. A second start makes
 no Discord calls unless a Tot's name or face changed, and then it only edits
-that Tot's webhook. A channel that cannot be created or reached is logged and
-skipped; every other channel, and all DMs, keep working.
+that Tot's webhook. While running, the bridge reconciles channels when the set
+of Tots changes, for example when a Tot is created or a machine comes back. A
+channel that cannot be created or reached is logged and skipped; every other
+channel, and all DMs, keep working.
 
 ### Channels that already exist
 
@@ -262,10 +278,14 @@ place you gave it:
 
 ```sh
 CHANNEL_TOT_MAP=123456789012345678=home,234567890123456789=t3bot
+# With several machines, name the machine when the id is not unique:
+CHANNEL_TOT_MAP=345678901234567890=office:home
 ```
 
-A pin wins over the `tot-<id>` name. Pins are checked at every start: a channel
-or Tot that no longer exists is logged and skipped, and that Tot gets a
+A pin wins over the `tot-<id>` name. The bare `channelId=totId` form works while
+that id is unique across the configured machines; if two machines have it, the
+pin is logged as ambiguous and skipped. Pins are checked at every start: a
+channel or Tot that no longer exists is logged and skipped, and that Tot gets a
 `tot-<id>` channel instead. With Developer Mode on, right-click a channel and
 **Copy Channel ID**.
 
@@ -286,6 +306,120 @@ there is visible to everyone in the channel, not just the person who asked.
 Treat a mapped channel as a room: the Tot has full access to the machine, and
 everyone in that room sees what it says.
 
+## Several machines
+
+One bridge can serve the Tots of several T3 servers: a laptop, a desktop, and a
+home server, all in the same Discord server, each Tot with its own channel. Each
+machine stays its own T3 server with its own projects, threads, and Tots; the
+bridge is the only thing that knows they belong together. DMs, the allowlist,
+dry runs, logging, and the single-machine form are unchanged.
+
+### The shape
+
+Replace `T3_MCP_URL` and `T3_MCP_TOKEN` with one JSON array:
+
+```sh
+T3_ENVIRONMENTS='[
+  {"label":"laptop","mcpUrl":"http://127.0.0.1:3773/mcp","token":"..."},
+  {"label":"office","mcpUrl":"https://office.tailnet.ts.net/mcp","token":"..."}
+]'
+```
+
+`label` is the machine name people see: in `/tot list`, in `/tot use
+office:Home`, and in a channel name when two machines share a Tot id. It is
+matched case-insensitively, must be unique, and may use letters, digits, dots,
+dashes and underscores, up to 32 characters. No spaces, so it also fits a
+channel name and a `CHANNEL_TOT_MAP` pin.
+
+Set **either** `T3_MCP_URL` + `T3_MCP_TOKEN`, **or** `T3_ENVIRONMENTS`, never
+both. Both together is a config error, not a merge. Every entry is checked at
+startup and every problem is printed at once: malformed JSON, a missing or
+malformed label, a duplicate label, two labels that would render to the same
+channel name, a missing token, or an `mcpUrl` that is not http(s). No value is
+printed, only the offending entry's index and field.
+
+`DISCORD_AVATAR_DIR` still holds the cache: each machine's faces go in their own
+directory below it, and the webhook record shared by the server is
+`webhooks.json` there.
+
+### Mint one token per machine
+
+A token is a 30-day MCP client session for one machine, so mint one per entry.
+On each machine, with its T3 server running:
+
+```sh
+t3 auth pairing create --json
+```
+
+Then, in the bridge directory, point `T3_MCP_URL` at that machine and run:
+
+```sh
+T3_MCP_URL=http://127.0.0.1:3773/mcp npm run mint-token
+```
+
+A `T3_MCP_URL` set in the shell wins over the one in `.env`, so the multi form
+can stay in `.env`. Put each printed token in its `T3_ENVIRONMENTS` entry and
+repeat on the other machines. A token from one machine never works on another.
+
+### What changes for users
+
+- **`/tot list` groups by machine.** Each machine's Tots are listed under its
+  label, and a machine that could not be read is listed at the end with the
+  reason. A DM's sticky Tot is still marked.
+- **DMs keep one sticky Tot.** `/tot use Home` picks the first machine in
+  `T3_ENVIRONMENTS` order that has a Tot named Home, and says which machine it
+  chose when the name exists on more than one. `/tot use office:Home` picks that
+  machine exactly, including when the names are otherwise the same.
+- **A channel belongs to one machine and one Tot.** A message there runs its
+  turn on that machine's client; the webhook wearing the Tot's name and face is
+  the one created for that channel. `/stop` in a channel stops that machine's
+  Tot.
+- **Health is per machine.** `environment.ready` reports the machine, how many
+  Tots it has and how many are on; `environment.failed` reports the machine, the
+  reason, and the number of failed refreshes in a row. Neither stops the other
+  machines from serving.
+
+### When a machine is offline
+
+A machine that does not answer is skipped for that refresh. The bridge logs
+`environment.failed`, lists it under "Could not load" in `/tot list`, and keeps
+serving every other machine's channels and all DMs. Its channels are not renamed
+or deleted and keep their binding; a message there gets a "Could not reach
+<machine>" reply rather than being routed somewhere else. A channel is never
+re-bound to a different machine.
+
+When it answers again, the next refresh sees it, logs `environment.ready` with
+its counts, and reconciles channels, so its Tots are available without a
+restart. A failed MCP session is dropped and a fresh one is opened on the next
+refresh.
+
+### Channel names on a collision
+
+Every Tot gets `tot-<totId>`, such as `tot-home`, while that id is unique across
+the configured machines. If two machines both have a Tot with id `home`, both
+become `tot-<label>-home`: `tot-laptop-home` and `tot-office-home`. Creation is
+still idempotent, and a channel is never renamed or deleted. The old shared
+`tot-home` is left alone; pin it to one machine with `CHANNEL_TOT_MAP` before
+restarting if you want to keep its name and history, or delete it by hand.
+
+A pin is `channelId=totId` or `channelId=label:totId`. The bare form works while
+that Tot id exists on only one machine; if two machines have it, the pin is
+logged as ambiguous and skipped, and both Tots get their normal channels. The
+labeled form always works and wins over the generated name.
+
+### What to do once
+
+1. On each machine, mint a token as above and keep its `label`, `mcpUrl` and
+   token together.
+2. Put them all in `T3_ENVIRONMENTS` in `.env` (or
+   `/etc/t3code-discord-bot.env`), and delete `T3_MCP_URL` and `T3_MCP_TOKEN`
+   from the same file.
+3. Keep `DISCORD_GUILD_ID` if you want a channel per Tot. Before the first
+   restart, pin any channel you want to keep on its new machine.
+4. Restart the bridge, then check the log for one `environment.ready` per label.
+5. If two machines share a Tot id, expect `tot-<label>-<id>` channels; the old
+   `tot-<id>` channel is left untouched.
+
 ## Security model
 
 - **Allowlisted ids only, in DMs and in channels.** Every path (messages,
@@ -301,10 +435,12 @@ everyone in that room sees what it says.
 - **Discord can read bot DMs.** Discord's own servers carry the messages, so
   nothing secret belongs in a DM prompt. The bridge keeps message text out of
   its logs, but it cannot make Discord private.
-- **The token is a credential for this machine.** It is a 30-day MCP client
-  session with full access. It lives in `.env` (mode 600) and is redacted from
-  logs. It is scoped to `/mcp`; it cannot call the WebSocket RPC or other HTTP
-  routes.
+- **Each token is a credential for one machine.** It is a 30-day MCP client
+  session with full access. With several machines there is one per
+  `T3_ENVIRONMENTS` entry, so revoke or replace them one at a time. They live in
+  `.env` (mode 600) and are redacted from logs. A token is scoped to that
+  machine's `/mcp`; it cannot call the WebSocket RPC or other HTTP routes, and it
+  never works on another machine.
 - **The pairing code is single use.** It expires in five minutes, and the
   exchange happens locally, so no browser or callback port is involved.
 
@@ -317,6 +453,10 @@ A token expires after 30 days, and you can cut it off early:
 2. `t3 auth pairing create --json`, then `npm run mint-token`, as above.
 3. Put the new value in `.env` (or `/etc/t3code-discord-bot.env`) and
    `sudo systemctl restart discord-tot-bridge`.
+
+With `T3_ENVIRONMENTS`, each machine has its own client entry named `Discord Tot
+bridge`, so revoke and replace them one at a time, for the machine whose token
+it is. The bridge keeps serving the other machines while one is stopped.
 
 An HTTP 401 or 403 from T3 in the log means the token is gone; the bridge tells
 the DM so.
@@ -332,7 +472,10 @@ the DM so.
 | No `tot-<id>` channels appeared          | Manage Channels and Manage Webhooks. `guild.channel_failed` names the channel and the error.          |
 | Channel messages arrive empty            | Message Content Intent is on in the Bot tab, then restart the bridge.                                 |
 | A second `tot-home` after a rename       | The bridge does not follow renames. Pin the renamed channel in `CHANNEL_TOT_MAP`.                     |
+| Two machines share a Tot id              | Expect `tot-<label>-<id>` channels. Pin the old one with `channelId=label:totId` to keep it.          |
+| A machine is missing from `/tot list`    | `environment.failed` in the log names it and the reason; check its URL and that its server is up.     |
+| "Could not load:" in `/tot list`         | That machine did not answer this refresh. The other machines and all DMs keep working.                |
 | "The T3 MCP endpoint rejected the token" | Mint a new token; it expired or was revoked.                                                          |
 | "Home is not running"                    | Turn the Tot on in the app; a Tot has a thread only while it is on.                                   |
-| "Could not reach the T3 MCP endpoint"    | `T3_MCP_URL`, and whether the server is running.                                                      |
+| "Could not reach the T3 MCP endpoint"    | That machine's `mcpUrl`, and whether its server is running.                                           |
 | Approvals never answer                   | By design: approve in the app, or `/tot stop`.                                                        |
