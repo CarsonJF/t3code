@@ -137,6 +137,29 @@ export const routeText = (
   return { kind: "send", tot, text, fresh: options.freshTotIds?.has(tot.id) ?? false };
 };
 
+/**
+ * A guild channel's Tot is fixed by the channel, so its id chooses the Tot
+ * instead of the sticky pick or Home.
+ */
+export const routeToTot = (
+  tots: ReadonlyArray<TotView>,
+  totId: string,
+  text: string,
+  options: { readonly freshTotIds?: ReadonlySet<string> } = {},
+): RouteDecision => {
+  const tot = tots.find((candidate) => candidate.id === totId);
+  if (tot === undefined) {
+    return { kind: "unavailable", message: `There is no Tot ${totId} on this T3 server.` };
+  }
+  if (tot.threadId === null) {
+    return { kind: "unavailable", tot, message: notRunningMessage(tot) };
+  }
+  if (text.trim().length === 0) {
+    return { kind: "unavailable", tot, message: "That message was empty." };
+  }
+  return { kind: "send", tot, text, fresh: options.freshTotIds?.has(tot.id) ?? false };
+};
+
 export const routeCommand = (context: RouteContext, command: SlashCommand): RouteDecision => {
   if (command.kind === "list") return { kind: "list" };
   if (command.kind === "use") {
