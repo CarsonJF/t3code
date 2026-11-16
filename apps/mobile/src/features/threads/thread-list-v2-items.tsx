@@ -42,6 +42,7 @@ import { Platform, Pressable, Text as RNText, useWindowDimensions, View } from "
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import type { ThreadListProvider } from "../../state/thread-list-environments";
+import { totFaceInputFromShell, totFaceState } from "@t3tools/client-runtime/tots";
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { Menu } from "../../components/ui/Menu";
@@ -92,6 +93,8 @@ import {
 } from "./threadListV2";
 import { QueuedMessageIcon } from "./queued-message-icon";
 import { useThreadGroupMenu } from "./thread-group-menu";
+import { TOT_ROW_FACE_SIZE, TotStillFace } from "../tots/TotStillFace";
+import { useThreadTot } from "../../state/tots";
 import { shouldRecedeThreadRow } from "./thread-row-emphasis";
 import { ThreadSearchMatchExcerpt } from "./thread-search-match";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
@@ -617,7 +620,10 @@ export const ThreadListV2PendingRow = memo(function ThreadListV2PendingRow(props
         </View>
       ) : null}
       {branch || props.environmentLabel ? (
-        <View className="mt-1 flex-row items-center gap-1" style={{ paddingLeft: titleTextInset }}>
+        <View
+          className="mt-0.5 flex-row items-center gap-1"
+          style={{ paddingLeft: titleTextInset }}
+        >
           {props.environmentLabel && props.environmentMachine ? (
             <EnvironmentMachineSymbol
               kind={props.environmentMachine}
@@ -834,6 +840,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const snoozedRow = props.snoozed === true;
   const pinnedRow = props.pinned === true;
   const dormant = useSwipeRowDormant(props.activationKey);
+  const tot = useThreadTot(thread);
 
   const selectThread = () => onSelectThread(thread);
   const { providerDrivers, providerIconUrl } = useMemo(() => {
@@ -1372,11 +1379,20 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       ? primaryAction.swipeHint
       : primaryAction.swipeSnoozeHint;
 
-  const titleTextInset = props.project ? projectIconSize + 8 : 0;
+  const titleTextInset =
+    tot !== null ? TOT_ROW_FACE_SIZE + 8 : props.project ? projectIconSize + 8 : 0;
   const cardContent = (
     <>
       <View className="flex-row items-start gap-2">
-        {props.project ? (
+        {tot !== null ? (
+          <View className="justify-center" style={{ height: titleLineHeight }}>
+            <TotStillFace
+              avatar={tot.tot.avatar}
+              state={totFaceState(totFaceInputFromShell(tot.tot, thread))}
+              size={TOT_ROW_FACE_SIZE}
+            />
+          </View>
+        ) : props.project ? (
           <View className="justify-center" style={{ height: titleLineHeight }}>
             <ProjectFavicon
               environmentId={thread.environmentId}
@@ -1390,8 +1406,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         ) : null}
         <Text
           className={cn(
-            "flex-1 text-base",
-            !recede && "font-t3-medium",
+            "flex-1 text-base font-t3-medium",
             selected
               ? selectedThreadRowColors.foregroundClassName
               : rowAppearance.foregroundClassName,
@@ -1509,7 +1524,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           />
         </View>
       ) : null}
-      <View className="mt-1 flex-row items-center gap-2" style={{ paddingLeft: titleTextInset }}>
+      <View className="mt-0.5 flex-row items-center gap-2" style={{ paddingLeft: titleTextInset }}>
         {(rawStatus === "failed" || rawStatus === "limited") && thread.runtime?.lastError ? (
           <Text
             className={cn(
@@ -1696,7 +1711,13 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             sidebarPane && "px-3",
           )}
         >
-          {props.project ? (
+          {tot !== null ? (
+            <TotStillFace
+              avatar={tot.tot.avatar}
+              state={totFaceState(totFaceInputFromShell(tot.tot, thread))}
+              size={TOT_ROW_FACE_SIZE}
+            />
+          ) : props.project ? (
             <View className="opacity-40">
               <ProjectFavicon
                 environmentId={thread.environmentId}
