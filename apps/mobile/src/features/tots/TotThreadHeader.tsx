@@ -27,7 +27,6 @@ export function TotThreadHeader(props: {
   const bandBorder = tokens["--tot-border"];
   const textColor = tokens["--tot-text"];
   const mutedColor = tokens["--tot-muted"];
-  const surfaceColor = tokens["--tot-surface"];
   return (
     <View
       accessible
@@ -57,17 +56,6 @@ export function TotThreadHeader(props: {
       >
         {tot.name}
       </AppText>
-      <View
-        className="rounded-full bg-grouped-card px-1.5 py-0.5"
-        style={surfaceColor === undefined ? undefined : { backgroundColor: surfaceColor }}
-      >
-        <AppText
-          className="text-3xs font-t3-bold tracking-[0.5px] uppercase text-foreground-muted"
-          style={mutedColor === undefined ? undefined : { color: mutedColor }}
-        >
-          Tot
-        </AppText>
-      </View>
       <View className="flex-1" />
       <AppText
         numberOfLines={1}

@@ -4,6 +4,9 @@ import Svg, { Path, Rect } from "react-native-svg";
 
 const EYE = "#F8FAFC";
 
+/** The face size every Tot row uses, so a Tot looks the same wherever it is listed. */
+export const TOT_ROW_FACE_SIZE = 30;
+
 /** The eyes BoopFace holds for each state, drawn on a 100x100 head. */
 function Eyes(props: { readonly state: TotFaceState }) {
   switch (props.state) {
