@@ -6,55 +6,42 @@ import type {
 } from "@t3tools/contracts";
 
 import type { Question } from "./answers.ts";
-import type { TotView } from "./routing.ts";
 import type { T3Client } from "./t3Client.ts";
-
-export interface TotListResult {
-  readonly tots: ReadonlyArray<{
-    readonly id: string;
-    readonly name: string;
-    readonly enabled: boolean;
-    readonly threadId: string | null;
-    readonly link: string | null;
-  }>;
-}
-
-/** The Tots on the host server, in the order the app lists them. */
-export const listTots = async (t3: T3Client): Promise<ReadonlyArray<TotView>> => {
-  const result = await t3.call<TotListResult>("t3_tot_list", {});
-  return result.tots.map((tot) => ({
-    id: tot.id,
-    name: tot.name,
-    enabled: tot.enabled,
-    threadId: tot.threadId,
-    link: tot.link,
-  }));
-};
-
-export interface TotFaceView {
-  readonly id: string;
-  readonly name: string;
-  readonly avatar: TotAvatar;
-}
 
 /** Home's colour, for a server older than the `avatar` field. */
 const FALLBACK_FACE: TotAvatar = { color: "#0a7ea4" };
 
+export interface TotRecord {
+  readonly id: string;
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly threadId: string | null;
+  readonly link: string | null;
+  readonly avatar: TotAvatar;
+}
+
 /**
- * The Tots with the face a channel webhook speaks as. A server that predates
- * `avatar` on `t3_tot_list` still works, wearing Home's colour.
+ * The Tots on one machine, in the order the app lists them, with the face a
+ * channel webhook speaks as. A server that predates `avatar` still works,
+ * wearing Home's colour.
  */
-export const listTotFaces = async (t3: T3Client): Promise<ReadonlyArray<TotFaceView>> => {
+export const listTots = async (t3: T3Client): Promise<ReadonlyArray<TotRecord>> => {
   const result = await t3.call<{
     readonly tots: ReadonlyArray<{
       readonly id: string;
       readonly name: string;
+      readonly enabled: boolean;
+      readonly threadId: string | null;
+      readonly link: string | null;
       readonly avatar?: TotAvatar;
     }>;
   }>("t3_tot_list", {});
   return result.tots.map((tot) => ({
     id: tot.id,
     name: tot.name,
+    enabled: tot.enabled,
+    threadId: tot.threadId,
+    link: tot.link,
     avatar: tot.avatar ?? FALLBACK_FACE,
   }));
 };

@@ -1,5 +1,4 @@
-// @effect-diagnostics extendsNativeError:off nodeBuiltinImport:off - discord.js error classes are matched, not thrown; the avatar cache lives at a path.
-import * as NodePath from "node:path";
+// @effect-diagnostics extendsNativeError:off nodeBuiltinImport:off - discord.js error classes are matched, not thrown.
 import {
   ApplicationIntegrationType,
   ChannelType,
@@ -20,18 +19,19 @@ import {
 } from "discord.js";
 
 import { isAllowedAuthor } from "./allowlist.ts";
-import { createAvatarStore } from "./avatar.ts";
+import { createAvatarStore, type AvatarStore } from "./avatar.ts";
 import { planLoginRetry } from "./backoff.ts";
+import type { EnvironmentCatalog, TotCatalogSnapshot } from "./environments.ts";
 import {
   createWebhookState,
   ensureGuildChannels,
   routeGuildMessage,
   type GuildPort,
-  type GuildTot,
+  type TotPin,
 } from "./guild.ts";
 import { type Logger, describeError } from "./log.ts";
 import type { BridgeService } from "./service.ts";
-import type { SlashCommand } from "./routing.ts";
+import type { SlashCommand, TotRef } from "./routing.ts";
 import { splitMessage } from "./split.ts";
 import type { ChannelPort } from "./turns.ts";
 import { createWebhookChannelPort } from "./webhook.ts";
@@ -43,11 +43,13 @@ const ATTACHMENTS_UNSUPPORTED = "Send text for now; the bridge does not forward 
 export interface DiscordGuildOptions {
   readonly guildId: string;
   /** Channels pinned to a Tot, so a channel with another name still reaches it. */
-  readonly channelTotMap: ReadonlyMap<string, string>;
-  /** Where rendered faces and webhook ids are cached. */
-  readonly avatarCacheDir: string;
-  /** The Tots to give a channel; read from the environment once the bot is ready. */
-  readonly listTots: () => Promise<ReadonlyArray<GuildTot>>;
+  readonly channelTotMap: ReadonlyMap<string, TotPin>;
+  /** Where one machine's rendered faces are cached. */
+  readonly avatarCacheDirFor: (environment: string) => string;
+  /** Where the webhook already in each channel is remembered. */
+  readonly webhookStatePath: string;
+  /** The Tots to give a channel, merged across machines. */
+  readonly catalog: EnvironmentCatalog;
 }
 
 export interface DiscordBridgeOptions {
@@ -154,8 +156,8 @@ export const startDiscordBridge = async (
     return channel;
   };
 
-  /** A Tot's channel id to its Tot, and to the port that speaks as that Tot. */
-  const channelTots = new Map<string, string>();
+  /** A Tot's channel id to its address, and to the port that speaks as that Tot. */
+  const channelTots = new Map<string, TotRef>();
   const channelPorts = new Map<string, ChannelPort>();
 
   const portFor = (key: string): ChannelPort => {
@@ -241,21 +243,48 @@ export const startDiscordBridge = async (
     };
   };
 
-  let guildSetup: Promise<void> | null = null;
+  const avatarStores = new Map<string, AvatarStore>();
+  const avatarsFor =
+    (guildOptions: DiscordGuildOptions) =>
+    (environment: string): AvatarStore => {
+      const existing = avatarStores.get(environment);
+      if (existing !== undefined) return existing;
+      const created = createAvatarStore({ dir: guildOptions.avatarCacheDirFor(environment) });
+      avatarStores.set(environment, created);
+      return created;
+    };
+  const webhookState =
+    options.guild === undefined ? null : createWebhookState(options.guild.webhookStatePath);
 
-  const setupGuild = async (guildOptions: DiscordGuildOptions): Promise<void> => {
-    const tots = await guildOptions.listTots();
+  let guildSetup: Promise<void> | null = null;
+  let lastGuildSignature: string | null = null;
+
+  const totSignature = (snapshot: TotCatalogSnapshot): string =>
+    snapshot.tots
+      .map((tot) => `${tot.environment}:${tot.id}`)
+      .sort()
+      .join("|");
+
+  const setupGuild = async (
+    guildOptions: DiscordGuildOptions,
+    snapshot: TotCatalogSnapshot,
+  ): Promise<void> => {
     const bindings = await ensureGuildChannels({
-      tots,
+      tots: snapshot.tots,
       pinned: guildOptions.channelTotMap,
       port: guildPort(guildOptions.guildId),
-      avatars: createAvatarStore({ dir: guildOptions.avatarCacheDir }),
-      state: createWebhookState(NodePath.join(guildOptions.avatarCacheDir, "webhooks.json")),
+      avatarsFor: avatarsFor(guildOptions),
+      state: webhookState ?? createWebhookState(guildOptions.webhookStatePath),
       logger,
     });
+    // Existing bindings are kept: a channel whose setup failed this time still
+    // routes, and a machine that is down keeps its channels able to say so.
     for (const binding of bindings) {
       const webhook = new WebhookClient({ id: binding.webhookId, token: binding.webhookToken });
-      channelTots.set(binding.channelId, binding.totId);
+      channelTots.set(binding.channelId, {
+        environment: binding.environment,
+        totId: binding.totId,
+      });
       channelPorts.set(
         binding.channelId,
         createWebhookChannelPort({
@@ -273,21 +302,40 @@ export const startDiscordBridge = async (
     logger.info("guild.ready", {
       guildId: guildOptions.guildId,
       channels: channelTots.size,
+      environments: guildOptions.catalog.environments.length,
+      failed: snapshot.failures.length,
     });
   };
 
-  /** One attempt per ready event: a failed setup is retried on the next one. */
-  const runGuildSetup = (): void => {
+  /**
+   * Reconciles channels when the merged set of Tots changes, so a machine that
+   * was offline at start gets its channels once it answers. A setup already
+   * running is left alone, and an unchanged set makes no Discord calls.
+   */
+  const runGuildSetup = (force = false, supplied?: TotCatalogSnapshot): void => {
     const guildOptions = options.guild;
     if (guildOptions === undefined || guildSetup !== null) return;
-    guildSetup = setupGuild(guildOptions).catch((cause: unknown) => {
-      guildSetup = null;
-      logger.error("guild.setup_failed", {
-        guildId: guildOptions.guildId,
-        reason: describeError(cause),
+    guildSetup = (async () => {
+      const snapshot = supplied ?? (await guildOptions.catalog.refresh());
+      const signature = totSignature(snapshot);
+      if (!force && signature === lastGuildSignature) return;
+      lastGuildSignature = signature;
+      await setupGuild(guildOptions, snapshot);
+    })()
+      .catch((cause: unknown) => {
+        logger.error("guild.setup_failed", {
+          guildId: guildOptions.guildId,
+          reason: describeError(cause),
+        });
+      })
+      .finally(() => {
+        guildSetup = null;
       });
-    });
   };
+
+  const unsubscribe = options.guild?.catalog.subscribe((snapshot) => {
+    runGuildSetup(false, snapshot);
+  });
 
   const handleDm = async (message: Message): Promise<void> => {
     const allowed = isAllowedAuthor(
@@ -334,7 +382,7 @@ export const startDiscordBridge = async (
       }
       return;
     }
-    await service.handleChannelText(message.channelId, decision.totId, decision.text);
+    await service.handleChannelText(message.channelId, decision.tot, decision.text);
   };
 
   const handleInteraction = async (interaction: Interaction): Promise<void> => {
@@ -376,11 +424,11 @@ export const startDiscordBridge = async (
     }
     const command = commandFrom(interaction);
     if (interaction.channel !== null && !interaction.channel.isDMBased()) {
-      const totId = command === null ? undefined : channelTots.get(interaction.channelId);
-      if (command?.kind === "stop" && totId !== undefined) {
+      const tot = command === null ? undefined : channelTots.get(interaction.channelId);
+      if (command?.kind === "stop" && tot !== undefined) {
         await interaction.deferReply();
         try {
-          const reply = await service.handleChannelStop(interaction.channelId, totId);
+          const reply = await service.handleChannelStop(interaction.channelId, tot);
           await interaction.editReply(reply.text);
         } catch (cause) {
           logger.error("discord.command_failed", {
@@ -410,7 +458,7 @@ export const startDiscordBridge = async (
         }
         return;
       }
-      if (totId !== undefined) {
+      if (tot !== undefined) {
         await interaction.reply({
           content:
             "This channel always talks to its Tot. /stop works here; use a DM for /tot use and /tot new.",
@@ -460,7 +508,7 @@ export const startDiscordBridge = async (
 
   client.on(Events.ClientReady, (ready) => {
     logger.info("discord.ready", { user: ready.user.tag, userId: ready.user.id });
-    runGuildSetup();
+    runGuildSetup(true);
     if (options.registerCommands === false) return;
     void ready.application.commands
       .set([totCommand(), stopCommand()])
@@ -507,6 +555,7 @@ export const startDiscordBridge = async (
   logger.info("discord.started", { commands: options.registerCommands !== false });
   return {
     stop: async () => {
+      unsubscribe?.();
       await client.destroy();
     },
   };
