@@ -69,6 +69,7 @@ anything.
 ### Runbooks
 
 - [00 · Development and local builds](./operations/00_development.md)
+- [Discord Tot bridge](./discord-tot-bridge.md)
 - [01 · Dev container](./operations/01_devcontainer.md)
 - [02 · T3 Connect setup](./operations/02_connect-setup.md)
 - [03 · Release](./operations/03_release.md)
