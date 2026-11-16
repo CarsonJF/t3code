@@ -1,9 +1,10 @@
 # Discord Tot bridge
 
 A small service that lets you talk to a [Tot](./internals/tots.md) from Discord
-direct DMs, in the same thread the app shows. It posts your message through the
-environment's MCP endpoint, follows the turn, edits one message as the answer
-streams in, and answers questions the Tot asks.
+direct DMs, or from a text channel of its own in one server, in the same thread
+the app shows. It posts your message through the environment's MCP endpoint,
+follows the turn, edits one message as the answer streams in, and answers
+questions the Tot asks.
 
 It is a separate process (`apps/discord-bot`), not part of the desktop app.
 Nothing in the app changes when it is off.
@@ -13,6 +14,10 @@ Nothing in the app changes when it is off.
 - **Plain DMs go to your current Tot.** The first time, that is Home. `/tot use
   <name>` makes another Tot sticky for your Discord user id; the app and other
   people are unaffected.
+- **In a server, each Tot can have a channel.** With `DISCORD_GUILD_ID` set, the
+  bridge makes a `tot-<id>` channel for every Tot and posts there through a
+  webhook wearing the Tot's name and face. See [One channel per
+  Tot](#one-channel-per-tot).
 - **The turn is a normal T3 turn.** Same provider, model, tools, and permission
   mode as the Tot's thread in the app, because it is that thread. You can watch
   it in the app and keep the conversation there.
@@ -36,10 +41,12 @@ Nothing in the app changes when it is off.
 
 - **Approve a permission request.** Approvals can only be answered by a Tot,
   and this bridge is an outside MCP client, not a Tot. When a turn asks for
-  approval, the DM shows the prompt and a thread link, and the turn waits until
-  you approve in the app. `/tot stop` is the way to decline.
+  approval, the DM or channel shows the prompt and a thread link, and the turn
+  waits until you approve in the app. `/tot stop` is the way to decline.
 - **Forward attachments.** Text only for now.
 - **Start a Tot that is off.** Turn it on in the app first; the DM says so.
+- **Read a thread inside a Tot channel.** Threads are not mapped; only the
+  channel itself is.
 - **Reach a linked machine's Tots on its own.** The bridge acts on the
   environment its token belongs to.
 
@@ -51,8 +58,11 @@ Nothing in the app changes when it is off.
    Application**. Name it something you will recognize in your DM list.
 2. On **Bot**, choose **Reset Token** and keep the value. That is
    `DISCORD_TOKEN`. Do not paste it into chat or commit it.
-3. Leave **Message Content Intent** and the other privileged intents off. The
-   bridge only reads DMs, and Discord delivers DM text without that intent.
+3. In **Bot → Privileged Gateway Intents**, leave **Message Content Intent** off
+   for DMs alone: Discord delivers DM text without it. Turn it on, and save,
+   before you set `DISCORD_GUILD_ID`: a server delivers channel text only with
+   it, and the bot asks for it as soon as guild mode is on. The other privileged
+   intents stay off.
 4. On **Installation**, turn on **User Install** if you want to add the app to
    your own account. This also makes `/tot` usable in a DM when you do not share
    a server with the bot. With only **Guild Install**, invite it to a server and
@@ -67,8 +77,11 @@ https://discord.com/api/oauth2/authorize?client_id=<APPLICATION_ID>&scope=bot%20
 ```
 
 `applications.commands` is what registers `/tot`; without it the bot works but
-the slash command never appears. `permissions=0` is deliberate: the bridge needs
-no server permissions, because it only writes in DMs.
+the slash command never appears. `permissions=0` is deliberate for DMs: they
+need no server permissions. Guild mode needs View Channels, Send Messages, Read
+Message History, Manage Webhooks and Manage Channels; [One channel per
+Tot](#one-channel-per-tot) lists them and the invite `permissions=536937536`
+that carries exactly those.
 
 Open a DM with the bot and send it a message. Nothing happens yet: the service
 is not running and your id is not allowlisted.
@@ -123,7 +136,17 @@ DISCORD_TOKEN=...
 DISCORD_ALLOWED_USER_IDS=123456789012345678
 T3_MCP_URL=http://127.0.0.1:3773/mcp
 T3_MCP_TOKEN=...
+
+# Optional: one channel per Tot in this server. See "One channel per Tot".
+DISCORD_GUILD_ID=
+# Optional: keep channels that already exist, as channelId=totId pairs.
+CHANNEL_TOT_MAP=
+# Optional: where Tot faces are cached. Default .webhook-avatars.
+DISCORD_AVATAR_DIR=
 ```
+
+Guild mode is off while `DISCORD_GUILD_ID` is empty, and everything below works
+without it.
 
 `T3_MCP_URL` is the environment's `/mcp` address: the port the server listens
 on, or its T3 Connect or Tailscale HTTPS address if the bridge runs elsewhere.
@@ -136,8 +159,10 @@ without a bot token. `/tot list`, `/tot use <name>`, `/tot new`, and `/tot stop`
 work there too.
 
 Logs go to `discord-tot-bridge.log` in the working directory, one JSON line per
-event: user id, Tot id, thread id, tool names, outcomes. Message text and
-credentials are never written. Set `DISCORD_BOT_LOG_FILE` to move the file.
+event: user id, channel id, Tot id, thread id, tool names, outcomes. Message
+text and credentials are never written. Guild setup logs `guild.channel_ready`,
+`guild.channel_skipped` and `guild.channel_failed` per channel. Set
+`DISCORD_BOT_LOG_FILE` to move the file.
 
 ### 6. Keep it running with systemd
 
@@ -172,16 +197,107 @@ Slash commands are registered globally the first time the bridge connects.
 Discord can take up to an hour to show them in a DM; plain messages work
 immediately.
 
+## One channel per Tot
+
+Guild mode gives every Tot a text channel of its own in one server, so a room
+can talk to a Tot without a DM per person. It is opt-in: while
+`DISCORD_GUILD_ID` is empty, nothing here happens and DMs are the whole bridge.
+
+### Set it up once
+
+1. **Turn on Message Content.** Discord application → **Bot → Privileged Gateway
+   Intents → Message Content Intent** → save. A server delivers channel text
+   only with this intent, and the bridge asks for it only when guild mode is on.
+2. **Give the bot its permissions in the server.** Either invite it with
+   `permissions=536937536`, which is exactly this set, or grant them on the
+   bot's role:
+   - View Channels
+   - Send Messages
+   - Read Message History
+   - Manage Webhooks
+   - Manage Channels
+
+   Manage Channels and Manage Webhooks are what create the channels and their
+   webhooks; the others are what let the Tot talk in them.
+
+3. **Set the server id** in `.env` and restart:
+
+   ```sh
+   DISCORD_GUILD_ID=123456789012345678
+   ```
+
+   With Developer Mode on, right-click the server and **Copy Server ID**.
+
+### What it creates
+
+For every Tot on this environment, on every start:
+
+- **A text channel named `tot-<totId>`**, such as `tot-home` or `tot-t3bot`. A
+  channel with that name is reused; one is created only when none has it.
+- **One webhook in that channel**, named after the Tot, with the Tot's face as
+  its avatar: a 128×128 PNG drawn from the Tot's colour and two-eye face, cached
+  in `.webhook-avatars/<environment>/<totId>.png`. Set `DISCORD_AVATAR_DIR` to
+  cache elsewhere, for example when the service's working directory is
+  read-only.
+
+Replies are posted through that webhook, so they carry the Tot's name and face
+rather than the bot's. The placeholder ("Home is working…"), its streaming edits
+and the settled answer are one webhook message, and further messages past 1,900
+characters are webhook messages too. Questions and approvals show the same way
+they do in a DM, and any allowlisted person in the channel can answer a
+question. `/stop` or `/tot stop` in the channel interrupts that Tot. `/tot
+list`, `/tot use` and `/tot new` stay in DMs, because a channel's Tot is fixed.
+Messages in threads under a Tot channel, and in any channel it did not map, are
+ignored.
+
+Setup is idempotent and never renames or deletes a channel. A second start makes
+no Discord calls unless a Tot's name or face changed, and then it only edits
+that Tot's webhook. A channel that cannot be created or reached is logged and
+skipped; every other channel, and all DMs, keep working.
+
+### Channels that already exist
+
+`CHANNEL_TOT_MAP` pins a channel id to a Tot, so a channel can keep the name and
+place you gave it:
+
+```sh
+CHANNEL_TOT_MAP=123456789012345678=home,234567890123456789=t3bot
+```
+
+A pin wins over the `tot-<id>` name. Pins are checked at every start: a channel
+or Tot that no longer exists is logged and skipped, and that Tot gets a
+`tot-<id>` channel instead. With Developer Mode on, right-click a channel and
+**Copy Channel ID**.
+
+### If you rename a channel
+
+The bridge never renames a channel, and it does not follow a rename on its own.
+It remembers which channel id holds which Tot while it runs, so a rename keeps
+working until the next restart. After that, no channel is named `tot-<id>`, so a
+fresh channel with the default name appears and the renamed one is left alone.
+To keep the renamed channel, pin it with `CHANNEL_TOT_MAP` before restarting.
+
+### Privacy: the reply looks like a person
+
+A webhook message is an ordinary channel message with someone else's name and
+picture on it. Everyone who can read the channel reads it as the Tot, and it
+stays in the channel's history like any other message. Anything the Tot says
+there is visible to everyone in the channel, not just the person who asked.
+Treat a mapped channel as a room: the Tot has full access to the machine, and
+everyone in that room sees what it says.
+
 ## Security model
 
-- **DMs from allowlisted ids only.** Every path (messages, commands,
-  autocomplete) checks `DISCORD_ALLOWED_USER_IDS` before doing anything, and
-  everyone else is ignored. An empty allowlist refuses to start.
-- **A DM is a full agent on the host.** The Tot's thread runs in `full-access`
-  with the same tools as the app: it can read and write files, run commands, and
-  reach the projects in its scope. Anyone who controls an allowlisted Discord
-  account controls that. Treat a DM like a terminal on the machine, and do not
-  allowlist an account you would not hand a shell.
+- **Allowlisted ids only, in DMs and in channels.** Every path (messages,
+  channel messages, commands, autocomplete) checks `DISCORD_ALLOWED_USER_IDS`
+  before doing anything, and everyone else is ignored. A channel message from
+  anyone else never reaches a Tot, and no webhook message is created for it. An
+  empty allowlist refuses to start.
+- **A DM or channel is a full agent on the host.** The Tot's thread runs in
+  `full-access` with the same tools as the app: it can read and write files, run
+  commands, and reach the projects in its scope. Anyone who controls an
+  allowlisted Discord account controls that. Treat it like a terminal on the
+  machine, and do not allowlist an account you would not hand a shell.
 - **Discord can read bot DMs.** Discord's own servers carry the messages, so
   nothing secret belongs in a DM prompt. The bridge keeps message text out of
   its logs, but it cannot make Discord private.
@@ -212,6 +328,10 @@ the DM so.
 | The bot ignores you                      | Your id in `DISCORD_ALLOWED_USER_IDS`, no spaces or quotes. The log records `discord.ignored_author`. |
 | No reply and no log line                 | The DM did not reach the bot. Friend the bot or invite it to a server you are in.                     |
 | `/tot` is not in the DM list             | `applications.commands` in the invite, then wait up to an hour.                                       |
+| Nothing happens in a Tot channel         | `DISCORD_GUILD_ID`, the channel in `guild.channel_ready` in the log, and your id allowlisted.         |
+| No `tot-<id>` channels appeared          | Manage Channels and Manage Webhooks. `guild.channel_failed` names the channel and the error.          |
+| Channel messages arrive empty            | Message Content Intent is on in the Bot tab, then restart the bridge.                                 |
+| A second `tot-home` after a rename       | The bridge does not follow renames. Pin the renamed channel in `CHANNEL_TOT_MAP`.                     |
 | "The T3 MCP endpoint rejected the token" | Mint a new token; it expired or was revoked.                                                          |
 | "Home is not running"                    | Turn the Tot on in the app; a Tot has a thread only while it is on.                                   |
 | "Could not reach the T3 MCP endpoint"    | `T3_MCP_URL`, and whether the server is running.                                                      |
