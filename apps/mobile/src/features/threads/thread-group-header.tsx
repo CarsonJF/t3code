@@ -311,8 +311,6 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
   const view = useThreadGroupsView();
   const { toggle } = useCollapsedThreadGroups();
   const sidebarPane = props.pane === "sidebar";
-  const tint = group.color ? projectIconColorClassNames(group.color) : null;
-  const customTint = customProjectColorValues(group.color);
   const textStyle = group.textColor ? { color: projectColorHex(group.textColor) } : undefined;
   const header = (
     <Pressable
@@ -321,29 +319,25 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
       accessibilityHint={expanded ? "Collapses this group" : "Expands this group"}
       accessibilityState={{ expanded }}
       className={cn(
-        "mb-1 mt-3 flex-row items-center gap-2 overflow-hidden rounded-lg px-2 py-1.5",
+        "mb-1 mt-2 flex-row items-center gap-2 overflow-hidden rounded-lg px-2 py-1.5",
         sidebarPane ? "mx-1" : "mx-3",
-        group.gradient
-          ? null
-          : (tint?.background ?? (sidebarPane ? "bg-drawer-border/40" : "bg-subtle")),
+        group.gradient ? null : sidebarPane ? "bg-drawer-border/40" : "bg-subtle",
       )}
       onPress={() => toggle(group.id)}
-      style={({ pressed }) => ({
-        ...(group.gradient ? null : customTint?.background),
-        opacity: pressed ? 0.6 : 1,
-      })}
+      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
     >
       {group.gradient ? <GradientBackground gradient={group.gradient} /> : null}
       <ThreadGroupIcon group={group} />
       <Text
         numberOfLines={1}
-        style={textStyle ?? customTint?.text}
+        style={textStyle}
         className={cn(
           "min-w-0 shrink text-xs font-t3-medium",
           textStyle
             ? null
-            : (tint?.text ??
-                (sidebarPane ? "text-drawer-foreground-muted" : "text-foreground-secondary")),
+            : sidebarPane
+              ? "text-drawer-foreground-muted"
+              : "text-foreground-secondary",
         )}
       >
         {group.name}
@@ -351,7 +345,14 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
       {expanded ? null : (
         <Text
           style={textStyle}
-          className={cn("text-xs", textStyle ? null : "text-foreground-tertiary")}
+          className={cn(
+            "text-xs tabular-nums",
+            textStyle
+              ? null
+              : sidebarPane
+                ? "text-drawer-foreground-muted"
+                : "text-foreground-tertiary",
+          )}
         >
           {String(count)}
         </Text>
