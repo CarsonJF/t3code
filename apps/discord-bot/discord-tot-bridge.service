@@ -1,0 +1,32 @@
+# Discord Tot bridge
+#
+# Copy to /etc/systemd/system/discord-tot-bridge.service, keep the environment
+# file root-owned and mode 600, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now discord-tot-bridge
+#
+# Adjust User, WorkingDirectory, and the node path for the host. Runbook:
+# docs/discord-tot-bridge.md
+
+[Unit]
+Description=T3 Code Discord Tot bridge
+Documentation=file:///opt/t3code/apps/discord-bot/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=t3
+WorkingDirectory=/opt/t3code/apps/discord-bot
+EnvironmentFile=/etc/t3code-discord-bot.env
+Environment=DISCORD_BOT_LOG_FILE=/var/log/t3code-discord-tot-bridge.log
+ExecStart=/usr/bin/node src/main.ts
+Restart=on-failure
+RestartSec=5
+# A broken token stops the service instead of looping; anything else backs off.
+StartLimitIntervalSec=0
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
