@@ -6,6 +6,7 @@ import {
   CircleAlertIcon,
   CircleCheckIcon,
   CircleDashedIcon,
+  CircleDotDashedIcon,
   MessageCircleQuestionIcon,
   ShieldQuestionIcon,
   UserRoundIcon,
@@ -55,6 +56,11 @@ const GROUP_STATUS: Record<
   request: { Icon: UserRoundIcon, label: "guest requests", className: "text-guest-foreground" },
   failed: { Icon: CircleAlertIcon, label: "failed", className: "text-error-foreground" },
   working: { Icon: CircleDashedIcon, label: "working", className: "text-info-foreground" },
+  waiting: {
+    Icon: CircleDotDashedIcon,
+    label: "waiting",
+    className: "text-muted-foreground",
+  },
   done: { Icon: CircleCheckIcon, label: "done", className: "text-success-foreground" },
 };
 
