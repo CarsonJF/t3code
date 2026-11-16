@@ -1017,7 +1017,14 @@ export function resolveSidebarFolderDot(
   return null;
 }
 
-export type CollapsedGroupStatus = "approval" | "input" | "request" | "failed" | "working" | "done";
+export type CollapsedGroupStatus =
+  | "approval"
+  | "input"
+  | "request"
+  | "failed"
+  | "working"
+  | "waiting"
+  | "done";
 
 const COLLAPSED_GROUP_STATUS_ORDER: ReadonlyArray<CollapsedGroupStatus> = [
   "approval",
@@ -1025,10 +1032,11 @@ const COLLAPSED_GROUP_STATUS_ORDER: ReadonlyArray<CollapsedGroupStatus> = [
   "request",
   "failed",
   "working",
+  "waiting",
   "done",
 ];
 
-/** Per-status thread counts for a collapsed group header, most urgent first. Waiting stays quiet, like rows. */
+/** Per-status thread counts for a collapsed group header, most urgent first. */
 export function resolveCollapsedGroupStatuses(
   threads: ReadonlyArray<ThreadStatusInput & SidebarThreadStatusInput>,
 ): Array<{ status: CollapsedGroupStatus; count: number }> {
@@ -1043,7 +1051,7 @@ export function resolveCollapsedGroupStatuses(
             ? "done"
             : null
           : raw === "waiting"
-            ? null
+            ? "waiting"
             : raw === "preparing"
               ? "working"
               : raw;
