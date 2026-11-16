@@ -264,6 +264,7 @@ describe("resolveThreadGroupHeaderStatuses", () => {
       { status: "request", count: 1 },
       { status: "failed", count: 1 },
       { status: "working", count: 1 },
+      { status: "waiting", count: 1 },
       { status: "done", count: 1 },
     ]);
   });
