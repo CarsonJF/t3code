@@ -345,7 +345,7 @@ import {
   THREAD_FEED_MAINTAIN_SCROLL_AT_END_THRESHOLD,
 } from "./threadFeedEndFollow";
 import { useMessageTimeFormatter } from "./useMessageTimeFormatter";
-import { useAnimateTotAvatars, useTotFace, useTots } from "../../state/tots";
+import { useAnimateTotAvatars, useThreadTot, useTotFace } from "../../state/tots";
 import { totThemeColor, useTotThemeTokens } from "../tots/useTotThemeTokens";
 import { TotLiveFace } from "../tots/TotLiveFace";
 import { TOT_THREAD_HEADER_HEIGHT, TotThreadHeader } from "../tots/TotThreadHeader";
@@ -3194,11 +3194,9 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const m = useMessages();
   const formatMessageTime = useMessageTimeFormatter();
   const { listRef, onIsAtEndChange, onHeaderMaterialVisibilityChange } = props;
-  const tot = useTots().find(
-    (entry) => entry.environmentId === props.environmentId && entry.tot.threadId === props.threadId,
-  );
+  const tot = useThreadTot({ environmentId: props.environmentId, id: props.threadId });
   const totTheme = useTotThemeTokens(props.environmentId, props.threadId);
-  const totFace = useTotFace(tot ?? null);
+  const totFace = useTotFace(tot);
   const animateTot = useAnimateTotAvatars();
   const workflowOpening = useWorkflowOpening(props.detailRef);
   const guestShare = useThreadGuestShare(props.detailRef);
@@ -4415,8 +4413,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     props.activeWorkStartedAt === null &&
     props.contentPresentation.kind === "ready";
   // A Tot's empty thread names itself with the big face, so its pinned header stays off then.
-  const totHeaderHeight =
-    tot === undefined || feedPlaceholderVisible ? 0 : TOT_THREAD_HEADER_HEIGHT;
+  const totHeaderHeight = tot === null || feedPlaceholderVisible ? 0 : TOT_THREAD_HEADER_HEIGHT;
 
   return (
     <PresentationSource identifier={fileShareSourceIdentifier} style={{ flex: 1 }}>
@@ -4539,7 +4536,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             }}
           />
         </View>
-        {tot !== undefined && totHeaderHeight > 0 ? (
+        {tot !== null && totHeaderHeight > 0 ? (
           <View
             style={{
               position: "absolute",
@@ -4558,7 +4555,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             style={[StyleSheet.absoluteFill, { left: contentLeftInset, right: contentRightInset }]}
           >
             <ThreadFeedPlaceholder
-              {...(tot === undefined
+              {...(tot === null
                 ? {
                     title: gt("No conversation yet"),
                     detail: gt(
