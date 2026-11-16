@@ -51,6 +51,8 @@ const TotListTool = Tool.make("t3_tot_list", {
         link: Schema.NullOr(Schema.String),
         scope: TotScope,
         watchAll: Schema.Boolean,
+        /** The Tot's face, so an outside client can draw it. */
+        avatar: TotAvatar,
       }),
     ),
   }),

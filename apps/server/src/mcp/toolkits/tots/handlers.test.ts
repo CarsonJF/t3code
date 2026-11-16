@@ -191,7 +191,16 @@ it.effect("lists the Tots with a link to each one's thread", () =>
     const { call } = harness(ThreadId.make("thread:any"));
     const listed = yield* call("t3_tot_list", {});
     expect(listed).toMatchObject({
-      tots: [{ id: "home", name: "Home", enabled: true, threadId: homeThread }, { id: "yui" }],
+      tots: [
+        {
+          id: "home",
+          name: "Home",
+          enabled: true,
+          threadId: homeThread,
+          avatar: { color: "#0A7EA4" },
+        },
+        { id: "yui", avatar: { color: "#0A7EA4" } },
+      ],
     });
     expect(JSON.stringify(listed)).toContain("t3-thread://");
   }),
