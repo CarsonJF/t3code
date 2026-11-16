@@ -4,30 +4,37 @@ import {
   describeQuestion,
   type PendingQuestion,
 } from "./answers.ts";
+import type { EnvironmentCatalog } from "./environments.ts";
 import { type Logger, describeError } from "./log.ts";
 import {
+  type EnvironmentFailure,
   type RouteContext,
   type SlashCommand,
   type StickyTots,
+  type TotRef,
   type TotView,
   autocompleteTots,
   createStickyTots,
+  describeTot,
   resolveTot,
   routeCommand,
   routeText,
   routeToTot,
+  sameTot,
+  totKey,
 } from "./routing.ts";
-import type { T3Client } from "./t3Client.ts";
-import { listTots, respondToPendingRequest, stopThread } from "./tots.ts";
+import { respondToPendingRequest, stopThread } from "./tots.ts";
 import { type ChannelPort, type TurnOutcome, createTurnRunner } from "./turns.ts";
 
 export interface BridgeServiceOptions {
-  readonly t3: T3Client;
+  readonly catalog: EnvironmentCatalog;
   readonly channelFor: (userId: string) => ChannelPort;
   readonly logger: Logger;
   readonly now: () => number;
   readonly sleep: (ms: number) => Promise<void>;
   readonly defaultTotName: string;
+  /** Name the machine in replies. Off for the single-environment form. */
+  readonly multiEnvironment?: boolean;
   readonly pollIntervalMs?: number;
 }
 
@@ -38,8 +45,8 @@ export interface CommandReply {
 export interface BridgeService {
   readonly handleText: (userId: string, text: string) => Promise<void>;
   /** A guild channel, whose Tot the channel fixes instead of the sticky pick. */
-  readonly handleChannelText: (channelId: string, totId: string, text: string) => Promise<void>;
-  readonly handleChannelStop: (channelId: string, totId: string) => Promise<CommandReply>;
+  readonly handleChannelText: (channelId: string, tot: TotRef, text: string) => Promise<void>;
+  readonly handleChannelStop: (channelId: string, tot: TotRef) => Promise<CommandReply>;
   readonly handleCommand: (userId: string, command: SlashCommand) => Promise<CommandReply>;
   readonly autocomplete: (
     query: string,
@@ -49,18 +56,76 @@ export interface BridgeService {
 
 const offSuffix = (tot: TotView): string => (tot.threadId === null ? " (off)" : "");
 
+export interface TotListOptions {
+  readonly multiEnvironment?: boolean;
+  readonly failures?: ReadonlyArray<EnvironmentFailure>;
+}
+
+const failureLines = (
+  failures: ReadonlyArray<EnvironmentFailure>,
+  multiEnvironment: boolean,
+): ReadonlyArray<string> => {
+  if (failures.length === 0) return [];
+  const heading = multiEnvironment ? "Could not load:" : "Could not reach T3:";
+  return [heading, ...failures.map((failure) => `• ${failure.environment}: ${failure.reason}`)];
+};
+
 export const formatTotList = (
   tots: ReadonlyArray<TotView>,
   current: TotView | undefined,
+  options: TotListOptions = {},
 ): string => {
+  const multiEnvironment = options.multiEnvironment === true;
+  const failures = options.failures ?? [];
   if (tots.length === 0) {
-    return "No Tots are set up on this T3 server yet. Create one in the app first.";
+    if (failures.length > 0) {
+      return [
+        multiEnvironment
+          ? "No Tots could be loaded from these machines."
+          : "No Tots could be loaded from this T3 server.",
+        "",
+        ...failureLines(failures, multiEnvironment),
+      ].join("\n");
+    }
+    return multiEnvironment
+      ? "No Tots are set up on these machines yet. Create one in the app first."
+      : "No Tots are set up on this T3 server yet. Create one in the app first.";
   }
-  const lines = tots.map((tot) => {
-    const marker = current?.id === tot.id ? " ← this DM" : "";
+
+  const line = (tot: TotView): string => {
+    const marker = current !== undefined && totKey(current) === totKey(tot) ? " ← this DM" : "";
     return `• ${tot.name}${offSuffix(tot)}${marker}`;
-  });
-  return [`Tots on this machine:`, ...lines, "", "Use /tot use <name> to switch."].join("\n");
+  };
+  const lines: Array<string> = [
+    multiEnvironment ? "Tots on these machines:" : "Tots on this machine:",
+  ];
+  if (multiEnvironment) {
+    const groups = new Map<string, Array<TotView>>();
+    for (const tot of tots) {
+      const group = groups.get(tot.environment);
+      if (group === undefined) groups.set(tot.environment, [tot]);
+      else group.push(tot);
+    }
+    let first = true;
+    for (const [environment, group] of groups) {
+      if (!first) lines.push("");
+      first = false;
+      lines.push(environment);
+      for (const tot of group) lines.push(line(tot));
+    }
+  } else {
+    for (const tot of tots) lines.push(line(tot));
+  }
+
+  const failed = failureLines(failures, multiEnvironment);
+  if (failed.length > 0) lines.push("", ...failed);
+  lines.push(
+    "",
+    multiEnvironment
+      ? "Use /tot use <name>, or <machine>:<name> when two machines share a name."
+      : "Use /tot use <name> to switch.",
+  );
+  return lines.join("\n");
 };
 
 const outcomeMessage = (outcome: TurnOutcome, name: string): string | null => {
@@ -78,11 +143,17 @@ const outcomeMessage = (outcome: TurnOutcome, name: string): string | null => {
 /** A guild channel is one conversation, keyed apart from any DM user id. */
 const channelConversation = (channelId: string): string => `channel:${channelId}`;
 
+interface PendingAnswer {
+  readonly pending: PendingQuestion;
+  readonly environment: string;
+}
+
 export const createBridgeService = (options: BridgeServiceOptions): BridgeService => {
-  const { t3, logger } = options;
+  const { catalog, logger } = options;
+  const multiEnvironment = options.multiEnvironment === true;
   const sticky: StickyTots = createStickyTots();
   const armedFresh = new Map<string, Set<string>>();
-  const pendingByConversation = new Map<string, PendingQuestion>();
+  const pendingByConversation = new Map<string, PendingAnswer>();
 
   const freshFor = (conversation: string): Set<string> => {
     const existing = armedFresh.get(conversation);
@@ -97,17 +168,17 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
     const existing = runners.get(conversation);
     if (existing !== undefined) return existing;
     const created = createTurnRunner({
-      t3,
+      t3For: (environment) => catalog.clientFor(environment),
       channel,
       logger,
       now: options.now,
       sleep: options.sleep,
-      onQuestion: (pending) => {
-        pendingByConversation.set(conversation, pending);
+      onQuestion: (pending, tot) => {
+        pendingByConversation.set(conversation, { pending, environment: tot.environment });
       },
       onSettled: (threadId) => {
         const pending = pendingByConversation.get(conversation);
-        if (pending?.threadId === threadId) pendingByConversation.delete(conversation);
+        if (pending?.pending.threadId === threadId) pendingByConversation.delete(conversation);
       },
       ...(options.pollIntervalMs === undefined ? {} : { pollIntervalMs: options.pollIntervalMs }),
     });
@@ -115,26 +186,34 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
     return created;
   };
 
-  const contextFor = async (conversation: string): Promise<RouteContext> => ({
-    tots: await listTots(t3),
-    sticky,
-    defaultName: options.defaultTotName,
-    userId: conversation,
-  });
+  const contextFor = async (conversation: string): Promise<RouteContext> => {
+    const snapshot = await catalog.refresh();
+    return {
+      tots: snapshot.tots,
+      sticky,
+      defaultName: options.defaultTotName,
+      userId: conversation,
+      failures: snapshot.failures,
+      multiEnvironment,
+    };
+  };
 
   const answerPending = async (
     conversation: string,
     channel: ChannelPort,
     text: string,
   ): Promise<boolean> => {
-    const pending = pendingByConversation.get(conversation);
-    if (pending === undefined) return false;
-    const outcome = answerQuestion(pending, text);
+    const stored = pendingByConversation.get(conversation);
+    if (stored === undefined) return false;
+    const outcome = answerQuestion(stored.pending, text);
     if (outcome.kind === "rejected") {
       await channel.send(outcome.note);
       return true;
     }
-    pendingByConversation.set(conversation, outcome.pending);
+    pendingByConversation.set(conversation, {
+      pending: outcome.pending,
+      environment: stored.environment,
+    });
     if (outcome.kind === "partial") {
       const next = currentQuestion(outcome.pending);
       await channel.send(
@@ -149,7 +228,7 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
     }
     pendingByConversation.delete(conversation);
     try {
-      await respondToPendingRequest(t3, {
+      await respondToPendingRequest(catalog.clientFor(stored.environment), {
         threadId: outcome.pending.threadId,
         requestId: outcome.pending.requestId,
         answers: outcome.answers,
@@ -157,6 +236,7 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
       await channel.send(`Answered ${outcome.note}.`);
       logger.info("bridge.answer", {
         userId: conversation,
+        environment: stored.environment,
         threadId: outcome.pending.threadId,
         requestId: outcome.pending.requestId,
       });
@@ -173,17 +253,29 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
     readonly conversation: string;
     readonly channel: ChannelPort;
     readonly text: string;
-    readonly totId: string | null;
+    readonly tot: TotRef | null;
   }): Promise<void> => {
     const { conversation, channel, text } = input;
     try {
       if (await answerPending(conversation, channel, text)) return;
       const context = await contextFor(conversation);
+      if (input.tot !== null) {
+        const failure = context.failures?.find(
+          (candidate) => candidate.environment === input.tot!.environment,
+        );
+        if (failure !== undefined) {
+          await channel.send(`Could not reach ${failure.environment}: ${failure.reason}`);
+          return;
+        }
+      }
       const fresh = freshFor(conversation);
       const decision =
-        input.totId === null
-          ? routeText(context, text, { freshTotIds: fresh })
-          : routeToTot(context.tots, input.totId, text, { freshTotIds: fresh });
+        input.tot === null
+          ? routeText(context, text, { freshTotKeys: fresh })
+          : routeToTot(context.tots, input.tot, text, {
+              freshTotKeys: fresh,
+              multiEnvironment,
+            });
       if (decision.kind === "unavailable") {
         await channel.send(decision.message);
         return;
@@ -192,7 +284,7 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
         await channel.send("Only plain messages and /tot commands are understood here.");
         return;
       }
-      if (decision.fresh) fresh.delete(decision.tot.id);
+      if (decision.fresh) fresh.delete(totKey(decision.tot));
       const outcome = await runnerFor(conversation, channel).run({
         userId: conversation,
         tot: decision.tot,
@@ -202,7 +294,11 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
       const message = outcomeMessage(outcome, decision.tot.name);
       if (message !== null) await channel.send(message);
     } catch (cause) {
-      logger.error("bridge.text_failed", { userId: conversation, reason: describeError(cause) });
+      logger.error("bridge.text_failed", {
+        userId: conversation,
+        ...(input.tot === null ? {} : { environment: input.tot.environment }),
+        reason: describeError(cause),
+      });
       await channel.send(`T3 did not answer: ${describeError(cause)}`);
     }
   };
@@ -215,10 +311,16 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
     if (tot.threadId === null) {
       return { text: `${tot.name} is not running. Turn it on in the app first.` };
     }
-    const result = await stopThread(t3, tot.threadId).catch((cause: unknown) => {
-      logger.warn("bridge.stop_failed", { userId: conversation, reason: describeError(cause) });
-      return null;
-    });
+    const result = await stopThread(catalog.clientFor(tot.environment), tot.threadId).catch(
+      (cause: unknown) => {
+        logger.warn("bridge.stop_failed", {
+          userId: conversation,
+          environment: tot.environment,
+          reason: describeError(cause),
+        });
+        return null;
+      },
+    );
     if (result === null) return { text: `Could not stop ${tot.name}.` };
     await channel.typing().catch(() => undefined);
     return {
@@ -234,28 +336,32 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
       conversation: userId,
       channel: options.channelFor(userId),
       text,
-      totId: null,
+      tot: null,
     });
   };
 
-  const handleChannelText = async (
-    channelId: string,
-    totId: string,
-    text: string,
-  ): Promise<void> => {
+  const handleChannelText = async (channelId: string, tot: TotRef, text: string): Promise<void> => {
     await deliver({
       conversation: channelConversation(channelId),
       channel: options.channelFor(channelId),
       text,
-      totId,
+      tot,
     });
   };
 
-  const handleChannelStop = async (channelId: string, totId: string): Promise<CommandReply> => {
-    const tots = await listTots(t3);
-    const tot = tots.find((candidate) => candidate.id === totId);
+  const handleChannelStop = async (channelId: string, ref: TotRef): Promise<CommandReply> => {
+    const context = await contextFor(channelConversation(channelId));
+    const failure = context.failures?.find(
+      (candidate) => candidate.environment === ref.environment,
+    );
+    if (failure !== undefined) {
+      return { text: `Could not reach ${failure.environment}: ${failure.reason}` };
+    }
+    const tot = context.tots.find((candidate) => sameTot(candidate, ref));
     if (tot === undefined) {
-      return { text: `There is no Tot ${totId} on this T3 server.` };
+      return {
+        text: `There is no Tot ${ref.totId} ${multiEnvironment ? `on ${ref.environment}` : "on this T3 server"}.`,
+      };
     }
     return stopReply(channelConversation(channelId), options.channelFor(channelId), tot);
   };
@@ -267,21 +373,33 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
     if (decision.kind === "list") {
       const resolution = resolveTot(context);
       return {
-        text: formatTotList(context.tots, resolution.kind === "tot" ? resolution.tot : undefined),
+        text: formatTotList(context.tots, resolution.kind === "tot" ? resolution.tot : undefined, {
+          multiEnvironment,
+          ...(context.failures === undefined ? {} : { failures: context.failures }),
+        }),
       };
     }
     if (decision.kind === "unavailable") return { text: decision.message };
     if (decision.kind === "use") {
-      sticky.set(userId, decision.tot.id);
-      logger.info("bridge.use", { userId, totId: decision.tot.id });
+      sticky.set(userId, totKey(decision.tot));
+      logger.info("bridge.use", {
+        userId,
+        environment: decision.tot.environment,
+        totId: decision.tot.id,
+      });
+      const alsoOn = decision.alsoOn ?? [];
+      const note =
+        alsoOn.length === 0
+          ? ""
+          : ` The same name is also on ${alsoOn.join(", ")}; use /tot use ${alsoOn[0]}:${decision.tot.name} for that machine.`;
       return {
-        text: `This DM now talks to ${decision.tot.name}.${decision.tot.threadId === null ? " Turn it on in the app before messaging it." : ""}`,
+        text: `This DM now talks to ${describeTot(decision.tot, multiEnvironment)}.${decision.tot.threadId === null ? " Turn it on in the app before messaging it." : ""}${note}`,
       };
     }
     if (decision.kind === "new") {
-      freshFor(userId).add(decision.tot.id);
+      freshFor(userId).add(totKey(decision.tot));
       return {
-        text: `The next message to ${decision.tot.name} starts a fresh session: a new provider context in its thread. T3's Start fresh, which moves the Tot to a new thread, is only in the app.`,
+        text: `The next message to ${describeTot(decision.tot, multiEnvironment)} starts a fresh session: a new provider context in its thread. T3's Start fresh, which moves the Tot to a new thread, is only in the app.`,
       };
     }
     return stopReply(userId, channel, decision.tot);
@@ -293,21 +411,22 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
     handleChannelStop,
     handleCommand,
     autocomplete: async (query) => {
-      const tots = await listTots(t3);
-      return autocompleteTots(tots, query).map((tot) => ({
-        name: `${tot.name}${offSuffix(tot)}`.slice(0, 100),
-        value: tot.id,
+      const snapshot = await catalog.refresh();
+      return autocompleteTots(snapshot.tots, query).map((tot) => ({
+        name: `${multiEnvironment ? `${tot.name} (${tot.environment})` : tot.name}${offSuffix(tot)}`.slice(
+          0,
+          100,
+        ),
+        value: multiEnvironment ? `${tot.environment}:${tot.id}` : tot.id,
       }));
     },
     describeTots: async (userId) => {
-      const tots = await listTots(t3);
-      const resolution = resolveTot({
-        tots,
-        sticky,
-        defaultName: options.defaultTotName,
-        userId,
+      const context = await contextFor(userId);
+      const resolution = resolveTot(context);
+      return formatTotList(context.tots, resolution.kind === "tot" ? resolution.tot : undefined, {
+        multiEnvironment,
+        ...(context.failures === undefined ? {} : { failures: context.failures }),
       });
-      return formatTotList(tots, resolution.kind === "tot" ? resolution.tot : undefined);
     },
   };
 };
