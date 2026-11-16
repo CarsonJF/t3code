@@ -12,12 +12,18 @@ import {
   routeToTot,
 } from "./routing.ts";
 
-const tot = (id: string, name: string, threadId: string | null = `thread-${id}`): TotView => ({
+const tot = (
+  id: string,
+  name: string,
+  threadId: string | null = `thread-${id}`,
+  environment = "alpha",
+): TotView => ({
   id,
   name,
   enabled: threadId !== null,
   threadId,
   link: threadId === null ? null : `https://app.t3.codes/threads/env/${threadId}`,
+  environment,
 });
 
 const tots = [
@@ -43,7 +49,7 @@ describe("resolveTot", () => {
 
   it("keeps a per-user sticky Tot", () => {
     const base = context();
-    base.sticky.set("user-1", "tot-squirt");
+    base.sticky.set("user-1", "alpha:tot-squirt");
 
     const mine = resolveTot(base);
     const other = resolveTot({ ...base, userId: "user-2" });
@@ -54,7 +60,7 @@ describe("resolveTot", () => {
 
   it("falls back to Home when the sticky Tot is gone", () => {
     const base = context();
-    base.sticky.set("user-1", "tot-removed");
+    base.sticky.set("user-1", "alpha:tot-removed");
 
     const resolution = resolveTot(base);
 
@@ -88,7 +94,7 @@ describe("resolveTot", () => {
 describe("routeText", () => {
   it("sends plain text to the sticky Tot", () => {
     const base = context();
-    base.sticky.set("user-1", "tot-squirt");
+    base.sticky.set("user-1", "alpha:tot-squirt");
 
     const decision = routeText(base, "what's up?");
 
@@ -103,10 +109,10 @@ describe("routeText", () => {
   it("marks a send fresh only for the armed Tot", () => {
     const base = context();
 
-    expect(routeText(base, "hi", { freshTotIds: new Set(["tot-home"]) })).toMatchObject({
+    expect(routeText(base, "hi", { freshTotKeys: new Set(["alpha:tot-home"]) })).toMatchObject({
       fresh: true,
     });
-    expect(routeText(base, "hi", { freshTotIds: new Set(["tot-squirt"]) })).toMatchObject({
+    expect(routeText(base, "hi", { freshTotKeys: new Set(["alpha:tot-squirt"]) })).toMatchObject({
       fresh: false,
     });
   });
@@ -153,7 +159,7 @@ describe("routeCommand", () => {
 
   it("arms a fresh session for the sticky Tot", () => {
     const base = context();
-    base.sticky.set("user-1", "tot-squirt");
+    base.sticky.set("user-1", "alpha:tot-squirt");
 
     expect(routeCommand(base, { kind: "new" })).toMatchObject({
       kind: "new",
@@ -211,21 +217,27 @@ describe("autocompleteTots", () => {
 
 describe("routeToTot", () => {
   it("picks the channel's Tot even when another one is sticky", () => {
-    const decision = routeToTot(tots, "tot-home", "Hi Home");
+    const decision = routeToTot(tots, { environment: "alpha", totId: "tot-home" }, "Hi Home");
 
     expect(decision).toMatchObject({ kind: "send", text: "Hi Home" });
     expect(decision.kind === "send" ? decision.tot.id : null).toBe("tot-home");
   });
 
   it("names a Tot that is not on the server", () => {
-    expect(routeToTot(tots, "tot-gone", "Hi")).toEqual({
+    expect(routeToTot(tots, { environment: "alpha", totId: "tot-gone" }, "Hi")).toEqual({
       kind: "unavailable",
       message: "There is no Tot tot-gone on this T3 server.",
     });
   });
 
   it("says a Tot with no thread is not running", () => {
-    expect(routeToTot([tot("tot-home", "Home", null)], "tot-home", "Hi")).toEqual({
+    expect(
+      routeToTot(
+        [tot("tot-home", "Home", null)],
+        { environment: "alpha", totId: "tot-home" },
+        "Hi",
+      ),
+    ).toEqual({
       kind: "unavailable",
       tot: tot("tot-home", "Home", null),
       message: expect.stringContaining("Home is not running"),
@@ -233,17 +245,102 @@ describe("routeToTot", () => {
   });
 
   it("carries the channel's fresh session", () => {
-    const decision = routeToTot(tots, "tot-home", "Hi", {
-      freshTotIds: new Set(["tot-home"]),
+    const decision = routeToTot(tots, { environment: "alpha", totId: "tot-home" }, "Hi", {
+      freshTotKeys: new Set(["alpha:tot-home"]),
     });
 
     expect(decision).toMatchObject({ kind: "send", fresh: true });
   });
 
   it("refuses empty text", () => {
-    expect(routeToTot(tots, "tot-home", "   ")).toMatchObject({
+    expect(routeToTot(tots, { environment: "alpha", totId: "tot-home" }, "   ")).toMatchObject({
       kind: "unavailable",
       message: "That message was empty.",
+    });
+  });
+});
+
+describe("several machines", () => {
+  const merged = [
+    tot("tot-home", "Home", "thread-alpha-home", "alpha"),
+    tot("tot-squirt", "Squirt", "thread-alpha-squirt", "alpha"),
+    tot("tot-home", "Home", "thread-beta-home", "beta"),
+  ];
+
+  const mergedContext = (userId = "user-1"): RouteContext => ({
+    tots: merged,
+    sticky: createStickyTots(),
+    defaultName: "Home",
+    userId,
+    multiEnvironment: true,
+  });
+
+  it("picks a Tot on the machine named in the query", () => {
+    expect(findTotByName(merged, "beta:Home")?.threadId).toBe("thread-beta-home");
+    expect(findTotByName(merged, "alpha:home")?.threadId).toBe("thread-alpha-home");
+  });
+
+  it("never falls through to another machine when the named one is missing", () => {
+    expect(findTotByName(merged, "gamma:Home")).toBeUndefined();
+  });
+
+  it("picks the first machine and says where else the name lives", () => {
+    const decision = routeCommand(mergedContext(), { kind: "use", name: "Home" });
+
+    expect(decision).toMatchObject({
+      kind: "use",
+      tot: { environment: "alpha" },
+      alsoOn: ["beta"],
+    });
+  });
+
+  it("does not repeat the other machines when the query named one", () => {
+    expect(routeCommand(mergedContext(), { kind: "use", name: "beta:Home" })).toMatchObject({
+      kind: "use",
+      tot: { environment: "beta" },
+    });
+    expect(routeCommand(mergedContext(), { kind: "use", name: "beta:Home" })).not.toHaveProperty(
+      "alsoOn",
+    );
+  });
+
+  it("keeps a sticky Tot on its own machine", () => {
+    const context = mergedContext();
+    context.sticky.set("user-1", "beta:tot-home");
+
+    const resolution = resolveTot(context);
+
+    expect(resolution.kind === "tot" ? resolution.tot.threadId : null).toBe("thread-beta-home");
+  });
+
+  it("routes a channel to the machine it belongs to", () => {
+    const decision = routeToTot(merged, { environment: "beta", totId: "tot-home" }, "Hi beta", {
+      multiEnvironment: true,
+    });
+
+    expect(decision.kind === "send" ? decision.tot.threadId : null).toBe("thread-beta-home");
+  });
+
+  it("says which machine a channel's Tot is missing from", () => {
+    expect(
+      routeToTot(merged, { environment: "beta", totId: "tot-gone" }, "Hi", {
+        multiEnvironment: true,
+      }),
+    ).toEqual({ kind: "unavailable", message: "There is no Tot tot-gone on beta." });
+  });
+
+  it("says a sticky Tot's machine is unreachable instead of falling back silently", () => {
+    const context = mergedContext();
+    context.sticky.set("user-1", "gamma:tot-home");
+
+    expect(
+      resolveTot({
+        ...context,
+        failures: [{ environment: "gamma", reason: "Connection refused" }],
+      }),
+    ).toEqual({
+      kind: "unavailable",
+      message: "Could not reach gamma: Connection refused",
     });
   });
 });
