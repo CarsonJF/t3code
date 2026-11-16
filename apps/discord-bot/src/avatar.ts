@@ -3,7 +3,8 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
-import type { TotAvatar } from "@t3tools/contracts";
+import type { TotAvatar, TotShape } from "@t3tools/contracts";
+import { totHeadPoints } from "@t3tools/client-runtime/tots/shapes";
 import { PNG } from "pngjs";
 
 /** Discord shows a webhook avatar at 128; one PNG covers every size a client draws. */
@@ -11,6 +12,9 @@ export const AVATAR_SIZE = 128;
 
 /** The app's idle face in its 100 box, scaled to 128 and moved down to leave room for the antenna. */
 const HEAD = { x: 8, y: 21, width: 112, height: 102, radius: 38 };
+/** A shaped head is drawn from the app's own outline, in its 240 box centred on 120,120. */
+const HEAD_CENTRE = { x: 64, y: 72 };
+const HEAD_SCALE = 51 / 100;
 const EYES = [
   { x: 33, y: 57, width: 17, height: 31, radius: 8.5 },
   { x: 78, y: 57, width: 17, height: 31, radius: 8.5 },
@@ -77,20 +81,65 @@ const paint = (pixel: Rgba, colour: Colour, coverage: number): void => {
 };
 
 /**
- * A Tot's face as a 128x128 PNG: the rounded head in its colour, the two-eye
- * idle face, and the antenna dot when the Tot has one. Shapes and skins are
- * not drawn; the colour and eyes are what make a Tot recognisable in a channel.
+ * A Tot's face as a 128x128 PNG: the head in its colour, using the app's own
+ * shape outline when the Tot picked one, the two-eye idle face, and the antenna
+ * dot when the Tot has one. Skins do not change the outline; they are not drawn.
  */
+/** Point-in-polygon, so a shaped head fills exactly the app's outline. */
+const insidePolygon = (
+  x: number,
+  y: number,
+  points: ReadonlyArray<{ x: number; y: number }>,
+): boolean => {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const a = points[i]!;
+    const b = points[j]!;
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+};
+
+const SUBPIXELS = [0.125, 0.375, 0.625, 0.875];
+
+/** Coverage of a shaped head by sampling a 4x4 grid inside one pixel. */
+const polygonCoverage = (
+  x: number,
+  y: number,
+  points: ReadonlyArray<{ x: number; y: number }>,
+): number => {
+  let hits = 0;
+  for (const oy of SUBPIXELS)
+    for (const ox of SUBPIXELS) if (insidePolygon(x + ox - 0.5, y + oy - 0.5, points)) hits += 1;
+  return hits / (SUBPIXELS.length * SUBPIXELS.length);
+};
+
+const outlineFor = (shape: TotShape | undefined) => {
+  const raw = totHeadPoints(shape);
+  if (raw === null) return null;
+  return raw.map((point) => ({
+    x: HEAD_CENTRE.x + (point.x - 120) * HEAD_SCALE,
+    y: HEAD_CENTRE.y + (point.y - 120) * HEAD_SCALE,
+  }));
+};
+
 export const renderTotFace = (avatar: TotAvatar): Buffer => {
   const png = new PNG({ width: AVATAR_SIZE, height: AVATAR_SIZE });
   const head = colourOf(avatar.color);
   const eye = colourOf(EYE_COLOR);
+  const outline = outlineFor(avatar.shape);
   for (let y = 0; y < AVATAR_SIZE; y += 1) {
     for (let x = 0; x < AVATAR_SIZE; x += 1) {
       const pixel: Rgba = { r: 0, g: 0, b: 0, a: 0 };
       const centreX = x + 0.5;
       const centreY = y + 0.5;
-      paint(pixel, head, coverageOf(distanceToRoundedRect(centreX, centreY, HEAD)));
+      paint(
+        pixel,
+        head,
+        outline === null
+          ? coverageOf(distanceToRoundedRect(centreX, centreY, HEAD))
+          : polygonCoverage(centreX, centreY, outline),
+      );
       if (avatar.antenna === true) {
         paint(pixel, head, coverageOf(distanceToCircle(centreX, centreY, ANTENNA)));
       }
