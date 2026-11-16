@@ -15,6 +15,7 @@ import {
   resolveTot,
   routeCommand,
   routeText,
+  routeToTot,
 } from "./routing.ts";
 import type { T3Client } from "./t3Client.ts";
 import { listTots, respondToPendingRequest, stopThread } from "./tots.ts";
@@ -36,6 +37,9 @@ export interface CommandReply {
 
 export interface BridgeService {
   readonly handleText: (userId: string, text: string) => Promise<void>;
+  /** A guild channel, whose Tot the channel fixes instead of the sticky pick. */
+  readonly handleChannelText: (channelId: string, totId: string, text: string) => Promise<void>;
+  readonly handleChannelStop: (channelId: string, totId: string) => Promise<CommandReply>;
   readonly handleCommand: (userId: string, command: SlashCommand) => Promise<CommandReply>;
   readonly autocomplete: (
     query: string,
@@ -71,60 +75,66 @@ const outcomeMessage = (outcome: TurnOutcome, name: string): string | null => {
   }
 };
 
+/** A guild channel is one conversation, keyed apart from any DM user id. */
+const channelConversation = (channelId: string): string => `channel:${channelId}`;
+
 export const createBridgeService = (options: BridgeServiceOptions): BridgeService => {
   const { t3, logger } = options;
   const sticky: StickyTots = createStickyTots();
   const armedFresh = new Map<string, Set<string>>();
-  const pendingByUser = new Map<string, PendingQuestion>();
+  const pendingByConversation = new Map<string, PendingQuestion>();
 
-  const freshFor = (userId: string): Set<string> => {
-    const existing = armedFresh.get(userId);
+  const freshFor = (conversation: string): Set<string> => {
+    const existing = armedFresh.get(conversation);
     if (existing !== undefined) return existing;
     const created = new Set<string>();
-    armedFresh.set(userId, created);
+    armedFresh.set(conversation, created);
     return created;
   };
 
   const runners = new Map<string, ReturnType<typeof createTurnRunner>>();
-  const runnerFor = (userId: string) => {
-    const existing = runners.get(userId);
+  const runnerFor = (conversation: string, channel: ChannelPort) => {
+    const existing = runners.get(conversation);
     if (existing !== undefined) return existing;
     const created = createTurnRunner({
       t3,
-      channel: options.channelFor(userId),
+      channel,
       logger,
       now: options.now,
       sleep: options.sleep,
       onQuestion: (pending) => {
-        pendingByUser.set(userId, pending);
+        pendingByConversation.set(conversation, pending);
       },
       onSettled: (threadId) => {
-        const pending = pendingByUser.get(userId);
-        if (pending?.threadId === threadId) pendingByUser.delete(userId);
+        const pending = pendingByConversation.get(conversation);
+        if (pending?.threadId === threadId) pendingByConversation.delete(conversation);
       },
       ...(options.pollIntervalMs === undefined ? {} : { pollIntervalMs: options.pollIntervalMs }),
     });
-    runners.set(userId, created);
+    runners.set(conversation, created);
     return created;
   };
 
-  const contextFor = async (userId: string): Promise<RouteContext> => ({
+  const contextFor = async (conversation: string): Promise<RouteContext> => ({
     tots: await listTots(t3),
     sticky,
     defaultName: options.defaultTotName,
-    userId,
+    userId: conversation,
   });
 
-  const answerPending = async (userId: string, text: string): Promise<boolean> => {
-    const pending = pendingByUser.get(userId);
+  const answerPending = async (
+    conversation: string,
+    channel: ChannelPort,
+    text: string,
+  ): Promise<boolean> => {
+    const pending = pendingByConversation.get(conversation);
     if (pending === undefined) return false;
-    const channel = options.channelFor(userId);
     const outcome = answerQuestion(pending, text);
     if (outcome.kind === "rejected") {
       await channel.send(outcome.note);
       return true;
     }
-    pendingByUser.set(userId, outcome.pending);
+    pendingByConversation.set(conversation, outcome.pending);
     if (outcome.kind === "partial") {
       const next = currentQuestion(outcome.pending);
       await channel.send(
@@ -137,7 +147,7 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
       );
       return true;
     }
-    pendingByUser.delete(userId);
+    pendingByConversation.delete(conversation);
     try {
       await respondToPendingRequest(t3, {
         threadId: outcome.pending.threadId,
@@ -146,7 +156,7 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
       });
       await channel.send(`Answered ${outcome.note}.`);
       logger.info("bridge.answer", {
-        userId,
+        userId: conversation,
         threadId: outcome.pending.threadId,
         requestId: outcome.pending.requestId,
       });
@@ -158,12 +168,22 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
     return true;
   };
 
-  const handleText = async (userId: string, text: string): Promise<void> => {
-    const channel = options.channelFor(userId);
+  /** One path for DMs and channels: a DM resolves its sticky Tot, a channel has one. */
+  const deliver = async (input: {
+    readonly conversation: string;
+    readonly channel: ChannelPort;
+    readonly text: string;
+    readonly totId: string | null;
+  }): Promise<void> => {
+    const { conversation, channel, text } = input;
     try {
-      if (await answerPending(userId, text)) return;
-      const context = await contextFor(userId);
-      const decision = routeText(context, text, { freshTotIds: freshFor(userId) });
+      if (await answerPending(conversation, channel, text)) return;
+      const context = await contextFor(conversation);
+      const fresh = freshFor(conversation);
+      const decision =
+        input.totId === null
+          ? routeText(context, text, { freshTotIds: fresh })
+          : routeToTot(context.tots, input.totId, text, { freshTotIds: fresh });
       if (decision.kind === "unavailable") {
         await channel.send(decision.message);
         return;
@@ -172,9 +192,9 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
         await channel.send("Only plain messages and /tot commands are understood here.");
         return;
       }
-      if (decision.fresh) freshFor(userId).delete(decision.tot.id);
-      const outcome = await runnerFor(userId).run({
-        userId,
+      if (decision.fresh) fresh.delete(decision.tot.id);
+      const outcome = await runnerFor(conversation, channel).run({
+        userId: conversation,
         tot: decision.tot,
         text: decision.text,
         fresh: decision.fresh,
@@ -182,9 +202,62 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
       const message = outcomeMessage(outcome, decision.tot.name);
       if (message !== null) await channel.send(message);
     } catch (cause) {
-      logger.error("bridge.text_failed", { userId, reason: describeError(cause) });
+      logger.error("bridge.text_failed", { userId: conversation, reason: describeError(cause) });
       await channel.send(`T3 did not answer: ${describeError(cause)}`);
     }
+  };
+
+  const stopReply = async (
+    conversation: string,
+    channel: ChannelPort,
+    tot: TotView,
+  ): Promise<CommandReply> => {
+    if (tot.threadId === null) {
+      return { text: `${tot.name} is not running. Turn it on in the app first.` };
+    }
+    const result = await stopThread(t3, tot.threadId).catch((cause: unknown) => {
+      logger.warn("bridge.stop_failed", { userId: conversation, reason: describeError(cause) });
+      return null;
+    });
+    if (result === null) return { text: `Could not stop ${tot.name}.` };
+    await channel.typing().catch(() => undefined);
+    return {
+      text:
+        result.status === "no_active_run"
+          ? `${tot.name} has nothing running.`
+          : `Stopped ${tot.name}.`,
+    };
+  };
+
+  const handleText = async (userId: string, text: string): Promise<void> => {
+    await deliver({
+      conversation: userId,
+      channel: options.channelFor(userId),
+      text,
+      totId: null,
+    });
+  };
+
+  const handleChannelText = async (
+    channelId: string,
+    totId: string,
+    text: string,
+  ): Promise<void> => {
+    await deliver({
+      conversation: channelConversation(channelId),
+      channel: options.channelFor(channelId),
+      text,
+      totId,
+    });
+  };
+
+  const handleChannelStop = async (channelId: string, totId: string): Promise<CommandReply> => {
+    const tots = await listTots(t3);
+    const tot = tots.find((candidate) => candidate.id === totId);
+    if (tot === undefined) {
+      return { text: `There is no Tot ${totId} on this T3 server.` };
+    }
+    return stopReply(channelConversation(channelId), options.channelFor(channelId), tot);
   };
 
   const handleCommand = async (userId: string, command: SlashCommand): Promise<CommandReply> => {
@@ -211,25 +284,13 @@ export const createBridgeService = (options: BridgeServiceOptions): BridgeServic
         text: `The next message to ${decision.tot.name} starts a fresh session: a new provider context in its thread. T3's Start fresh, which moves the Tot to a new thread, is only in the app.`,
       };
     }
-    if (decision.tot.threadId === null) {
-      return { text: `${decision.tot.name} is not running. Turn it on in the app first.` };
-    }
-    const result = await stopThread(t3, decision.tot.threadId).catch((cause: unknown) => {
-      logger.warn("bridge.stop_failed", { userId, reason: describeError(cause) });
-      return null;
-    });
-    if (result === null) return { text: `Could not stop ${decision.tot.name}.` };
-    await channel.typing().catch(() => undefined);
-    return {
-      text:
-        result.status === "no_active_run"
-          ? `${decision.tot.name} has nothing running.`
-          : `Stopped ${decision.tot.name}.`,
-    };
+    return stopReply(userId, channel, decision.tot);
   };
 
   return {
     handleText,
+    handleChannelText,
+    handleChannelStop,
     handleCommand,
     autocomplete: async (query) => {
       const tots = await listTots(t3);
