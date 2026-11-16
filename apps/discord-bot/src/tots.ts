@@ -2,6 +2,7 @@ import type {
   OrchestratorMcpThreadInterruptResult,
   OrchestratorMcpThreadReadResult,
   OrchestratorMcpThreadSendResult,
+  TotAvatar,
 } from "@t3tools/contracts";
 
 import type { Question } from "./answers.ts";
@@ -27,6 +28,34 @@ export const listTots = async (t3: T3Client): Promise<ReadonlyArray<TotView>> =>
     enabled: tot.enabled,
     threadId: tot.threadId,
     link: tot.link,
+  }));
+};
+
+export interface TotFaceView {
+  readonly id: string;
+  readonly name: string;
+  readonly avatar: TotAvatar;
+}
+
+/** Home's colour, for a server older than the `avatar` field. */
+const FALLBACK_FACE: TotAvatar = { color: "#0a7ea4" };
+
+/**
+ * The Tots with the face a channel webhook speaks as. A server that predates
+ * `avatar` on `t3_tot_list` still works, wearing Home's colour.
+ */
+export const listTotFaces = async (t3: T3Client): Promise<ReadonlyArray<TotFaceView>> => {
+  const result = await t3.call<{
+    readonly tots: ReadonlyArray<{
+      readonly id: string;
+      readonly name: string;
+      readonly avatar?: TotAvatar;
+    }>;
+  }>("t3_tot_list", {});
+  return result.tots.map((tot) => ({
+    id: tot.id,
+    name: tot.name,
+    avatar: tot.avatar ?? FALLBACK_FACE,
   }));
 };
 
