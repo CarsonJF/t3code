@@ -13,10 +13,12 @@
   },
   "dependencies": {
     "@t3tools/contracts": "workspace:*",
-    "discord.js": "14.28.1"
+    "discord.js": "14.28.1",
+    "pngjs": "7.0.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pngjs": "6.0.5",
     "vite-plus": "catalog:"
   },
   "engines": {
