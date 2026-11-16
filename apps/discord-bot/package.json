@@ -1,0 +1,25 @@
+{
+  "name": "@t3tools/discord-bot",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Discord DM bridge to the Tots on a T3 Code server.",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "dry-run": "node --env-file-if-exists=.env src/main.ts --dry-run",
+    "mint-token": "node --env-file-if-exists=.env src/main.ts --mint-token",
+    "typecheck": "effect-tsgo tsrs --noEmit",
+    "test": "vp test run --config ../vite.config.ts --dir ."
+  },
+  "dependencies": {
+    "@t3tools/contracts": "workspace:*",
+    "discord.js": "14.28.1"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}
