@@ -13,6 +13,7 @@ const home: TotView = {
   enabled: true,
   threadId: "thread-home",
   link: "https://app.t3.codes/threads/env/thread-home",
+  environment: "alpha",
 };
 
 const createFakeWebhook = () => {
@@ -36,7 +37,7 @@ const runnerFor = (frames: Parameters<typeof createFakeT3>[0]["frames"]) => {
   const webhook = createFakeWebhook();
   const clock = createFakeClock();
   const runner = createTurnRunner({
-    t3: fake.client,
+    t3For: () => fake.client,
     channel: createWebhookChannelPort(webhook.api),
     logger: silentLogger,
     now: clock.now,
