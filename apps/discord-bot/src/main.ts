@@ -4,11 +4,10 @@ import * as NodeReadlinePromises from "node:readline/promises";
 import { startDiscordBridge } from "./discord.ts";
 import { runDryRun } from "./dryRun.ts";
 import { ConfigError, dryRunUserId, isDryRunBypassingAllowlist, readConfig } from "./env.ts";
+import { createEnvironmentCatalog } from "./environments.ts";
 import { createFileLogger, describeError } from "./log.ts";
 import { extractPairingCode, formatMintedToken, mintMcpToken } from "./mintToken.ts";
 import { createBridgeService } from "./service.ts";
-import { createT3Client } from "./t3Client.ts";
-import { listTotFaces } from "./tots.ts";
 
 const HELP = `Discord bridge for T3 Code Tots.
 
@@ -20,12 +19,14 @@ Usage:
 Environment:
   DISCORD_TOKEN             Bot token from the Discord application
   DISCORD_ALLOWED_USER_IDS  Comma-separated Discord user ids; everyone else is ignored
-  T3_MCP_URL                The environment's MCP endpoint, such as http://127.0.0.1:3773/mcp
+  T3_MCP_URL                One machine's MCP endpoint, such as http://127.0.0.1:3773/mcp
   T3_MCP_TOKEN              Bearer token from \`npm run mint-token\`
+  T3_ENVIRONMENTS           Several machines as JSON: [{"label","mcpUrl","token"}]
+                            Set this or T3_MCP_URL + T3_MCP_TOKEN, never both.
 
 Guild mode (optional):
   DISCORD_GUILD_ID          A server id: one text channel per Tot, each with its own webhook
-  CHANNEL_TOT_MAP           Pin channels that already exist: channelId=totId pairs
+  CHANNEL_TOT_MAP           Pin channels that already exist: channelId=totId or channelId=label:totId
   DISCORD_AVATAR_DIR        Where rendered Tot faces are cached (default .webhook-avatars)
 
 Runbook: docs/discord-tot-bridge.md`;
@@ -64,15 +65,18 @@ const mintToken = async (mcpUrl: string): Promise<number> => {
 
 const serve = async (dryRun: boolean): Promise<number | null> => {
   const config = readConfig(process.env, dryRun ? "dry-run" : "serve");
-  const logger = createFileLogger(config.logFile, [config.t3McpToken, config.discordToken]);
-  const t3 = createT3Client({
-    url: config.t3McpUrl,
-    token: config.t3McpToken,
-    clientName: "discord-tot-bridge",
+  const logger = createFileLogger(config.logFile, [
+    ...config.environments.map((environment) => environment.token),
+    config.discordToken,
+  ]);
+  const catalog = createEnvironmentCatalog({
+    environments: config.environments,
+    logger,
   });
   logger.info("bridge.starting", {
     mode: config.mode,
-    mcpUrl: config.t3McpUrl,
+    environments: config.environments.map((environment) => environment.label),
+    mcpUrls: config.environments.map((environment) => environment.mcpUrl),
     allowedUsers: config.allowedUserIds.size,
     logFile: config.logFile,
     guildId: config.guildId,
@@ -87,17 +91,18 @@ const serve = async (dryRun: boolean): Promise<number | null> => {
   if (dryRun) {
     write(`Dry run. Logging to ${config.logFile}.`);
     await runDryRun({
-      t3,
+      catalog,
       logger,
       userId: dryRunUserId(config),
       defaultTotName: config.defaultTotName,
+      multiEnvironment: config.multiEnvironment,
       input: process.stdin,
       output: write,
       now: Date.now,
       sleep,
       allowlistBypassed: isDryRunBypassingAllowlist(config),
     });
-    await t3.close();
+    await catalog.close();
     return 0;
   }
 
@@ -108,12 +113,13 @@ const serve = async (dryRun: boolean): Promise<number | null> => {
     sleep,
     createService: (channelFor) =>
       createBridgeService({
-        t3,
+        catalog,
         channelFor,
         logger,
         now: Date.now,
         sleep,
         defaultTotName: config.defaultTotName,
+        multiEnvironment: config.multiEnvironment,
       }),
     ...(config.guildId === null
       ? {}
@@ -121,8 +127,13 @@ const serve = async (dryRun: boolean): Promise<number | null> => {
           guild: {
             guildId: config.guildId,
             channelTotMap: config.channelTotMap,
-            avatarCacheDir: config.avatarCacheDir,
-            listTots: () => listTotFaces(t3),
+            avatarCacheDirFor: (environment) =>
+              config.environments.find((candidate) => candidate.label === environment)
+                ?.avatarCacheDir ??
+              config.environments[0]?.avatarCacheDir ??
+              ".webhook-avatars",
+            webhookStatePath: config.webhookStatePath,
+            catalog,
           },
         }),
   });
@@ -133,7 +144,7 @@ const serve = async (dryRun: boolean): Promise<number | null> => {
     stopping = true;
     logger.info("bridge.stopping", { signal });
     await bridge.stop().catch(() => undefined);
-    await t3.close();
+    await catalog.close();
     process.exit(0);
   };
   process.on("SIGINT", () => {
@@ -156,7 +167,7 @@ const main = async (): Promise<number | null> => {
   }
   try {
     if (argv.includes("--mint-token")) {
-      return await mintToken(readConfig(process.env, "mint-token").t3McpUrl);
+      return await mintToken(readConfig(process.env, "mint-token").environments[0]?.mcpUrl ?? "");
     }
     return await serve(argv.includes("--dry-run"));
   } catch (cause) {

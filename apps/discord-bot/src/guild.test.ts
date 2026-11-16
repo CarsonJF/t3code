@@ -8,7 +8,9 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   type GuildChannelView,
   type GuildTot,
+  type TotPin,
   channelNameFor,
+  channelNameForTot,
   createWebhookState,
   ensureGuildChannels,
   parseChannelTotMap,
@@ -18,8 +20,26 @@ import {
 import { createFakeAvatars, createFakeGuild, createFakeWebhookState } from "./guild.testkit.ts";
 import { createLogger } from "./log.ts";
 
-const home: GuildTot = { id: "home", name: "Home", avatar: { color: "#0a7ea4" } };
-const squirt: GuildTot = { id: "squirt", name: "Squirt", avatar: { color: "#e879f9" } };
+const home: GuildTot = {
+  id: "home",
+  name: "Home",
+  avatar: { color: "#0a7ea4" },
+  environment: "alpha",
+};
+const squirt: GuildTot = {
+  id: "squirt",
+  name: "Squirt",
+  avatar: { color: "#e879f9" },
+  environment: "alpha",
+};
+const betaHome: GuildTot = {
+  id: "home",
+  name: "Home",
+  avatar: { color: "#ff0000" },
+  environment: "beta",
+};
+
+const pin = (totId: string, environment = "alpha"): TotPin => ({ environment, totId });
 
 const textChannel = (id: string, name: string): GuildChannelView => ({ id, name, textual: true });
 
@@ -29,7 +49,7 @@ const eventsOf = (lines: ReadonlyArray<string>): ReadonlyArray<Record<string, un
 const setup = (options: {
   readonly tots?: ReadonlyArray<GuildTot>;
   readonly channels?: ReadonlyArray<GuildChannelView>;
-  readonly pinned?: ReadonlyMap<string, string>;
+  readonly pinned?: ReadonlyMap<string, TotPin>;
 }) => {
   const guild = createFakeGuild(options.channels ?? []);
   const avatars = createFakeAvatars();
@@ -44,7 +64,7 @@ const setup = (options: {
         tots,
         pinned: options.pinned ?? new Map(),
         port: guild.port,
-        avatars: avatars.store,
+        avatarsFor: () => avatars.store,
         state,
         logger,
       }),
@@ -56,6 +76,14 @@ describe("channelNameFor", () => {
     expect(channelNameFor("home")).toBe("tot-home");
     expect(channelNameFor("t3bot")).toBe("tot-t3bot");
   });
+
+  it("adds the machine only when two machines share a Tot id", () => {
+    expect(channelNameForTot({ id: "home", environment: "alpha" }, false)).toBe("tot-home");
+    expect(channelNameForTot({ id: "home", environment: "alpha" }, true)).toBe("tot-alpha-home");
+    expect(channelNameForTot({ id: "home", environment: "Work Laptop" }, true)).toBe(
+      "tot-work-laptop-home",
+    );
+  });
 });
 
 describe("parseChannelTotMap", () => {
@@ -63,24 +91,36 @@ describe("parseChannelTotMap", () => {
     const parsed = parseChannelTotMap("1001=home, 1002=squirt\n1003=build");
 
     expect([...parsed.map]).toEqual([
-      ["1001", "home"],
-      ["1002", "squirt"],
-      ["1003", "build"],
+      ["1001", { environment: null, totId: "home" }],
+      ["1002", { environment: null, totId: "squirt" }],
+      ["1003", { environment: null, totId: "build" }],
+    ]);
+    expect(parsed.problems).toEqual([]);
+  });
+
+  it("reads channelId=label:totId pins", () => {
+    const parsed = parseChannelTotMap("1001=alpha:home 1002=work-laptop:squirt");
+
+    expect([...parsed.map]).toEqual([
+      ["1001", { environment: "alpha", totId: "home" }],
+      ["1002", { environment: "work-laptop", totId: "squirt" }],
     ]);
     expect(parsed.problems).toEqual([]);
   });
 
   it("reports every entry it cannot read", () => {
-    const parsed = parseChannelTotMap("1001=home 1002 nope=home 1003=Home! 1004=home=extra");
+    const parsed = parseChannelTotMap(
+      "1001=home 1002 nope=home 1003=Home! 1004=home=extra 1005=:home 1006=alpha:",
+    );
 
-    expect([...parsed.map]).toEqual([["1001", "home"]]);
-    expect(parsed.problems).toHaveLength(4);
+    expect([...parsed.map]).toEqual([["1001", { environment: null, totId: "home" }]]);
+    expect(parsed.problems).toHaveLength(6);
   });
 
   it("refuses a channel listed twice", () => {
     const parsed = parseChannelTotMap("1001=home,1001=squirt");
 
-    expect([...parsed.map]).toEqual([["1001", "home"]]);
+    expect([...parsed.map]).toEqual([["1001", { environment: null, totId: "home" }]]);
     expect(parsed.problems.join(" ")).toContain("more than once");
   });
 
@@ -94,8 +134,22 @@ describe("planGuildChannels", () => {
     const plan = planGuildChannels({ tots: [home, squirt], channels: [], pinned: new Map() });
 
     expect(plan).toEqual([
-      { kind: "create", totId: "home", name: "tot-home" },
-      { kind: "create", totId: "squirt", name: "tot-squirt" },
+      { kind: "create", environment: "alpha", totId: "home", name: "tot-home" },
+      { kind: "create", environment: "alpha", totId: "squirt", name: "tot-squirt" },
+    ]);
+  });
+
+  it("qualifies both channels when two machines have the same Tot id", () => {
+    const plan = planGuildChannels({
+      tots: [home, betaHome, squirt],
+      channels: [],
+      pinned: new Map(),
+    });
+
+    expect(plan).toEqual([
+      { kind: "create", environment: "alpha", totId: "home", name: "tot-alpha-home" },
+      { kind: "create", environment: "beta", totId: "home", name: "tot-beta-home" },
+      { kind: "create", environment: "alpha", totId: "squirt", name: "tot-squirt" },
     ]);
   });
 
@@ -107,8 +161,21 @@ describe("planGuildChannels", () => {
     });
 
     expect(plan).toEqual([
-      { kind: "bind", totId: "home", channelId: "1001", via: "name" },
-      { kind: "create", totId: "squirt", name: "tot-squirt" },
+      { kind: "bind", environment: "alpha", totId: "home", channelId: "1001", via: "name" },
+      { kind: "create", environment: "alpha", totId: "squirt", name: "tot-squirt" },
+    ]);
+  });
+
+  it("reuses a qualified channel on a collision", () => {
+    const plan = planGuildChannels({
+      tots: [home, betaHome],
+      channels: [textChannel("1001", "tot-alpha-home"), textChannel("1002", "tot-beta-home")],
+      pinned: new Map(),
+    });
+
+    expect(plan).toEqual([
+      { kind: "bind", environment: "alpha", totId: "home", channelId: "1001", via: "name" },
+      { kind: "bind", environment: "beta", totId: "home", channelId: "1002", via: "name" },
     ]);
   });
 
@@ -119,19 +186,67 @@ describe("planGuildChannels", () => {
       pinned: new Map(),
     });
 
-    expect(plan).toEqual([{ kind: "create", totId: "home", name: "tot-home" }]);
+    expect(plan).toEqual([
+      { kind: "create", environment: "alpha", totId: "home", name: "tot-home" },
+    ]);
   });
 
   it("lets a pin win over the default name", () => {
     const plan = planGuildChannels({
       tots: [home, squirt],
       channels: [textChannel("1001", "tot-home"), textChannel("2002", "general")],
-      pinned: new Map([["2002", "home"]]),
+      pinned: new Map([["2002", pin("home")]]),
     });
 
     expect(plan).toEqual([
-      { kind: "bind", totId: "home", channelId: "2002", via: "pin" },
-      { kind: "create", totId: "squirt", name: "tot-squirt" },
+      { kind: "bind", environment: "alpha", totId: "home", channelId: "2002", via: "pin" },
+      { kind: "create", environment: "alpha", totId: "squirt", name: "tot-squirt" },
+    ]);
+  });
+
+  it("binds a labeled pin to exactly that machine", () => {
+    const plan = planGuildChannels({
+      tots: [home, betaHome],
+      channels: [textChannel("2002", "general")],
+      pinned: new Map([["2002", pin("home", "beta")]]),
+    });
+
+    expect(plan).toEqual([
+      { kind: "bind", environment: "beta", totId: "home", channelId: "2002", via: "pin" },
+      { kind: "create", environment: "alpha", totId: "home", name: "tot-alpha-home" },
+    ]);
+  });
+
+  it("lets a bare pin find the one machine holding that Tot", () => {
+    const plan = planGuildChannels({
+      tots: [home, squirt],
+      channels: [textChannel("2002", "general")],
+      pinned: new Map([["2002", { environment: null, totId: "home" }]]),
+    });
+
+    expect(plan).toEqual([
+      { kind: "bind", environment: "alpha", totId: "home", channelId: "2002", via: "pin" },
+      { kind: "create", environment: "alpha", totId: "squirt", name: "tot-squirt" },
+    ]);
+  });
+
+  it("skips a bare pin that two machines could mean", () => {
+    const plan = planGuildChannels({
+      tots: [home, betaHome],
+      channels: [textChannel("2002", "general")],
+      pinned: new Map([["2002", { environment: null, totId: "home" }]]),
+    });
+
+    expect(plan).toEqual([
+      {
+        kind: "skip",
+        environment: null,
+        totId: "home",
+        channelId: "2002",
+        reason: "ambiguous-tot",
+      },
+      { kind: "create", environment: "alpha", totId: "home", name: "tot-alpha-home" },
+      { kind: "create", environment: "beta", totId: "home", name: "tot-beta-home" },
     ]);
   });
 
@@ -140,31 +255,49 @@ describe("planGuildChannels", () => {
       tots: [home],
       channels: [textChannel("1001", "tot-home")],
       pinned: new Map([
-        ["9999", "home"],
-        ["1001", "nobody"],
+        ["9999", pin("home")],
+        ["1001", pin("nobody")],
       ]),
     });
 
     expect(plan).toEqual([
-      { kind: "skip", totId: "home", channelId: "9999", reason: "unknown-channel" },
-      { kind: "skip", totId: "nobody", channelId: "1001", reason: "unknown-tot" },
-      { kind: "bind", totId: "home", channelId: "1001", via: "name" },
+      {
+        kind: "skip",
+        environment: "alpha",
+        totId: "home",
+        channelId: "9999",
+        reason: "unknown-channel",
+      },
+      {
+        kind: "skip",
+        environment: "alpha",
+        totId: "nobody",
+        channelId: "1001",
+        reason: "unknown-tot",
+      },
+      { kind: "bind", environment: "alpha", totId: "home", channelId: "1001", via: "name" },
     ]);
   });
 
-  it("binds a Tot to one channel only", () => {
+  it("binds a Tot to one channel only, even when two machines share its id", () => {
     const plan = planGuildChannels({
       tots: [home],
       channels: [textChannel("1001", "general"), textChannel("1002", "other")],
       pinned: new Map([
-        ["1001", "home"],
-        ["1002", "home"],
+        ["1001", pin("home")],
+        ["1002", pin("home")],
       ]),
     });
 
     expect(plan).toEqual([
-      { kind: "bind", totId: "home", channelId: "1001", via: "pin" },
-      { kind: "skip", totId: "home", channelId: "1002", reason: "already-bound" },
+      { kind: "bind", environment: "alpha", totId: "home", channelId: "1001", via: "pin" },
+      {
+        kind: "skip",
+        environment: "alpha",
+        totId: "home",
+        channelId: "1002",
+        reason: "already-bound",
+      },
     ]);
   });
 
@@ -172,12 +305,12 @@ describe("planGuildChannels", () => {
     const plan = planGuildChannels({
       tots: [home, squirt],
       channels: [textChannel("1001", "tot-home")],
-      pinned: new Map([["1001", "squirt"]]),
+      pinned: new Map([["1001", pin("squirt")]]),
     });
 
     expect(plan).toEqual([
-      { kind: "bind", totId: "squirt", channelId: "1001", via: "pin" },
-      { kind: "create", totId: "home", name: "tot-home" },
+      { kind: "bind", environment: "alpha", totId: "squirt", channelId: "1001", via: "pin" },
+      { kind: "create", environment: "alpha", totId: "home", name: "tot-home" },
     ]);
   });
 });
@@ -200,6 +333,30 @@ describe("ensureGuildChannels", () => {
       "createWebhook:1002",
     ]);
     expect(guild.webhooksIn("1001")[0]).toMatchObject({ name: "Home", token: "webhook-token-1" });
+  });
+
+  it("gives each machine's channel a face from that machine", async () => {
+    const { guild } = setup({ tots: [home, betaHome] });
+    const asked: Array<string> = [];
+
+    const bindings = await ensureGuildChannels({
+      tots: [home, betaHome],
+      pinned: new Map(),
+      port: guild.port,
+      avatarsFor: (environment) => {
+        asked.push(environment);
+        return createFakeAvatars().store;
+      },
+      state: createFakeWebhookState(),
+      logger: createLogger({ write: () => undefined, now: () => 0 }),
+    });
+
+    expect(bindings.map((binding) => binding.environment)).toEqual(["alpha", "beta"]);
+    expect(asked).toEqual(["alpha", "beta"]);
+    expect(guild.channels.map((channel) => channel.name)).toEqual([
+      "tot-alpha-home",
+      "tot-beta-home",
+    ]);
   });
 
   it("makes no calls on a second run with the same Tots", async () => {
@@ -238,7 +395,7 @@ describe("ensureGuildChannels", () => {
   it("keeps a pinned channel's name and webhook", async () => {
     const { guild, run } = setup({
       channels: [textChannel("2002", "general")],
-      pinned: new Map([["2002", "home"]]),
+      pinned: new Map([["2002", pin("home")]]),
     });
 
     const bindings = await run();
@@ -274,22 +431,22 @@ describe("ensureGuildChannels", () => {
       tots: [home, squirt],
       pinned: new Map(),
       port: failing,
-      avatars: createFakeAvatars().store,
+      avatarsFor: () => createFakeAvatars().store,
       state: createFakeWebhookState(),
       logger: createLogger({ write: (line) => lines.push(line), now: () => 0 }),
     });
 
     expect(bindings.map((binding) => binding.totId)).toEqual(["squirt"]);
     const failed = eventsOf(lines).find((event) => event.event === "guild.channel_failed");
-    expect(failed).toMatchObject({ totId: "home", reason: "Missing Access" });
+    expect(failed).toMatchObject({ environment: "alpha", totId: "home", reason: "Missing Access" });
   });
 });
 
 describe("routeGuildMessage", () => {
-  const channelTots = new Map([["1001", "home"]]);
+  const channelTots = new Map([["1001", { environment: "alpha", totId: "home" }]]);
   const allowedUserIds = new Set(["42"]);
 
-  it("sends an allowlisted author's text to the channel's Tot", () => {
+  it("sends an allowlisted author's text to the channel's Tot and machine", () => {
     const decision = routeGuildMessage({
       channelId: "1001",
       author: { userId: "42", bot: false },
@@ -298,7 +455,11 @@ describe("routeGuildMessage", () => {
       allowedUserIds,
     });
 
-    expect(decision).toEqual({ kind: "route", totId: "home", text: "Hi Home" });
+    expect(decision).toEqual({
+      kind: "route",
+      tot: { environment: "alpha", totId: "home" },
+      text: "Hi Home",
+    });
   });
 
   it("ignores a channel that is not mapped", () => {
