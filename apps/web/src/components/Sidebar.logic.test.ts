@@ -1719,7 +1719,7 @@ describe("shouldCreateNewThreadInCurrentProject", () => {
 });
 
 describe("resolveCollapsedGroupStatuses", () => {
-  it("counts each status, most urgent first, and skips idle and waiting threads", () => {
+  it("counts each status, most urgent first, including waiting threads", () => {
     const idle = {
       hasActionableProposedPlan: false,
       hasPendingApprovals: false,
@@ -1746,7 +1746,9 @@ describe("resolveCollapsedGroupStatuses", () => {
     };
     const waiting = { ...unread, runtime: { ...runtime, status: "idle" as const } };
 
-    expect(resolveCollapsedGroupStatuses([idle, waiting])).toEqual([]);
+    expect(resolveCollapsedGroupStatuses([idle, waiting])).toEqual([
+      { status: "waiting", count: 1 },
+    ]);
     expect(resolveCollapsedGroupStatuses([working, unread, working, input, limited, idle])).toEqual(
       [
         { status: "input", count: 1 },
