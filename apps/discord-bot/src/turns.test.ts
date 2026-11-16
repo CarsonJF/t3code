@@ -13,6 +13,7 @@ const home: TotView = {
   enabled: true,
   threadId: "thread-home",
   link: "https://app.t3.codes/threads/env/thread-home",
+  environment: "alpha",
 };
 
 const build = (
@@ -35,7 +36,7 @@ const build = (
     questions,
     settled,
     deps: {
-      t3: fake.client,
+      t3For: () => fake.client,
       channel: channel.port,
       logger: silentLogger,
       now: clock.now,
