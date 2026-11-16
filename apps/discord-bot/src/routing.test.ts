@@ -9,6 +9,7 @@ import {
   resolveTot,
   routeCommand,
   routeText,
+  routeToTot,
 } from "./routing.ts";
 
 const tot = (id: string, name: string, threadId: string | null = `thread-${id}`): TotView => ({
@@ -205,5 +206,44 @@ describe("autocompleteTots", () => {
 
   it("caps the list", () => {
     expect(autocompleteTots(tots, "", 2)).toHaveLength(2);
+  });
+});
+
+describe("routeToTot", () => {
+  it("picks the channel's Tot even when another one is sticky", () => {
+    const decision = routeToTot(tots, "tot-home", "Hi Home");
+
+    expect(decision).toMatchObject({ kind: "send", text: "Hi Home" });
+    expect(decision.kind === "send" ? decision.tot.id : null).toBe("tot-home");
+  });
+
+  it("names a Tot that is not on the server", () => {
+    expect(routeToTot(tots, "tot-gone", "Hi")).toEqual({
+      kind: "unavailable",
+      message: "There is no Tot tot-gone on this T3 server.",
+    });
+  });
+
+  it("says a Tot with no thread is not running", () => {
+    expect(routeToTot([tot("tot-home", "Home", null)], "tot-home", "Hi")).toEqual({
+      kind: "unavailable",
+      tot: tot("tot-home", "Home", null),
+      message: expect.stringContaining("Home is not running"),
+    });
+  });
+
+  it("carries the channel's fresh session", () => {
+    const decision = routeToTot(tots, "tot-home", "Hi", {
+      freshTotIds: new Set(["tot-home"]),
+    });
+
+    expect(decision).toMatchObject({ kind: "send", fresh: true });
+  });
+
+  it("refuses empty text", () => {
+    expect(routeToTot(tots, "tot-home", "   ")).toMatchObject({
+      kind: "unavailable",
+      message: "That message was empty.",
+    });
   });
 });
