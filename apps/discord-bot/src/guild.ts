@@ -7,43 +7,86 @@ import type { TotAvatar } from "@t3tools/contracts";
 import { isAllowedAuthor } from "./allowlist.ts";
 import type { AvatarStore } from "./avatar.ts";
 import { type Logger, describeError } from "./log.ts";
+import type { TotRef } from "./routing.ts";
 
 /** A Tot's channel name. Discord lowercases names, and a Tot id is already a slug. */
 export const channelNameFor = (totId: string): string => `tot-${totId}`;
 
+/** The machine part of a channel name, so two machines can share a Tot id. */
+export const labelSlug = (label: string): string => {
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
+  return slug.length === 0 ? "machine" : slug;
+};
+
+/**
+ * A Tot's channel: `tot-<id>` while that id is unique across machines, and
+ * `tot-<machine>-<id>` when two machines have a Tot with the same id.
+ */
+export const channelNameForTot = (
+  tot: { readonly environment: string; readonly id: string },
+  collides: boolean,
+): string => (collides ? `tot-${labelSlug(tot.environment)}-${tot.id}` : channelNameFor(tot.id));
+
+/** One `channelId=totId` or `channelId=label:totId` pin. */
+export interface TotPin {
+  /** Null lets a bare pin find the one machine holding that Tot id at setup. */
+  readonly environment: string | null;
+  readonly totId: string;
+}
+
 export interface ChannelTotMap {
-  readonly map: ReadonlyMap<string, string>;
+  readonly map: ReadonlyMap<string, TotPin>;
   readonly problems: ReadonlyArray<string>;
 }
 
 const CHANNEL_ID = /^\d+$/u;
 const TOT_ID = /^[a-z0-9][a-z0-9-]{0,31}$/u;
+const LABEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/u;
 
-/** `channelId=totId` pairs, whitespace or comma separated. Pinned channels are never renamed. */
+/**
+ * `channelId=totId` pairs, or `channelId=label:totId` when several machines are
+ * configured. Whitespace or comma separated. Pinned channels are never renamed.
+ */
 export const parseChannelTotMap = (value: string | undefined): ChannelTotMap => {
-  const map = new Map<string, string>();
+  const map = new Map<string, TotPin>();
   const problems: Array<string> = [];
   const entries = (value ?? "")
     .split(/[\s,]+/u)
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
   for (const entry of entries) {
-    const [channelId, totId, extra] = entry.split("=");
-    if (
-      channelId === undefined ||
-      totId === undefined ||
-      extra !== undefined ||
-      !CHANNEL_ID.test(channelId) ||
-      !TOT_ID.test(totId)
-    ) {
-      problems.push(`CHANNEL_TOT_MAP entry ${entry} is not a channelId=totId pair.`);
+    const separator = entry.indexOf("=");
+    if (separator <= 0 || entry.indexOf("=", separator + 1) !== -1) {
+      problems.push(
+        `CHANNEL_TOT_MAP entry ${entry} is not a channelId=totId or channelId=label:totId pair.`,
+      );
+      continue;
+    }
+    const channelId = entry.slice(0, separator);
+    const target = entry.slice(separator + 1);
+    if (!CHANNEL_ID.test(channelId)) {
+      problems.push(
+        `CHANNEL_TOT_MAP entry ${entry} is not a channelId=totId or channelId=label:totId pair.`,
+      );
+      continue;
+    }
+    const colon = target.indexOf(":");
+    const environment = colon === -1 ? null : target.slice(0, colon);
+    const totId = colon === -1 ? target : target.slice(colon + 1);
+    if ((environment !== null && !LABEL.test(environment)) || !TOT_ID.test(totId)) {
+      problems.push(
+        `CHANNEL_TOT_MAP entry ${entry} is not a channelId=totId or channelId=label:totId pair.`,
+      );
       continue;
     }
     if (map.has(channelId)) {
       problems.push(`CHANNEL_TOT_MAP lists channel ${channelId} more than once.`);
       continue;
     }
-    map.set(channelId, totId);
+    map.set(channelId, { environment, totId });
   }
   return { map, problems };
 };
@@ -52,6 +95,7 @@ export interface GuildTot {
   readonly id: string;
   readonly name: string;
   readonly avatar: TotAvatar;
+  readonly environment: string;
 }
 
 export interface GuildChannelView {
@@ -85,6 +129,7 @@ export interface GuildPort {
 
 export interface ChannelBindingPlan {
   readonly kind: "bind";
+  readonly environment: string;
   readonly totId: string;
   readonly channelId: string;
   readonly via: "pin" | "name";
@@ -92,14 +137,22 @@ export interface ChannelBindingPlan {
 
 export interface ChannelCreatePlan {
   readonly kind: "create";
+  readonly environment: string;
   readonly totId: string;
   readonly name: string;
 }
 
-export type ChannelSkipReason = "unknown-tot" | "unknown-channel" | "not-text" | "already-bound";
+export type ChannelSkipReason =
+  | "unknown-tot"
+  | "ambiguous-tot"
+  | "unknown-channel"
+  | "not-text"
+  | "already-bound";
 
 export interface ChannelSkipPlan {
   readonly kind: "skip";
+  /** Null when a bare pin matched no single machine. */
+  readonly environment: string | null;
   readonly totId: string;
   readonly channelId: string | null;
   readonly reason: ChannelSkipReason;
@@ -107,58 +160,121 @@ export interface ChannelSkipPlan {
 
 export type ChannelPlan = ChannelBindingPlan | ChannelCreatePlan | ChannelSkipPlan;
 
+const totKey = (tot: GuildTot): string => `${tot.environment}:${tot.id}`;
+
 /**
- * One channel per Tot: pinned channels first, then a channel already named
- * `tot-<id>`, then a new one. An existing channel is only ever reused, never
+ * One channel per Tot: pinned channels first, then a channel already named for
+ * the Tot, then a new one. A channel name carries the machine only when two
+ * machines share the Tot id. An existing channel is only ever reused, never
  * renamed or deleted, and a pin wins over a name.
  */
 export const planGuildChannels = (input: {
   readonly tots: ReadonlyArray<GuildTot>;
   readonly channels: ReadonlyArray<GuildChannelView>;
-  readonly pinned: ReadonlyMap<string, string>;
+  readonly pinned: ReadonlyMap<string, TotPin>;
 }): ReadonlyArray<ChannelPlan> => {
-  const totIds = new Set(input.tots.map((tot) => tot.id));
   const channelsById = new Map(input.channels.map((channel) => [channel.id, channel]));
+  const byKey = new Map(input.tots.map((tot) => [totKey(tot), tot]));
+  const idCounts = new Map<string, number>();
+  for (const tot of input.tots) idCounts.set(tot.id, (idCounts.get(tot.id) ?? 0) + 1);
   const bound = new Set<string>();
   const claimed = new Set<string>();
   const plan: Array<ChannelPlan> = [];
 
-  for (const [channelId, totId] of input.pinned) {
-    if (!totIds.has(totId)) {
-      plan.push({ kind: "skip", totId, channelId, reason: "unknown-tot" });
+  const resolvePin = (
+    pin: TotPin,
+  ):
+    | { readonly tot: GuildTot; readonly reason?: undefined }
+    | {
+        readonly tot?: undefined;
+        readonly reason: "unknown-tot" | "ambiguous-tot";
+      } => {
+    if (pin.environment !== null) {
+      const tot = byKey.get(`${pin.environment}:${pin.totId}`);
+      return tot === undefined ? { reason: "unknown-tot" } : { tot };
+    }
+    const matches = input.tots.filter((tot) => tot.id === pin.totId);
+    if (matches.length === 0) return { reason: "unknown-tot" };
+    if (matches.length > 1) return { reason: "ambiguous-tot" };
+    return { tot: matches[0]! };
+  };
+
+  for (const [channelId, pin] of input.pinned) {
+    const resolved = resolvePin(pin);
+    if (resolved.tot === undefined) {
+      plan.push({
+        kind: "skip",
+        environment: pin.environment,
+        totId: pin.totId,
+        channelId,
+        reason: resolved.reason,
+      });
       continue;
     }
+    const tot = resolved.tot;
     const channel = channelsById.get(channelId);
     if (channel === undefined) {
-      plan.push({ kind: "skip", totId, channelId, reason: "unknown-channel" });
+      plan.push({
+        kind: "skip",
+        environment: tot.environment,
+        totId: tot.id,
+        channelId,
+        reason: "unknown-channel",
+      });
       continue;
     }
     if (!channel.textual) {
-      plan.push({ kind: "skip", totId, channelId, reason: "not-text" });
+      plan.push({
+        kind: "skip",
+        environment: tot.environment,
+        totId: tot.id,
+        channelId,
+        reason: "not-text",
+      });
       continue;
     }
-    if (bound.has(totId)) {
-      plan.push({ kind: "skip", totId, channelId, reason: "already-bound" });
+    const key = totKey(tot);
+    if (bound.has(key)) {
+      plan.push({
+        kind: "skip",
+        environment: tot.environment,
+        totId: tot.id,
+        channelId,
+        reason: "already-bound",
+      });
       continue;
     }
-    bound.add(totId);
+    bound.add(key);
     claimed.add(channelId);
-    plan.push({ kind: "bind", totId, channelId, via: "pin" });
+    plan.push({
+      kind: "bind",
+      environment: tot.environment,
+      totId: tot.id,
+      channelId,
+      via: "pin",
+    });
   }
 
   for (const tot of input.tots) {
-    if (bound.has(tot.id)) continue;
-    const name = channelNameFor(tot.id);
+    const key = totKey(tot);
+    if (bound.has(key)) continue;
+    const name = channelNameForTot(tot, (idCounts.get(tot.id) ?? 0) > 1);
     const existing = input.channels.find(
       (channel) => channel.textual && channel.name === name && !claimed.has(channel.id),
     );
     if (existing !== undefined) {
-      bound.add(tot.id);
+      bound.add(key);
       claimed.add(existing.id);
-      plan.push({ kind: "bind", totId: tot.id, channelId: existing.id, via: "name" });
+      plan.push({
+        kind: "bind",
+        environment: tot.environment,
+        totId: tot.id,
+        channelId: existing.id,
+        via: "name",
+      });
       continue;
     }
-    plan.push({ kind: "create", totId: tot.id, name });
+    plan.push({ kind: "create", environment: tot.environment, totId: tot.id, name });
   }
 
   return plan;
@@ -201,6 +317,7 @@ export const createWebhookState = (path: string): WebhookState => {
 
 export interface GuildChannelBinding {
   readonly channelId: string;
+  readonly environment: string;
   readonly totId: string;
   readonly webhookId: string;
   readonly webhookToken: string;
@@ -242,9 +359,10 @@ const webhookFor = async (input: {
 
 export interface GuildSetupOptions {
   readonly tots: ReadonlyArray<GuildTot>;
-  readonly pinned: ReadonlyMap<string, string>;
+  readonly pinned: ReadonlyMap<string, TotPin>;
   readonly port: GuildPort;
-  readonly avatars: AvatarStore;
+  /** One store per machine, so two machines never share a face file. */
+  readonly avatarsFor: (environment: string) => AvatarStore;
   readonly state: WebhookState;
   readonly logger: Logger;
 }
@@ -264,6 +382,7 @@ export const ensureGuildChannels = async (
     pinned: options.pinned,
   });
   const bindings: Array<GuildChannelBinding> = [];
+  const totsByKey = new Map(options.tots.map((tot) => [totKey(tot), tot]));
 
   const bind = async (
     channelId: string,
@@ -274,32 +393,44 @@ export const ensureGuildChannels = async (
       channelId,
       tot,
       port: options.port,
-      avatars: options.avatars,
+      avatars: options.avatarsFor(tot.environment),
       state: options.state,
     });
     if (webhook.token === null) {
-      options.logger.warn("guild.webhook_unusable", { channelId, totId: tot.id });
+      options.logger.warn("guild.webhook_unusable", {
+        channelId,
+        environment: tot.environment,
+        totId: tot.id,
+      });
       return null;
     }
     options.logger.info("guild.channel_ready", {
       channelId,
+      environment: tot.environment,
       totId: tot.id,
       via,
       webhook: action,
     });
-    return { channelId, totId: tot.id, webhookId: webhook.id, webhookToken: webhook.token };
+    return {
+      channelId,
+      environment: tot.environment,
+      totId: tot.id,
+      webhookId: webhook.id,
+      webhookToken: webhook.token,
+    };
   };
 
   for (const entry of plan) {
     if (entry.kind === "skip") {
       options.logger.warn("guild.channel_skipped", {
+        environment: entry.environment,
         totId: entry.totId,
         ...(entry.channelId === null ? {} : { channelId: entry.channelId }),
         reason: entry.reason,
       });
       continue;
     }
-    const tot = options.tots.find((candidate) => candidate.id === entry.totId);
+    const tot = totsByKey.get(`${entry.environment}:${entry.totId}`);
     if (tot === undefined) continue;
     if (entry.kind === "bind") {
       try {
@@ -308,6 +439,7 @@ export const ensureGuildChannels = async (
       } catch (cause) {
         options.logger.error("guild.channel_failed", {
           channelId: entry.channelId,
+          environment: tot.environment,
           totId: tot.id,
           reason: describeError(cause),
         });
@@ -320,6 +452,7 @@ export const ensureGuildChannels = async (
       createdChannelId = channel.id;
       options.logger.info("guild.channel_created", {
         channelId: createdChannelId,
+        environment: tot.environment,
         totId: tot.id,
         name: channel.name,
       });
@@ -327,6 +460,7 @@ export const ensureGuildChannels = async (
       if (binding !== null) bindings.push(binding);
     } catch (cause) {
       options.logger.error("guild.channel_failed", {
+        environment: tot.environment,
         totId: tot.id,
         ...(createdChannelId === null ? {} : { channelId: createdChannelId }),
         reason: describeError(cause),
@@ -347,7 +481,7 @@ export type GuildMessageDecision =
       readonly kind: "ignore";
       readonly reason: "unmapped" | "bot-author" | "not-allowed" | "empty";
     }
-  | { readonly kind: "route"; readonly totId: string; readonly text: string };
+  | { readonly kind: "route"; readonly tot: TotRef; readonly text: string };
 
 /**
  * A channel message only reaches a Tot when the channel is mapped, the author
@@ -358,16 +492,16 @@ export const routeGuildMessage = (input: {
   readonly channelId: string;
   readonly author: { readonly userId: string | null | undefined; readonly bot: boolean };
   readonly content: string;
-  readonly channelTots: ReadonlyMap<string, string>;
+  readonly channelTots: ReadonlyMap<string, TotRef>;
   readonly allowedUserIds: ReadonlySet<string>;
 }): GuildMessageDecision => {
-  const totId = input.channelTots.get(input.channelId);
-  if (totId === undefined) return { kind: "ignore", reason: "unmapped" };
+  const tot = input.channelTots.get(input.channelId);
+  if (tot === undefined) return { kind: "ignore", reason: "unmapped" };
   if (input.author.bot) return { kind: "ignore", reason: "bot-author" };
   if (!isAllowedAuthor(input.author, input.allowedUserIds)) {
     return { kind: "ignore", reason: "not-allowed" };
   }
   const text = input.content.trim();
   if (text.length === 0) return { kind: "ignore", reason: "empty" };
-  return { kind: "route", totId, text };
+  return { kind: "route", tot, text };
 };
