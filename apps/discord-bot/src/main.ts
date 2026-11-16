@@ -1,0 +1,155 @@
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off - A plain Node service entry point with no Effect runtime.
+import * as NodeReadlinePromises from "node:readline/promises";
+
+import { startDiscordBridge } from "./discord.ts";
+import { runDryRun } from "./dryRun.ts";
+import { ConfigError, dryRunUserId, isDryRunBypassingAllowlist, readConfig } from "./env.ts";
+import { createFileLogger, describeError } from "./log.ts";
+import { extractPairingCode, formatMintedToken, mintMcpToken } from "./mintToken.ts";
+import { createBridgeService } from "./service.ts";
+import { createT3Client } from "./t3Client.ts";
+
+const HELP = `Discord DM bridge for T3 Code Tots.
+
+Usage:
+  npm start                 Run the bridge (DISCORD_TOKEN required)
+  npm run dry-run           Read DMs from stdin and print what would be sent
+  npm run mint-token        Exchange a pairing code for a 30-day T3_MCP_TOKEN
+
+Environment:
+  DISCORD_TOKEN             Bot token from the Discord application
+  DISCORD_ALLOWED_USER_IDS  Comma-separated Discord user ids; everyone else is ignored
+  T3_MCP_URL                The environment's MCP endpoint, such as http://127.0.0.1:3773/mcp
+  T3_MCP_TOKEN              Bearer token from \`npm run mint-token\`
+
+Runbook: docs/discord-tot-bridge.md`;
+
+const write = (line: string): void => {
+  process.stdout.write(`${line}\n`);
+};
+
+const writeError = (line: string): void => {
+  process.stderr.write(`${line}\n`);
+};
+
+const mintToken = async (mcpUrl: string): Promise<number> => {
+  const readline = NodeReadlinePromises.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    const answer = await readline.question("Pairing code from `t3 auth pairing create`: ");
+    const code = extractPairingCode(answer);
+    if (code === null) {
+      writeError("That does not look like a pairing code.");
+      return 2;
+    }
+    write("Approving the sign-in as a full-access MCP client...");
+    const minted = await mintMcpToken({ mcpUrl, pairingCode: code });
+    write(formatMintedToken(minted));
+    return 0;
+  } catch (cause) {
+    writeError(`Could not mint a token: ${describeError(cause)}`);
+    return 1;
+  } finally {
+    readline.close();
+  }
+};
+
+const serve = async (dryRun: boolean): Promise<number | null> => {
+  const config = readConfig(process.env, dryRun ? "dry-run" : "serve");
+  const logger = createFileLogger(config.logFile, [config.t3McpToken, config.discordToken]);
+  const t3 = createT3Client({
+    url: config.t3McpUrl,
+    token: config.t3McpToken,
+    clientName: "discord-tot-bridge",
+  });
+  logger.info("bridge.starting", {
+    mode: config.mode,
+    mcpUrl: config.t3McpUrl,
+    allowedUsers: config.allowedUserIds.size,
+    logFile: config.logFile,
+  });
+
+  const sleep = (ms: number): Promise<void> =>
+    new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+
+  if (dryRun) {
+    write(`Dry run. Logging to ${config.logFile}.`);
+    await runDryRun({
+      t3,
+      logger,
+      userId: dryRunUserId(config),
+      defaultTotName: config.defaultTotName,
+      input: process.stdin,
+      output: write,
+      now: Date.now,
+      sleep,
+      allowlistBypassed: isDryRunBypassingAllowlist(config),
+    });
+    await t3.close();
+    return 0;
+  }
+
+  const bridge = await startDiscordBridge({
+    token: config.discordToken,
+    allowedUserIds: config.allowedUserIds,
+    logger,
+    sleep,
+    createService: (channelFor) =>
+      createBridgeService({
+        t3,
+        channelFor,
+        logger,
+        now: Date.now,
+        sleep,
+        defaultTotName: config.defaultTotName,
+      }),
+  });
+
+  let stopping = false;
+  const stop = async (signal: string): Promise<void> => {
+    if (stopping) return;
+    stopping = true;
+    logger.info("bridge.stopping", { signal });
+    await bridge.stop().catch(() => undefined);
+    await t3.close();
+    process.exit(0);
+  };
+  process.on("SIGINT", () => {
+    void stop("SIGINT");
+  });
+  process.on("SIGTERM", () => {
+    void stop("SIGTERM");
+  });
+  process.on("unhandledRejection", (cause) => {
+    logger.error("bridge.unhandled_rejection", { reason: describeError(cause) });
+  });
+  return null;
+};
+
+const main = async (): Promise<number | null> => {
+  const argv = process.argv.slice(2);
+  if (argv.includes("--help") || argv.includes("-h")) {
+    write(HELP);
+    return 0;
+  }
+  try {
+    if (argv.includes("--mint-token")) {
+      return await mintToken(readConfig(process.env, "mint-token").t3McpUrl);
+    }
+    return await serve(argv.includes("--dry-run"));
+  } catch (cause) {
+    if (cause instanceof ConfigError) {
+      writeError(cause.message);
+      return 2;
+    }
+    writeError(`The bridge stopped: ${describeError(cause)}`);
+    return 1;
+  }
+};
+
+const code = await main();
+if (code !== null) process.exitCode = code;
