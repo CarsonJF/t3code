@@ -3,14 +3,15 @@ import * as NodeReadlinePromises from "node:readline/promises";
 import { type Logger, describeError } from "./log.ts";
 import type { SlashCommand } from "./routing.ts";
 import { type BridgeService, createBridgeService } from "./service.ts";
-import type { T3Client } from "./t3Client.ts";
+import type { EnvironmentCatalog } from "./environments.ts";
 import type { ChannelPort } from "./turns.ts";
 
 export interface DryRunOptions {
-  readonly t3: T3Client;
+  readonly catalog: EnvironmentCatalog;
   readonly logger: Logger;
   readonly userId: string;
   readonly defaultTotName: string;
+  readonly multiEnvironment?: boolean;
   readonly input: NodeJS.ReadableStream;
   readonly output: (line: string) => void;
   readonly now: () => number;
@@ -57,12 +58,13 @@ export const runDryRun = async (options: DryRunOptions): Promise<void> => {
     typing: async () => undefined,
   };
   const service: BridgeService = createBridgeService({
-    t3: options.t3,
+    catalog: options.catalog,
     channelFor: () => port,
     logger: options.logger,
     now: options.now,
     sleep: options.sleep,
     defaultTotName: options.defaultTotName,
+    multiEnvironment: options.multiEnvironment === true,
   });
 
   options.output(

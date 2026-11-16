@@ -37,13 +37,14 @@ export interface ChannelPort {
 }
 
 export interface TurnDependencies {
-  readonly t3: T3Client;
+  /** The client for the machine a turn's Tot lives on. */
+  readonly t3For: (environment: string) => T3Client;
   readonly channel: ChannelPort;
   readonly logger: Logger;
   readonly now: () => number;
   readonly sleep: (ms: number) => Promise<void>;
   /** Records a question the user now owes an answer to. */
-  readonly onQuestion: (pending: PendingQuestion) => void;
+  readonly onQuestion: (pending: PendingQuestion, tot: TotView) => void;
   /** The turn ended, so no question from it is still pending. */
   readonly onSettled: (threadId: string) => void;
   readonly pollIntervalMs?: number;
@@ -164,7 +165,8 @@ const runTurn = async (deps: TurnDependencies, request: TurnRequest): Promise<Tu
   if (threadId === null) {
     return { kind: "unavailable", message: `${request.tot.name} has no thread yet.` };
   }
-  const { t3, channel, logger } = deps;
+  const { channel, logger } = deps;
+  const t3 = deps.t3For(request.tot.environment);
   const pollIntervalMs = deps.pollIntervalMs ?? DEFAULT_POLL_MS;
 
   const baseline = await newestMessagePosition(t3, threadId);
@@ -212,7 +214,7 @@ const runTurn = async (deps: TurnDependencies, request: TurnRequest): Promise<Tu
         answers: {},
         nextIndex: 0,
       };
-      deps.onQuestion(state);
+      deps.onQuestion(state, request.tot);
       await channel.send(
         describeQuestion(first, { index: 0, total: pendingRequest.questions.length }),
       );
