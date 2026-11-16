@@ -5,10 +5,17 @@ import {
   totFaceInputFromShell,
   totFaceState,
   totHostOrder,
+  totOwningThread,
   withoutTotProjects,
   type EnvironmentTot,
 } from "@t3tools/client-runtime/tots";
-import type { EnvironmentId, ServerSettings, TotFaceState } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ProjectId,
+  ServerSettings,
+  ThreadId,
+  TotFaceState,
+} from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
 
 import { useProjects, useThreadShell } from "./entities";
@@ -28,6 +35,17 @@ const totsAtom = Atom.make((get): ReadonlyArray<EnvironmentTot> => {
 
 export function useTots(): ReadonlyArray<EnvironmentTot> {
   return useAtomValue(totsAtom);
+}
+
+/** The Tot whose thread this is, while it runs or after it was turned off. */
+export function useThreadTot(
+  thread: {
+    readonly environmentId: EnvironmentId;
+    readonly id: ThreadId;
+    readonly projectId?: ProjectId;
+  } | null,
+): EnvironmentTot | null {
+  return totOwningThread(useTots(), thread);
 }
 
 /** The face a Tot shows: its status light, or "sleep" while it has no thread here. */
