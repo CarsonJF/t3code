@@ -392,15 +392,34 @@ export const startDiscordBridge = async (
         }
         return;
       }
+      // Listing is read-only, so it works anywhere, channel-bound or not.
+      if (command?.kind === "list") {
+        await interaction.deferReply();
+        try {
+          const reply = await service.handleCommand(interaction.user.id, command);
+          const chunks = splitMessage(reply.text);
+          await interaction.editReply(chunks[0] ?? "…");
+          for (const chunk of chunks.slice(1)) await interaction.followUp(chunk);
+        } catch (cause) {
+          logger.error("discord.command_failed", {
+            channelId: interaction.channelId,
+            command: command.kind,
+            reason: describeError(cause),
+          });
+          await interaction.editReply(`T3 did not answer: ${describeError(cause)}`);
+        }
+        return;
+      }
       if (totId !== undefined) {
         await interaction.reply({
           content:
-            "This channel always talks to its Tot. /stop works here; use a DM for /tot list, /tot use and /tot new.",
+            "This channel always talks to its Tot. /stop works here; use a DM for /tot use and /tot new.",
         });
         return;
       }
       await interaction.reply({
-        content: "Send me a direct message to talk to a Tot from there.",
+        content:
+          "This channel is not a Tot channel. Each Tot has its own channel; /tot list shows them, and DMs work for any Tot.",
       });
       return;
     }
