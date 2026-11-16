@@ -37,7 +37,15 @@ import {
   useCollapsedThreadGroups,
   useThreadGroupsView,
 } from "../../state/thread-groups";
-import type { ThreadListV2GroupListItem } from "./thread-group-header-item";
+import type {
+  ThreadListV2GroupListItem,
+  ThreadGroupHeaderStatus,
+} from "./thread-group-header-item";
+import {
+  DONE_STATUS_PRESENTATION,
+  THREAD_STATUS_PRESENTATION,
+  type ThreadStatusPresentation,
+} from "./thread-status-presentation";
 
 /** Native menus take color values, not class names. */
 const THREAD_GROUP_SWATCH_HEX = THREAD_GROUP_COLOR_HEX;
@@ -81,6 +89,37 @@ const DOT_CLASS_NAMES: Record<ProjectIconColor, string> = {
 };
 
 const isMonogramText = Schema.is(ProjectMonogramText);
+
+// Desktop's wording, with the thread rows' SF Symbols and tints.
+const GROUP_STATUS: Record<
+  ThreadGroupHeaderStatus,
+  { readonly label: string; readonly presentation: ThreadStatusPresentation }
+> = {
+  approval: {
+    label: "need approval",
+    presentation: THREAD_STATUS_PRESENTATION.approval,
+  },
+  input: {
+    label: "awaiting input",
+    presentation: THREAD_STATUS_PRESENTATION.input,
+  },
+  request: {
+    label: "guest requests",
+    presentation: THREAD_STATUS_PRESENTATION.request,
+  },
+  failed: {
+    label: "failed",
+    presentation: THREAD_STATUS_PRESENTATION.failed,
+  },
+  working: {
+    label: "working",
+    presentation: THREAD_STATUS_PRESENTATION.working,
+  },
+  done: {
+    label: "done",
+    presentation: DONE_STATUS_PRESENTATION,
+  },
+};
 
 const colorTitle = (color: ProjectIconColor) => color.charAt(0).toUpperCase() + color.slice(1);
 
@@ -307,15 +346,24 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
   readonly item: ThreadListV2GroupListItem;
   readonly pane?: "screen" | "sidebar";
 }) {
-  const { group, count, expanded } = props.item;
+  const { group, count, expanded, statuses } = props.item;
   const view = useThreadGroupsView();
   const { toggle } = useCollapsedThreadGroups();
   const sidebarPane = props.pane === "sidebar";
   const textStyle = group.textColor ? { color: projectColorHex(group.textColor) } : undefined;
+  const statusDescription = statuses
+    .map(({ status, count: statusCount }) => `${statusCount} ${GROUP_STATUS[status].label}`)
+    .join(", ");
   const header = (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${group.name} group, ${count === 1 ? "1 thread" : `${count} threads`}`}
+      accessibilityLabel={[
+        `${group.name} group`,
+        count === 1 ? "1 thread" : `${count} threads`,
+        statusDescription,
+      ]
+        .filter((part) => part.length > 0)
+        .join(", ")}
       accessibilityHint={expanded ? "Collapses this group" : "Expands this group"}
       accessibilityState={{ expanded }}
       className={cn(
@@ -342,6 +390,36 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
       >
         {group.name}
       </Text>
+      <View className="flex-1" />
+      {expanded ? null : (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          className="shrink-0 flex-row items-center gap-1"
+        >
+          {statuses.map(({ status, count: statusCount }) => {
+            const { presentation } = GROUP_STATUS[status];
+            return (
+              <View key={status} className="flex-row items-center gap-0.5">
+                <SymbolView
+                  name={presentation.icon}
+                  size={11}
+                  tintColorClassName={presentation.iconTintClassName}
+                  type="monochrome"
+                  weight="semibold"
+                />
+                {statusCount > 1 ? (
+                  <Text
+                    className={cn("text-[10px] font-t3-bold tabular-nums", presentation.className)}
+                  >
+                    {String(statusCount)}
+                  </Text>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      )}
       {expanded ? null : (
         <Text
           style={textStyle}
@@ -357,7 +435,6 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
           {String(count)}
         </Text>
       )}
-      <View className="flex-1" />
       <SymbolView
         name="chevron.down"
         size={10}
