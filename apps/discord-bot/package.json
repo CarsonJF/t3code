@@ -2,7 +2,7 @@
   "name": "@t3tools/discord-bot",
   "version": "0.0.0",
   "private": true,
-  "description": "Discord DM bridge to the Tots on a T3 Code server.",
+  "description": "Discord bridge to the Tots on a T3 Code server: DMs, or a channel per Tot.",
   "type": "module",
   "scripts": {
     "start": "node --env-file-if-exists=.env src/main.ts",

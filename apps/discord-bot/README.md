@@ -7,8 +7,8 @@ from the desktop app and only runs when started.
 
 - Runbook, including the Discord application setup and token rotation:
   [docs/discord-tot-bridge.md](../../docs/discord-tot-bridge.md)
-- Code: `src/main.ts` is the entry point; `src/discord.ts` is the only file that
-  imports discord.js, and everything behind it talks to `ChannelPort`.
+- Code: `src/main.ts` is the entry point; `src/discord.ts` is the only runtime
+  file that imports discord.js, and everything behind it talks to `ChannelPort`.
 - Try it without Discord: `npm run dry-run`.
 
 ```sh
