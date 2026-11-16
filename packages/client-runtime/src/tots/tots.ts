@@ -4,6 +4,7 @@ import {
   HOME_TOT_ID,
   type ProjectId,
   type ServerSettings,
+  type ThreadId,
   type Tot,
   type TotFaceState,
 } from "@t3tools/contracts";
@@ -109,6 +110,35 @@ export function selectTots(
     const rightHome = right.tot.id === HOME_TOT_ID ? 0 : 1;
     return leftHome - rightHome || left.tot.name.localeCompare(right.tot.name);
   });
+}
+
+/**
+ * The Tot whose thread this is: the one it runs while on, or the turned-off Tot that owns the
+ * thread's project, which is how its last thread still reads as a Tot's.
+ */
+export function totOwningThread(
+  tots: ReadonlyArray<EnvironmentTot>,
+  thread: {
+    readonly environmentId: EnvironmentId;
+    readonly id: ThreadId;
+    readonly projectId?: ProjectId;
+  } | null,
+): EnvironmentTot | null {
+  if (thread === null) return null;
+  const running = tots.find(
+    (entry) => entry.environmentId === thread.environmentId && entry.tot.threadId === thread.id,
+  );
+  if (running !== undefined) return running;
+  if (thread.projectId === undefined) return null;
+  return (
+    tots.find(
+      (entry) =>
+        entry.environmentId === thread.environmentId &&
+        entry.tot.threadId === null &&
+        entry.tot.projectId !== null &&
+        entry.tot.projectId === thread.projectId,
+    ) ?? null
+  );
 }
 
 /** Machines a new Tot can live on: the one already hosting Tots first, then the rest. */
