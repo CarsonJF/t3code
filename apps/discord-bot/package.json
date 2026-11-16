@@ -12,6 +12,7 @@
     "test": "vp test run --config ../vite.config.ts --dir ."
   },
   "dependencies": {
+    "@t3tools/client-runtime": "workspace:*",
     "@t3tools/contracts": "workspace:*",
     "discord.js": "14.28.1",
     "pngjs": "7.0.0"
