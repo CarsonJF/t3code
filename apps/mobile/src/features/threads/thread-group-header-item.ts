@@ -6,6 +6,7 @@ export type ThreadGroupHeaderStatus =
   | "request"
   | "failed"
   | "working"
+  | "waiting"
   | "done";
 
 export interface ThreadGroupHeaderStatusCount {

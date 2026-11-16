@@ -23,10 +23,11 @@ const GROUP_STATUS_ORDER: ReadonlyArray<ThreadGroupHeaderStatus> = [
   "request",
   "failed",
   "working",
+  "waiting",
   "done",
 ];
 
-/** Per-status counts for a collapsed header, most urgent first. Waiting stays quiet, like rows. */
+/** Per-status counts for a collapsed header, most urgent first. */
 export function resolveThreadGroupHeaderStatuses(
   threads: ReadonlyArray<EnvironmentThreadShell>,
 ): ThreadGroupHeaderStatusCount[] {
@@ -41,7 +42,7 @@ export function resolveThreadGroupHeaderStatuses(
             ? "done"
             : null
           : raw === "waiting"
-            ? null
+            ? "waiting"
             : raw;
     if (status !== null) counts.set(status, (counts.get(status) ?? 0) + 1);
   }
