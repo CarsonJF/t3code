@@ -1490,6 +1490,23 @@ describe("threadListV2ListItemsAreEqual", () => {
     expect(secondA.type === "v2-thread" && secondA.showTrailingDivider).toBe(false);
     expect(threadListV2ListItemsAreEqual(firstA, secondA)).toBe(false);
   });
+
+  it("notices changed status counts on a group header", () => {
+    const header: ThreadListV2ListItem = {
+      type: "v2-thread-group",
+      key: "v2-thread-group:status",
+      group: { id: "status", name: "Status" },
+      count: 2,
+      expanded: false,
+      statuses: [{ status: "input", count: 1 }],
+    };
+    const moreWaiting = {
+      ...header,
+      statuses: [{ status: "input" as const, count: 2 }],
+    };
+    expect(threadListV2ListItemsAreEqual(header, header)).toBe(true);
+    expect(threadListV2ListItemsAreEqual(header, moreWaiting)).toBe(false);
+  });
 });
 
 describe("thread list Woke marker", () => {
