@@ -43,7 +43,7 @@ import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSw
 
 import type { ThreadListProvider } from "../../state/thread-list-environments";
 import { totFaceInputFromShell, totFaceState } from "@t3tools/client-runtime/tots";
-import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { Menu } from "../../components/ui/Menu";
 import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
@@ -84,8 +84,8 @@ import {
   resolveThreadListV2SwipeActions,
   layoutThreadListV2RowMenuActions,
   threadListV2RowAccessibilityLabel,
-  type ThreadListV2Status,
 } from "./threadListV2";
+import { DONE_STATUS_PRESENTATION, THREAD_STATUS_PRESENTATION } from "./thread-status-presentation";
 import { QueuedMessageIcon } from "./queued-message-icon";
 import { useThreadGroupMenu } from "./thread-group-menu";
 import { TOT_ROW_FACE_SIZE, TotStillFace } from "../tots/TotStillFace";
@@ -95,64 +95,6 @@ import { ThreadSearchMatchExcerpt } from "./thread-search-match";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
 import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
 import { pullRequestStatus } from "../pull-requests/pullRequestStatus";
-
-interface StatusLabel {
-  // Null when the icon and timer carry the status on their own.
-  readonly label: string | null;
-  readonly icon: AppSymbolName;
-  readonly className: string;
-  readonly iconTintClassName: string;
-}
-const STATUS_LABEL_BY_STATUS: Partial<Record<ThreadListV2Status, StatusLabel>> = {
-  approval: {
-    label: msg("Approval", { $context: "thread status, waiting for approval" }),
-    icon: "exclamationmark.shield",
-    className: "text-warning-foreground",
-    iconTintClassName: "accent-warning-foreground",
-  },
-  input: {
-    label: msg("Input", { $context: "thread status, waiting for user input" }),
-    icon: "questionmark.bubble",
-    className: "text-adaptive-indigo-600-300",
-    iconTintClassName: "accent-adaptive-indigo-600-300",
-  },
-  request: {
-    label: msg("Request", { $context: "thread status, a guest request is waiting" }),
-    icon: "person.crop.circle",
-    className: "text-adaptive-fuchsia-600-300",
-    iconTintClassName: "accent-adaptive-fuchsia-600-300",
-  },
-  working: {
-    label: null,
-    icon: "circle.dashed",
-    className: "text-adaptive-sky-600-400",
-    iconTintClassName: "accent-adaptive-sky-600-400",
-  },
-  waiting: {
-    label: null,
-    icon: "circle.dashed.inset.filled",
-    className: "text-foreground-muted",
-    iconTintClassName: "accent-foreground-muted",
-  },
-  failed: {
-    label: msg("Failed", { $context: "thread status" }),
-    icon: "exclamationmark.circle",
-    className: "text-danger-foreground",
-    iconTintClassName: "accent-danger-foreground",
-  },
-  limited: {
-    label: msg("Limited", { $context: "thread status, usage limit reached" }),
-    icon: "exclamationmark.circle",
-    className: "text-warning-foreground",
-    iconTintClassName: "accent-warning-foreground",
-  },
-};
-const DONE_STATUS_LABEL: StatusLabel = {
-  label: msg("Done", { $context: "thread status, turn finished" }),
-  icon: "checkmark.circle",
-  className: "text-adaptive-emerald-700-300",
-  iconTintClassName: "accent-adaptive-emerald-700-300",
-};
 
 // DM Sans has no tabular figures, so a ticking timer in it reflows the row every second.
 const TABULAR_DURATION_STYLE = {
@@ -864,7 +806,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const rawStatus = resolveThreadListV2Status(thread);
   const status = resolveThreadListV2RowStatus(thread);
   const isUnread = status === "ready" && threadHasUnseenCompletion(thread);
-  const workingLabel = STATUS_LABEL_BY_STATUS[status];
+  const workingLabel = status === "ready" ? undefined : THREAD_STATUS_PRESENTATION[status];
   const showsWoke = status === "ready" && props.wokeAt !== null;
   const statusEntry =
     (status === "working" && workingLabel !== undefined && thread.goal?.status === "active"
@@ -872,7 +814,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           ...workingLabel,
           label: msg("Goal", { $context: "thread status, working toward a goal" }),
         }
-      : workingLabel) ?? (isUnread ? DONE_STATUS_LABEL : undefined);
+      : workingLabel) ?? (isUnread ? DONE_STATUS_PRESENTATION : undefined);
   const statusLabel = statusEntry && {
     ...statusEntry,
     label: statusEntry.label === null ? null : m(statusEntry.label),
