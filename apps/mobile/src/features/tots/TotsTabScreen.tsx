@@ -8,7 +8,6 @@ import { Atom } from "effect/reactivity";
 import { useNavigation } from "@react-navigation/native";
 import { useState } from "react";
 import { Platform, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useResolveClassNames } from "uniwind";
 
 import { AppText } from "../../components/ui/AppText";
@@ -27,10 +26,11 @@ import {
   type TotHost,
 } from "../../state/tots";
 import { useWorkspaceSettledContentWidth } from "../layout/workspace-content-width";
+import { useWorkspaceListBottomInset } from "../layout/workspace/workspace-list-insets";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { TotLiveFace } from "./TotLiveFace";
-import { TotStillFace } from "./TotStillFace";
+import { TOT_ROW_FACE_SIZE, TotStillFace } from "./TotStillFace";
 
 const NO_SETTINGS_ATOM = Atom.make<ServerSettings | null>(null).pipe(
   Atom.withLabel("mobile-tots-no-host"),
@@ -66,7 +66,7 @@ function TotListRow(props: { readonly entry: EnvironmentTot; readonly machine: s
       className="bg-grouped-card"
     >
       <ListRowLayout
-        leading={<TotStillFace avatar={tot.avatar} state={state} size={30} />}
+        leading={<TotStillFace avatar={tot.avatar} state={state} size={TOT_ROW_FACE_SIZE} />}
         label={tot.name}
         description={description}
         accessory={
@@ -100,8 +100,8 @@ function machineLabel(hosts: ReadonlyArray<TotHost>, entry: EnvironmentTot): str
 
 /** The Tots tab: every Tot on every machine, then a way to make one. */
 export function TotsTabScreen() {
-  const insets = useSafeAreaInsets();
   const [measuredWidth, setMeasuredWidth] = useState(0);
+  const bottomInset = useWorkspaceListBottomInset({ automaticBottomInset: true });
   // A workspace pane knows its width in the render that resizes it; measuring lags a frame.
   const width = useWorkspaceSettledContentWidth() ?? measuredWidth;
   const tots = useTots();
@@ -155,7 +155,7 @@ export function TotsTabScreen() {
         showsVerticalScrollIndicator={false}
         className="flex-1"
         contentContainerClassName="px-5 pt-4"
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
+        contentContainerStyle={{ paddingBottom: bottomInset }}
         onLayout={(event) => setMeasuredWidth(event.nativeEvent.layout.width)}
       >
         {wide ? (
