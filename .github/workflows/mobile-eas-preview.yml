@@ -54,6 +54,11 @@ jobs:
         if: steps.expo-token.outputs.present == 'true'
         uses: ./.github/actions/drop-checkout-credentials
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup Vite+
         if: steps.expo-token.outputs.present == 'true'
         uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
@@ -175,6 +180,11 @@ jobs:
         if: steps.expo-token.outputs.present == 'true'
         uses: ./.github/actions/drop-checkout-credentials
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup Vite+
         if: steps.expo-token.outputs.present == 'true'
         uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
@@ -267,6 +277,7 @@ jobs:
       fingerprint: ${{ needs.android.outputs.fingerprint }}
     secrets:
       EXPO_PREVIEW_TOKEN: ${{ secrets.EXPO_PREVIEW_TOKEN }}
+      BOOPFACE_READ_KEY: ${{ secrets.BOOPFACE_READ_KEY }}
 
   ios-build:
     name: iOS preview client
@@ -285,6 +296,7 @@ jobs:
       fingerprint: ${{ needs.ios.outputs.fingerprint }}
     secrets:
       EXPO_PREVIEW_TOKEN: ${{ secrets.EXPO_PREVIEW_TOKEN }}
+      BOOPFACE_READ_KEY: ${{ secrets.BOOPFACE_READ_KEY }}
 
   comment:
     name: Mobile preview comment
