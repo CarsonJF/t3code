@@ -179,7 +179,7 @@ const ScheduleTaskTool = Tool.make("schedule_task", {
   success: OrchestratorMcpScheduleTaskResult,
   failure: OrchestratorMcpFailure,
   failureMode: "return",
-  dependencies,
+  dependencies: [...dependencies, TotService.TotService],
 })
   .annotate(Tool.Title, "Schedule a task")
   .annotate(Tool.Destructive, true)
