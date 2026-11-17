@@ -107,7 +107,12 @@ const handlers = {
           }
           const scope = yield* McpInvocationContext.McpInvocationContext;
           const service = yield* OrchestratorMcpService.OrchestratorMcpService;
-          return yield* service.scheduleTask(scope, { ...input, prompt, schedule });
+          const tot = yield* readTotCaller();
+          return yield* service.scheduleTask(
+            scope,
+            { ...input, prompt, schedule },
+            Option.getOrUndefined(Option.map(tot, (caller) => caller.totId)),
+          );
         }),
       // A scheduled run starts long after its caller, with nothing to carry the link.
       { refused: "schedule tasks in this environment" },
