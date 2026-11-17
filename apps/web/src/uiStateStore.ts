@@ -22,6 +22,7 @@ const LEGACY_PERSISTED_STATE_KEYS = [
 export interface PersistedUiState {
   projectExpandedById?: Record<string, boolean>;
   projectOrder?: string[];
+  totOrder?: string[];
   threadLastVisitedAtById?: Record<string, string>;
   collapsedProjectCwds?: string[];
   expandedProjectCwds?: string[];
@@ -40,6 +41,11 @@ export interface UiProjectState {
   sidebarProjectScopeKeys: string[];
 }
 
+export interface UiTotsState {
+  /** Scoped `environmentId:totId` keys; the server's Tot array has no display order. */
+  totOrder: string[];
+}
+
 export interface UiThreadState {
   threadLastVisitedAtById: Record<string, string>;
   threadChangedFilesExpandedById: Record<string, Record<string, boolean>>;
@@ -54,12 +60,13 @@ export interface UiPullRequestState {
 }
 
 export interface UiState
-  extends UiProjectState, UiThreadState, UiEndpointState, UiPullRequestState {}
+  extends UiProjectState, UiTotsState, UiThreadState, UiEndpointState, UiPullRequestState {}
 
 const initialState: UiState = {
   projectExpandedById: {},
   projectOrder: [],
   sidebarProjectScopeKeys: [],
+  totOrder: [],
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
   defaultAdvertisedEndpointKey: null,
@@ -144,6 +151,7 @@ export function parsePersistedState(parsed: PersistedUiState): UiState {
   return {
     projectExpandedById,
     projectOrder,
+    totOrder: sanitizeStringArray(parsed.totOrder),
     threadLastVisitedAtById: sanitizeTimestampRecord(parsed.threadLastVisitedAtById),
     threadChangedFilesExpandedById:
       parsed.threadChangedFilesExpansionVersion === THREAD_CHANGED_FILES_EXPANSION_VERSION
@@ -219,6 +227,7 @@ export function persistState(state: UiState): void {
       JSON.stringify({
         projectExpandedById: state.projectExpandedById,
         projectOrder: state.projectOrder,
+        totOrder: state.totOrder,
         threadLastVisitedAtById: state.threadLastVisitedAtById,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         sidebarProjectScopeKeys: state.sidebarProjectScopeKeys,
@@ -345,6 +354,17 @@ function setPullRequestMergeMethod(state: UiState, method: PullRequestMergeMetho
     : { ...state, pullRequestMergeMethod: method };
 }
 
+function setTotOrder(state: UiState, order: readonly string[]): UiState {
+  const nextOrder = sanitizeStringArray(order);
+  if (
+    nextOrder.length === state.totOrder.length &&
+    nextOrder.every((key, index) => key === state.totOrder[index])
+  ) {
+    return state;
+  }
+  return { ...state, totOrder: nextOrder };
+}
+
 export function resolveProjectExpanded(
   projectExpandedById: Readonly<Record<string, boolean>>,
   preferenceKeys: readonly string[],
@@ -428,6 +448,7 @@ interface UiStateStore extends UiState {
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
   setSidebarProjectScopeKeys: (projectKeys: readonly string[]) => void;
+  setTotOrder: (order: readonly string[]) => void;
   setPullRequestMergeMethod: (method: PullRequestMergeMethod) => void;
   setProjectExpanded: (projectIds: string | readonly string[], expanded: boolean) => void;
   reorderProjects: (
@@ -449,6 +470,7 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
   setSidebarProjectScopeKeys: (projectKeys) =>
     set((state) => setSidebarProjectScopeKeys(state, projectKeys)),
+  setTotOrder: (order) => set((state) => setTotOrder(state, order)),
   setPullRequestMergeMethod: (method) => set((state) => setPullRequestMergeMethod(state, method)),
   setProjectExpanded: (projectIds, expanded) =>
     set((state) => setProjectExpanded(state, projectIds, expanded)),
