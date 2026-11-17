@@ -83,7 +83,7 @@ export function workspaceTabsReducer(
           selectionRevision: state.selectionRevision + 1,
         };
   const tab = action.tab ?? state.selectedTab;
-  if (tab === "usage") return state;
+  if (isPageTab(tab)) return state;
   const current = state.tabs[tab];
   let next: WorkspaceTabState;
   switch (action.type) {
