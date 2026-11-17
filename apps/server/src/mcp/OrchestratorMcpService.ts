@@ -61,6 +61,7 @@ import {
   type ServerProvider,
   type ServerProviderModel,
   ThreadId,
+  type TotId,
   isOrchestrationV2WorkActive,
   latestProviderTurnForAttempt,
   resolveProjectProviderInstanceEnabled,
@@ -195,6 +196,8 @@ export interface OrchestratorMcpServiceShape {
   readonly scheduleTask: (
     scope: McpInvocationScope,
     input: OrchestratorMcpScheduleTaskInput,
+    /** The Tot that asked, so its settings panel can find the task in any project. */
+    createdByTotId?: TotId,
   ) => Effect.Effect<OrchestratorMcpScheduleTaskResult, OrchestratorMcpFailure>;
   readonly listScheduledTasks: (
     scope: McpInvocationScope,
@@ -2358,7 +2361,7 @@ const make = Effect.gen(function* () {
   });
 
   return OrchestratorMcpService.of({
-    scheduleTask: Effect.fn("OrchestratorMcpService.scheduleTask")(function* (scope, input) {
+    scheduleTask: Effect.fn("OrchestratorMcpService.scheduleTask")(function* (scope, input, totId) {
       const { parent, limits } = yield* loadCaller(scope, ["runs"]);
       const projectId = yield* resolveProjectTarget(parent, input.projectId);
       yield* assertLiveCallerForOtherProject(scope, parent, projectId);
@@ -2399,6 +2402,7 @@ const make = Effect.gen(function* () {
         interactionMode: limits.interactionMode,
         createdBy: "agent",
         creationSource: "mcp",
+        ...(totId === undefined ? {} : { createdByTotId: totId }),
         // Scope the idempotency key by provider session so two callers
         // reusing the same clientRequestId cannot collide on one task row.
         ...(input.clientRequestId === undefined

@@ -3,12 +3,50 @@ import * as Schema from "effect/Schema";
 
 import {
   MIN_SCHEDULED_TASK_INTERVAL_MS,
+  ScheduledTask,
   ScheduledTaskSchedule,
   ScheduledTaskUpsertSchedule,
 } from "./scheduledTask.ts";
 
 const decodeSchedule = Schema.decodeUnknownSync(ScheduledTaskSchedule);
 const decodeUpsertSchedule = Schema.decodeUnknownSync(ScheduledTaskUpsertSchedule);
+const decodeTask = Schema.decodeUnknownSync(ScheduledTask);
+
+const storedTask = {
+  id: "scheduled-task:nightly",
+  title: "Review issues",
+  prompt: "Review open issues",
+  enabled: true,
+  schedule: { type: "interval", everyMs: 60_000 },
+  projectId: "project:app",
+  threadId: null,
+  workspaceStrategy: { type: "root" },
+  modelSelection: { instanceId: "codex", model: "gpt-5" },
+  runtimeMode: "full-access",
+  interactionMode: "default",
+  createdBy: "user",
+  creationSource: "web",
+  createdAt: "2026-11-17T00:00:00.000Z",
+  updatedAt: "2026-11-17T00:00:00.000Z",
+  nextRunAt: null,
+  lastRunAt: null,
+  lastRunStatus: "never",
+  lastRunError: null,
+  runCount: 0,
+} as const;
+
+describe("ScheduledTask", () => {
+  it("decodes rows and older servers without createdByTotId", () => {
+    const decoded = decodeTask(storedTask);
+    expect(decoded.createdByTotId).toBeUndefined();
+    expect("createdByTotId" in decoded).toBe(false);
+  });
+
+  it("decodes the Tot whose MCP call created the task", () => {
+    expect(decodeTask({ ...storedTask, createdByTotId: "yui" }).createdByTotId).toBe("yui");
+    expect(() => decodeTask({ ...storedTask, createdByTotId: "Yui" })).toThrow();
+  });
+});
 
 describe("ScheduledTaskSchedule", () => {
   it("keeps legacy sub-minute persisted schedules readable", () => {
