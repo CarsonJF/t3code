@@ -221,6 +221,7 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
           interactionMode: shell.interactionMode,
           createdBy: "agent",
           creationSource: "mcp",
+          createdByTotId: caller.totId,
         })
         .pipe(
           Effect.mapError(

@@ -12,6 +12,7 @@ import {
   type ScheduledTaskUpsertInput,
   SecretRef,
   ThreadId,
+  TotId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -859,6 +860,55 @@ it.effect("a refused dispatch records its refusal, and opaque causes stay generi
         assert.equal(result.task.lastRunStatus, "failed");
         assert.equal(result.task.lastRunError, expected);
       }
+    }).pipe(Effect.provide(layer));
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
+);
+
+it.effect("remembers the Tot that created a task across later edits", () =>
+  Effect.gen(function* () {
+    const layer = ScheduledTaskService.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          ManagedPolicy.layerTest(),
+          Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
+          Layer.mock(ThreadManagementService.ThreadManagementService)({}),
+          Layer.mock(SecretRequests.SecretRequests)({}),
+          Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
+            namedProjectsRoot: "/projects",
+            isScratchProject: () => Effect.succeed(false),
+          }),
+          NodeCrypto.layer,
+          Layer.succeed(Scheduler.Scheduler, { register: () => Effect.void }),
+        ),
+      ),
+    );
+    yield* Effect.gen(function* () {
+      const service = yield* ScheduledTaskService.ScheduledTaskService;
+      const base = {
+        title: "Reminder",
+        prompt: "Check the build",
+        enabled: true,
+        schedule: { type: "interval", everyMs: 60_000 } as const,
+        projectId: ProjectId.make("project:test"),
+        workspaceStrategy: { type: "root" } as const,
+        modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+        runtimeMode: "full-access" as const,
+        interactionMode: "default" as const,
+      };
+      const { task } = yield* service.upsert({ ...base, createdByTotId: TotId.make("yui") });
+      assert.equal(task.createdByTotId, "yui");
+
+      // A client edit carries no author; the row keeps the Tot that made it.
+      yield* service.upsert({ ...base, id: task.id, title: "Reminder edited" });
+      const stored = (yield* service.list()).tasks.find((candidate) => candidate.id === task.id);
+      assert.equal(stored?.createdByTotId, "yui");
+
+      const personMade = yield* service.upsert({
+        ...base,
+        id: ScheduledTaskId.make("task:person"),
+        title: "Made by a person",
+      });
+      assert.isUndefined(personMade.task.createdByTotId);
     }).pipe(Effect.provide(layer));
   }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );
