@@ -41,7 +41,10 @@ describe("TotAvatar accessories", () => {
   it("maps a legacy bare kind and skips an id this catalog does not know", async () => {
     await using screen = await render(
       <TotAvatar
-        avatar={{ ...avatar, accessories: [{ kind: "glasses" }, { kind: "cardinal.storm-cloud" }] }}
+        avatar={{
+          ...avatar,
+          accessories: [{ kind: "glasses" }, { kind: "cardinal.test-only-never-registered" }],
+        }}
         state="idle"
         animation="still"
         size={64}
@@ -54,7 +57,7 @@ describe("TotAvatar accessories", () => {
     // An unknown id would make setAccessories throw, so the client drops it instead.
     expect(
       face(screen.container).shadowRoot?.querySelector(
-        '[data-accessory-id="cardinal.storm-cloud"]',
+        '[data-accessory-id="cardinal.test-only-never-registered"]',
       ),
     ).toBeNull();
   });

@@ -57,7 +57,7 @@
     "@tiptap/pm": "^3.31.3",
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
-    "boopface": "git+ssh://git@github.com/CarsonJF/boopface-fork.git#v0.9.1-cardinal.1",
+    "boopface": "git+ssh://git@github.com/CarsonJF/boopface-fork.git#v0.9.3-cardinal.1",
     "canvas-confetti": "1.9.4",
     "class-variance-authority": "^0.7.1",
     "culori": "^4.0.2",
