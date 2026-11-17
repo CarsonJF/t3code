@@ -658,8 +658,8 @@ importers:
         specifier: ^3.44.0
         version: 3.44.0(react-native-svg@15.16.1(patch_hash=7f94d240fc19418233c96f9a637dfd248846446657476c204f3614fd2847900e)(react-native@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.1(@babel/core@7.29.7(supports-color@8.1.1))(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(@types/react@19.3.0)(bufferutil@4.1.0)(react@19.3.0)(supports-color@8.1.1)(utf-8-validate@6.0.6))(react@19.3.0))(react@19.3.0)
       boopface:
-        specifier: 0.8.0
-        version: 0.8.0
+        specifier: git+ssh://git@github.com/CarsonJF/boopface-fork.git#v0.9.3-cardinal.1
+        version: git+https://github.com/CarsonJF/boopface-fork.git#3683a7951265fe3677aef27fe1f6af0f3dd7aca0
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -1218,8 +1218,8 @@ importers:
         specifier: ^3.31.3
         version: 3.31.3
       boopface:
-        specifier: 0.8.0
-        version: 0.8.0
+        specifier: git+ssh://git@github.com/CarsonJF/boopface-fork.git#v0.9.3-cardinal.1
+        version: git+https://github.com/CarsonJF/boopface-fork.git#3683a7951265fe3677aef27fe1f6af0f3dd7aca0
       canvas-confetti:
         specifier: 1.9.4
         version: 1.9.4
@@ -8424,8 +8424,9 @@ packages:
     resolution: {integrity: sha512-d0II/GO9uf9lfUHH2BQsjxzRJZBdsjgsBiW4BvhWk/3qoKwQFjIDVN19PfX8F2D/r9PCMTtLWjYVCFrpeYUzsw==}
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
-  boopface@0.8.0:
-    resolution: {integrity: sha512-V3VI+SoCqopipRNQqNrRmMbtSFMQTY6CnvMMtYMgIa8WIAtF+6nWTyPQISVpA974un0FFKpo7lYGQ+zUTLlk4w==}
+  boopface@git+https://github.com/CarsonJF/boopface-fork.git#3683a7951265fe3677aef27fe1f6af0f3dd7aca0:
+    resolution: {commit: 3683a7951265fe3677aef27fe1f6af0f3dd7aca0, repo: https://github.com/CarsonJF/boopface-fork.git, type: git}
+    version: 0.9.3-cardinal.1
 
   bplist-creator@0.1.0:
     resolution: {integrity: sha512-sXaHZicyEEmY86WyueLTQesbeoH/mquvarJaQNbjuOQO+7gbFcDEWqKmcWA4cOTLzFlfgvkiVxolk1k5bBIpmg==}
@@ -18729,7 +18730,7 @@ snapshots:
   boolean@3.2.0:
     optional: true
 
-  boopface@0.8.0: {}
+  boopface@git+https://github.com/CarsonJF/boopface-fork.git#3683a7951265fe3677aef27fe1f6af0f3dd7aca0: {}
 
   bplist-creator@0.1.0:
     dependencies:

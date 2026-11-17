@@ -80,7 +80,7 @@
     "@t3tools/mobile-terminal-native": "file:./modules/t3-terminal",
     "@t3tools/shared": "workspace:*",
     "@tabler/icons-react-native": "^3.44.0",
-    "boopface": "0.8.0",
+    "boopface": "git+ssh://git@github.com/CarsonJF/boopface-fork.git#v0.9.3-cardinal.1",
     "clsx": "^2.1.1",
     "diff": "8.0.3",
     "effect": "catalog:",
