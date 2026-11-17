@@ -57,6 +57,11 @@ jobs:
           path: ${{ steps.package_cache_path.outputs.path }}
           key: windows-tests-packages-v1-${{ hashFiles('pnpm-lock.yaml') }}
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Install
         run: vp install
 

@@ -432,7 +432,15 @@ const make = Effect.gen(function* () {
   const saveDesign = Effect.fn("TotService.saveDesign")(function* (id: TotId, avatar: TotAvatar) {
     const tot = yield* requireTot(id);
     const faceKey = (face: TotAvatar) =>
-      `${face.color}|${face.skin ?? ""}|${face.shape ?? ""}|${face.antenna === true}`;
+      [
+        face.color,
+        face.skin ?? "",
+        face.shape ?? "",
+        face.antenna === true,
+        (face.accessories ?? [])
+          .map((accessory) => `${accessory.kind}:${accessory.color ?? ""}`)
+          .join(","),
+      ].join("|");
     const key = faceKey(avatar);
     const designs = [
       avatar,

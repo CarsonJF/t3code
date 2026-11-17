@@ -322,10 +322,12 @@ it.effect("keeps a Tot's own face designs, newest first, without repeats", () =>
     const tots = yield* TotService.TotService;
     yield* tots.saveDesign(HOME_TOT_ID, { color: "#111111" });
     yield* tots.saveDesign(HOME_TOT_ID, { color: "#222222", shape: "gem", antenna: true });
+    yield* tots.saveDesign(HOME_TOT_ID, { color: "#222222", accessories: [{ kind: "halo" }] });
     const again = yield* tots.saveDesign(HOME_TOT_ID, { color: "#111111" });
     expect(again.avatar).toEqual({ color: "#111111" });
     expect(again.designs).toEqual([
       { color: "#111111" },
+      { color: "#222222", accessories: [{ kind: "halo" }] },
       { color: "#222222", shape: "gem", antenna: true },
     ]);
   }).pipe(Effect.provide(layer));

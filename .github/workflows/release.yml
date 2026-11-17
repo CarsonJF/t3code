@@ -134,6 +134,11 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -247,6 +252,11 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -278,6 +288,11 @@ jobs:
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
@@ -318,6 +333,11 @@ jobs:
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
@@ -378,6 +398,11 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -430,6 +455,11 @@ jobs:
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
@@ -549,6 +579,11 @@ jobs:
         with:
           name: release-dependency-verification
           path: ${{ runner.temp }}/pnpm-metadata
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
@@ -827,6 +862,11 @@ jobs:
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
@@ -1118,6 +1158,11 @@ jobs:
             /pnpm-workspace.yaml
           sparse-checkout-cone-mode: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup Node.js
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -1206,6 +1251,11 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -1227,6 +1277,11 @@ jobs:
 
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Refresh release lockfile
         run: vp install --lockfile-only --ignore-scripts
@@ -1307,6 +1362,11 @@ jobs:
             /pnpm-workspace.yaml
           sparse-checkout-cone-mode: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup Vite+
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -1377,6 +1437,11 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -1443,6 +1508,11 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup Vite+
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -1501,6 +1571,11 @@ jobs:
           echo "name=${APP_SLUG}[bot]" >> "$GITHUB_OUTPUT"
           echo "email=${user_id}+${APP_SLUG}[bot]@users.noreply.github.com" >> "$GITHUB_OUTPUT"
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -1515,6 +1590,11 @@ jobs:
       - name: Format package.json files
         if: steps.update_versions.outputs.changed == 'true'
         run: vp fmt apps/server/package.json apps/desktop/package.json apps/web/package.json packages/contracts/package.json
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Refresh lockfile
         if: steps.update_versions.outputs.changed == 'true'
@@ -1571,6 +1651,11 @@ jobs:
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
