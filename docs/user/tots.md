@@ -148,7 +148,7 @@ Deleting a group chat deletes its thread. Deleting a Tot removes it from its gro
 
 ## Faces
 
-Pick a face's color, shape and skin when you create or edit a Tot. The antenna is off unless you turn it on for that Tot. A top hat, glasses and a halo are one click each; they can be worn together, each in its own color, and clicking one again takes it off. They show wherever the Tot's face is drawn, including its Discord avatar. When you edit a Tot that is on, type a few words under the face controls and press **Ask**: the Tot designs its own face, which becomes its face and joins a row of saved designs you can pick from later. Skins come in series, such as Jelly, Metal or Wood; pick a series to see its skins. On mobile you can change the color and shape; a skin or accessory set on desktop shows there too.
+Pick a face's color, shape and skin when you create or edit a Tot. The antenna is off unless you turn it on for that Tot. The face catalog's accessories — today a top hat, glasses and a halo — are one click each; they can be worn together, each in its own color, and clicking one again takes it off. They show wherever the Tot's face is drawn, including its Discord avatar. When you edit a Tot that is on, type a few words under the face controls and press **Ask**: the Tot designs its own face, which becomes its face and joins a row of saved designs you can pick from later. Skins come in series, such as Jelly, Metal or Wood; pick a series to see its skins. On mobile you can change the color and shape; a skin or accessory set on desktop shows there too.
 
 Faces move in a Tot's own thread, in the Tots tab, and when you hover them in the sidebar. To keep them still, turn off **Animate Tot avatars** in Appearance settings, on each device.
 

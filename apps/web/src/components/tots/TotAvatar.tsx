@@ -2,6 +2,7 @@ import type { TotAnimation } from "@t3tools/client-runtime/tots";
 import {
   totAccessoryFit,
   totHeadBox,
+  totWearableAccessories,
   type TotAccessoryFrame,
 } from "@t3tools/client-runtime/tots/accessories";
 import { applyTotAntenna, applyTotHeadShape } from "@t3tools/client-runtime/tots/shapes";
@@ -90,11 +91,20 @@ export function TotAvatar(props: {
     applyTotAntenna(face, props.avatar.antenna === true);
   }, [defined, props.avatar.antenna]);
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- dresses the boop-face element in its accessories
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- dresses the boop-face element in the accessories its catalog knows
   useEffect(() => {
     const face = ref.current;
     if (!defined || face === null) return;
-    face.setAccessories(props.avatar.accessories ?? []);
+    let cancelled = false;
+    void loadBoopFace().then((module) => {
+      if (cancelled || ref.current !== face) return;
+      face.setAccessories(
+        totWearableAccessories(props.avatar.accessories, module.listAccessories()),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [defined, props.avatar.accessories]);
 
   return (

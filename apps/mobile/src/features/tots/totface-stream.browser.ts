@@ -1,8 +1,9 @@
 // Runs inside the Tot face WebView: one BoopFace that the app drives by message.
-import "boopface";
+import { listAccessories } from "boopface";
 import {
   totAccessoryFit,
   totHeadBox,
+  totWearableAccessories,
   type TotAccessoryFrame,
 } from "@t3tools/client-runtime/tots/accessories";
 import { applyTotAntenna, applyTotHeadShape } from "@t3tools/client-runtime/tots/shapes";
@@ -68,7 +69,7 @@ const apply = (message: FaceMessage) => {
   face.setAttribute("motion", message.motion);
   applyTotHeadShape(face, message.shape);
   applyTotAntenna(face, message.antenna === true);
-  face.setAccessories(message.accessories ?? []);
+  face.setAccessories(totWearableAccessories(message.accessories, listAccessories()));
   fitFace(face, message);
   face.setPointerFollow(false);
   face.play(message.action);

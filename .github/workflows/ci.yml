@@ -84,6 +84,11 @@ jobs:
             exit 1
           fi
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup Vite+
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -158,6 +163,11 @@ jobs:
               sudo apt-get install -y libsecret-1-dev pkg-config xvfb
             echo "$?" > "$RUNNER_TEMP/apt-status"
           ) > "$RUNNER_TEMP/apt.log" 2>&1 < /dev/null &
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Setup Vite+
         uses: ./.github/actions/setup-ci-deps
@@ -312,6 +322,11 @@ jobs:
             echo "$?" > "$RUNNER_TEMP/apt-status"
           ) > "$RUNNER_TEMP/apt.log" 2>&1 < /dev/null &
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup Vite+
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -387,6 +402,11 @@ jobs:
             !/apps/mobile/modules/t3-terminal/Vendor/**/*.a
           sparse-checkout-cone-mode: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup Vite+
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -456,6 +476,11 @@ jobs:
       - name: Detect affected jobs
         id: changes
         uses: ./.github/actions/ci-changes
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Setup Vite+
         if: steps.changes.outputs.test_server != 'false'
@@ -608,6 +633,11 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
         with:
@@ -641,6 +671,11 @@ jobs:
             !/.repos/
             !/apps/mobile/modules/t3-terminal/Vendor/**/*.a
           sparse-checkout-cone-mode: false
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Setup Vite+
         uses: ./.github/actions/setup-ci-deps

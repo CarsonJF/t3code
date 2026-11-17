@@ -1,28 +1,107 @@
 /**
- * BoopFace's accessory geometry, for the surfaces that draw a Tot without the
- * web component: the still face on mobile and the Discord bridge's PNG. The
- * numbers come from the accessory module in BoopFace 0.9, which works in its
- * 240 box; each surface maps them with its own head box and eye line.
+ * Accessory art for the surfaces without the web component: the mobile still
+ * face and the Discord PNG. Art exists for the built-ins; a catalog id this
+ * build does not know is skipped, and the web component draws it.
  */
-import type { TotAccessory, TotAccessoryKind, TotShape } from "@t3tools/contracts";
+import type { TotAccessory, TotShape } from "@t3tools/contracts";
 
 import { totHeadPoints, type HeadPoint } from "./shapes.ts";
 
-/** The colors BoopFace gives an accessory saved without one. */
-const TOT_ACCESSORY_DEFAULT_COLORS: Record<TotAccessoryKind, string> = {
+/** The accessories the native surfaces have art for. */
+export type TotAccessoryShape = "top-hat" | "glasses" | "halo";
+
+/** The three items this build can draw without a catalog read. */
+export interface TotAccessoryChoice {
+  /** The catalog id, such as `cardinal.top-hat`. */
+  readonly id: string;
+  readonly label: string;
+  readonly defaultColor: string;
+}
+
+export const TOT_ACCESSORY_FALLBACK: ReadonlyArray<TotAccessoryChoice> = [
+  { id: "cardinal.top-hat", label: "Top hat", defaultColor: "#191b20" },
+  { id: "cardinal.glasses", label: "Glasses", defaultColor: "#262b33" },
+  { id: "cardinal.halo", label: "Halo", defaultColor: "#f4c84b" },
+];
+
+const TOT_ACCESSORY_DEFAULT_COLORS: Record<TotAccessoryShape, string> = {
   "top-hat": "#191b20",
   glasses: "#262b33",
   halo: "#f4c84b",
 };
 
-export const TOT_ACCESSORY_LABELS: Record<TotAccessoryKind, string> = {
-  "top-hat": "Top hat",
-  glasses: "Glasses",
-  halo: "Halo",
+/** The bare kind of a catalog id: `cardinal.top-hat` becomes `top-hat`. */
+export const totAccessoryBareId = (id: string): string => {
+  const text = id.trim().toLowerCase();
+  return text.slice(text.lastIndexOf(".") + 1);
 };
 
-export const totAccessoryColor = (accessory: TotAccessory): string =>
-  accessory.color ?? TOT_ACCESSORY_DEFAULT_COLORS[accessory.kind];
+/** The built-in art an id maps to, or null for a catalog item this build cannot draw. */
+export const totAccessoryShape = (id: string): TotAccessoryShape | null => {
+  const bare = totAccessoryBareId(id);
+  return bare === "top-hat" || bare === "glasses" || bare === "halo" ? bare : null;
+};
+
+/**
+ * What the editor offers: the component's registered catalog, or the three
+ * built-ins when the registry cannot be read.
+ */
+export const totAccessoryChoices = (
+  catalog: ReadonlyArray<{ id?: unknown; label?: unknown; defaultColor?: unknown }> | undefined,
+): ReadonlyArray<TotAccessoryChoice> => {
+  const choices = (catalog ?? []).flatMap((entry): TotAccessoryChoice[] => {
+    if (typeof entry.id !== "string" || entry.id === "") return [];
+    return [
+      {
+        id: entry.id,
+        label: typeof entry.label === "string" && entry.label !== "" ? entry.label : entry.id,
+        defaultColor:
+          typeof entry.defaultColor === "string" && /^#[0-9a-fA-F]{6}$/u.test(entry.defaultColor)
+            ? entry.defaultColor
+            : (TOT_ACCESSORY_DEFAULT_COLORS[totAccessoryShape(entry.id) ?? "top-hat"] ?? "#191b20"),
+      },
+    ];
+  });
+  return choices.length > 0 ? choices : TOT_ACCESSORY_FALLBACK;
+};
+
+export const totAccessoryColor = (
+  accessory: TotAccessory,
+  choices: ReadonlyArray<TotAccessoryChoice> = TOT_ACCESSORY_FALLBACK,
+): string => {
+  if (accessory.color !== undefined) return accessory.color;
+  const bare = totAccessoryBareId(accessory.kind);
+  const exact = choices.find((choice) => choice.id === accessory.kind);
+  const byBare = exact ?? choices.find((choice) => totAccessoryBareId(choice.id) === bare);
+  return (
+    byBare?.defaultColor ??
+    TOT_ACCESSORY_DEFAULT_COLORS[totAccessoryShape(accessory.kind) ?? "top-hat"]
+  );
+};
+
+/**
+ * The accessories the loaded component can draw, mapped to its catalog ids.
+ * Unknown ids are left to a newer client instead of making setAccessories throw.
+ */
+export const totWearableAccessories = (
+  accessories: ReadonlyArray<TotAccessory> | undefined,
+  catalog: ReadonlyArray<{ readonly id: string }>,
+): ReadonlyArray<{ readonly kind: string; readonly color?: string }> => {
+  const wearable: { kind: string; color?: string }[] = [];
+  for (const accessory of accessories ?? []) {
+    const exact = catalog.find((entry) => entry.id === accessory.kind);
+    const bare = totAccessoryBareId(accessory.kind);
+    const byBare =
+      exact === undefined ? catalog.filter((entry) => totAccessoryBareId(entry.id) === bare) : [];
+    const known = exact ?? (byBare.length === 1 ? byBare[0] : undefined);
+    if (known === undefined) continue;
+    wearable.push({
+      kind: known.id,
+      ...(accessory.color === undefined ? {} : { color: accessory.color }),
+    });
+  }
+  return wearable;
+};
 
 export const TOT_TOP_HAT_ART = {
   brim: { rx: 62, ry: 11 },
@@ -227,8 +306,9 @@ const totAccessoryReach = (
   const scale = headScale(frame);
   let reach = 0;
   for (const accessory of accessories) {
-    if (accessory.kind === "top-hat") reach = Math.max(reach, 67 * scale);
-    if (accessory.kind === "halo") reach = Math.max(reach, 72 * scale);
+    const shape = totAccessoryShape(accessory.kind);
+    if (shape === "top-hat") reach = Math.max(reach, 67 * scale);
+    if (shape === "halo") reach = Math.max(reach, 72 * scale);
   }
   return reach;
 };

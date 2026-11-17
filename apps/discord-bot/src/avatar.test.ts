@@ -93,6 +93,15 @@ describe("renderTotFace", () => {
     expect(rim[3]).toBe(255);
   });
 
+  it("draws a catalog id like its legacy bare kind and ignores an unknown id", () => {
+    expect(renderTotFace({ ...home, accessories: [{ kind: "cardinal.glasses" }] })).toEqual(
+      renderTotFace({ ...home, accessories: [{ kind: "glasses" }] }),
+    );
+    expect(renderTotFace({ ...home, accessories: [{ kind: "cardinal.storm-cloud" }] })).toEqual(
+      renderTotFace(home),
+    );
+  });
+
   it("keeps the antenna visible over a hat, as BoopFace does", () => {
     const hat = read(renderTotFace({ ...home, accessories: [{ kind: "top-hat" }] }));
     const both = read(

@@ -127,6 +127,35 @@ it("puts the glasses on the still face's own eye line", async () => {
   }
 });
 
+it("wears a namespaced catalog id and skips one this build cannot draw", async () => {
+  const worn = await renderFace({
+    avatar: { ...home, accessories: [{ kind: "cardinal.glasses" }] },
+    state: "idle",
+    size: 30,
+  });
+  try {
+    expect(
+      ofKind(worn.container, "Rect").filter((rect) => propsOf(rect).stroke === "#262b33"),
+    ).toHaveLength(2);
+  } finally {
+    await worn.cleanup();
+  }
+
+  const unknown = await renderFace({
+    avatar: { ...home, accessories: [{ kind: "cardinal.storm-cloud" }] },
+    state: "idle",
+    size: 30,
+  });
+  try {
+    // Nothing is invented for an id this build has no art for.
+    expect(ofKind(unknown.container, "Path")).toHaveLength(0);
+    expect(ofKind(unknown.container, "Ellipse")).toHaveLength(0);
+    expect(ofKind(unknown.container, "Rect")).toHaveLength(3);
+  } finally {
+    await unknown.cleanup();
+  }
+});
+
 it("floats a halo above the head in its own color", async () => {
   const face = await renderFace({
     avatar: { ...home, accessories: [{ kind: "halo", color: "#ffd166" }] },

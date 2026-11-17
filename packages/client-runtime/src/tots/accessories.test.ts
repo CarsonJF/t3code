@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  TOT_ACCESSORY_FALLBACK,
   TOT_GLASSES_ART,
   TOT_HALO_ART,
   TOT_TOP_HAT_ART,
+  totAccessoryBareId,
+  totAccessoryChoices,
   totAccessoryColor,
   totAccessoryFit,
   totAccessoryPoint,
+  totAccessoryShape,
   totGlassesPlacement,
   totHaloPlacement,
   totHeadBox,
@@ -14,6 +18,7 @@ import {
   totTopHatCrownOutline,
   totTopHatCrownPath,
   totTopHatPlacement,
+  totWearableAccessories,
   type TotAccessoryFrame,
 } from "./accessories.ts";
 
@@ -136,6 +141,55 @@ describe("totAccessoryFit", () => {
   });
 });
 
+describe("accessory ids", () => {
+  it("reads a catalog id and a legacy bare kind as the same item", () => {
+    expect(totAccessoryBareId("cardinal.top-hat")).toBe("top-hat");
+    expect(totAccessoryBareId("top-hat")).toBe("top-hat");
+    expect(totAccessoryShape("cardinal.top-hat")).toBe("top-hat");
+    expect(totAccessoryShape("top-hat")).toBe("top-hat");
+    expect(totAccessoryShape("cardinal.glasses")).toBe("glasses");
+    expect(totAccessoryShape("cardinal.halo")).toBe("halo");
+  });
+
+  it("returns null for a catalog item this build has no art for", () => {
+    expect(totAccessoryShape("cardinal.storm-cloud")).toBeNull();
+    expect(totAccessoryShape("other-pack.crown")).toBeNull();
+  });
+
+  it("offers the component registry, falling back to the three built-ins", () => {
+    expect(
+      totAccessoryChoices([
+        { id: "cardinal.jester-hat", label: "Jester hat", defaultColor: "#ff00aa" },
+        { id: "cardinal.top-hat", label: "Top hat", defaultColor: "#191b20" },
+      ]),
+    ).toEqual([
+      { id: "cardinal.jester-hat", label: "Jester hat", defaultColor: "#ff00aa" },
+      { id: "cardinal.top-hat", label: "Top hat", defaultColor: "#191b20" },
+    ]);
+    expect(totAccessoryChoices(undefined)).toEqual(TOT_ACCESSORY_FALLBACK);
+    expect(totAccessoryChoices([])).toEqual(TOT_ACCESSORY_FALLBACK);
+    expect(totAccessoryChoices([{ label: "no id" }])).toEqual(TOT_ACCESSORY_FALLBACK);
+  });
+
+  it("maps what the component knows to catalog ids and leaves the rest out", () => {
+    expect(
+      totWearableAccessories(
+        [
+          { kind: "top-hat" },
+          { kind: "cardinal.glasses", color: "#123456" },
+          { kind: "cardinal.storm-cloud" },
+          { kind: "cardinal.halo" },
+        ],
+        TOT_ACCESSORY_FALLBACK,
+      ),
+    ).toEqual([
+      { kind: "cardinal.top-hat" },
+      { kind: "cardinal.glasses", color: "#123456" },
+      { kind: "cardinal.halo" },
+    ]);
+  });
+});
+
 describe("accessory art", () => {
   it("draws the hat's crown from its own outline", () => {
     expect(totTopHatCrownPath()).toBe(`M -34 1 L -29 -58 Q 0 -66 29 -58 L 34 1 Z`);
@@ -146,9 +200,15 @@ describe("accessory art", () => {
   });
 
   it("gives an accessory its own color unless the Tot picked one", () => {
+    expect(totAccessoryColor({ kind: "cardinal.halo" })).toBe("#f4c84b");
     expect(totAccessoryColor({ kind: "halo" })).toBe("#f4c84b");
-    expect(totAccessoryColor({ kind: "glasses" })).toBe("#262b33");
+    expect(totAccessoryColor({ kind: "cardinal.glasses" })).toBe("#262b33");
     expect(totAccessoryColor({ kind: "top-hat" })).toBe("#191b20");
-    expect(totAccessoryColor({ kind: "glasses", color: "#123456" })).toBe("#123456");
+    expect(totAccessoryColor({ kind: "cardinal.glasses", color: "#123456" })).toBe("#123456");
+    expect(
+      totAccessoryColor({ kind: "cardinal.jester-hat" }, [
+        { id: "cardinal.jester-hat", label: "Jester hat", defaultColor: "#ff00aa" },
+      ]),
+    ).toBe("#ff00aa");
   });
 });

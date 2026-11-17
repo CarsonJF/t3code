@@ -5,6 +5,7 @@ import {
   totAccessoryColor,
   totAccessoryFit,
   totAccessoryPoint,
+  totAccessoryShape,
   totAccessoryTransform,
   totGlassesBridgePath,
   totGlassesPlacement,
@@ -105,8 +106,10 @@ function Eyes(props: { readonly state: TotFaceState }) {
 /** The same accessories BoopFace draws, anchored to this face's own head and eyes. */
 function Accessory(props: { readonly accessory: TotAccessory; readonly frame: TotAccessoryFrame }) {
   const { accessory, frame } = props;
+  const shape = totAccessoryShape(accessory.kind);
+  if (shape === null) return null;
   const color = totAccessoryColor(accessory);
-  switch (accessory.kind) {
+  switch (shape) {
     case "top-hat": {
       const hat = totTopHatPlacement(frame);
       return (

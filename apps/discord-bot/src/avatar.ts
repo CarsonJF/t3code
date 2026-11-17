@@ -10,6 +10,7 @@ import {
   totAccessoryColor,
   totAccessoryFit,
   totAccessoryPoint,
+  totAccessoryShape,
   totGlassesPlacement,
   totHaloPlacement,
   totTopHatBandOutline,
@@ -264,8 +265,10 @@ const accessoryPaints = (
   };
 
   for (const accessory of accessories) {
+    const shape = totAccessoryShape(accessory.kind);
+    if (shape === null) continue;
     const colour = accessoryColour(accessory);
-    switch (accessory.kind) {
+    switch (shape) {
       case "top-hat": {
         const hat = totTopHatPlacement(frame);
         const art = (x: number, y: number) => totAccessoryPoint(hat, { x, y });

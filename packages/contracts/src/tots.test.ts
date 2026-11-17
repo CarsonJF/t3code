@@ -99,19 +99,33 @@ describe("Tot accessories", () => {
       decodeAvatar({
         color: "#0A7EA4",
         accessories: [
-          { kind: "top-hat" },
-          { kind: "glasses", color: "#262b33" },
-          { kind: "halo", color: "#F4C84B" },
+          { kind: "cardinal.top-hat" },
+          { kind: "cardinal.glasses", color: "#262b33" },
+          { kind: "cardinal.halo", color: "#F4C84B" },
         ],
       }),
     ).toEqual({
       color: "#0A7EA4",
       accessories: [
-        { kind: "top-hat" },
-        { kind: "glasses", color: "#262b33" },
-        { kind: "halo", color: "#F4C84B" },
+        { kind: "cardinal.top-hat" },
+        { kind: "cardinal.glasses", color: "#262b33" },
+        { kind: "cardinal.halo", color: "#F4C84B" },
       ],
     });
+  });
+
+  it("takes an id this build does not know, so a newer catalog needs no release", () => {
+    const unknown = { kind: "cardinal.storm-cloud", color: "#94A3B8" };
+    expect(decodeAvatar({ color: "#0A7EA4", accessories: [unknown] }).accessories).toEqual([
+      unknown,
+    ]);
+  });
+
+  it("still decodes the bare kinds older Tots saved", () => {
+    expect(
+      decodeAvatar({ color: "#0A7EA4", accessories: [{ kind: "top-hat" }, { kind: "glasses" }] })
+        .accessories,
+    ).toEqual([{ kind: "top-hat" }, { kind: "glasses" }]);
   });
 
   it("keeps accessories off a face that has none", () => {
@@ -123,7 +137,7 @@ describe("Tot accessories", () => {
     const saved = decodeTot({
       id: yui,
       name: "Yui",
-      avatar: { color: "#0A7EA4", accessories: [{ kind: "glasses" }] },
+      avatar: { color: "#0A7EA4", accessories: [{ kind: "cardinal.glasses" }] },
       scope: "all",
       instructions: "",
       projectId: null,
@@ -132,15 +146,23 @@ describe("Tot accessories", () => {
       watchAll: false,
       watches: [],
     });
-    expect(saved.avatar.accessories).toEqual([{ kind: "glasses" }]);
+    expect(saved.avatar.accessories).toEqual([{ kind: "cardinal.glasses" }]);
   });
 
-  it("refuses a fourth accessory, an unknown kind or a color that is not hex", () => {
-    const four = ["top-hat", "glasses", "halo", "top-hat"].map((kind) => ({ kind }));
+  it("refuses a fourth accessory, a malformed id or a color that is not hex", () => {
+    const four = ["top-hat", "glasses", "halo", "cardinal.crown"].map((kind) => ({ kind }));
     expect(() => decodeAvatar({ color: "#0A7EA4", accessories: four })).toThrow();
-    expect(() => decodeAvatar({ color: "#0A7EA4", accessories: [{ kind: "crown" }] })).toThrow();
+    for (const kind of [
+      "Cardinal.Top-Hat",
+      "cardinal..hat",
+      "cardinal.top-hat-",
+      "-cardinal",
+      "",
+    ]) {
+      expect(() => decodeAvatar({ color: "#0A7EA4", accessories: [{ kind }] })).toThrow();
+    }
     expect(() =>
-      decodeAvatar({ color: "#0A7EA4", accessories: [{ kind: "halo", color: "gold" }] }),
+      decodeAvatar({ color: "#0A7EA4", accessories: [{ kind: "cardinal.halo", color: "gold" }] }),
     ).toThrow();
   });
 });

@@ -9,11 +9,13 @@ describe("TotAvatar accessories", () => {
   const face = (container: HTMLElement) => container.querySelector("boop-face") as HTMLElement;
   const accessory = (container: HTMLElement, kind: string) =>
     face(container).shadowRoot?.querySelector(`[data-accessory="${kind}"]`) ?? null;
+  const accessoryId = (container: HTMLElement, id: string) =>
+    face(container).shadowRoot?.querySelector(`[data-accessory-id="${id}"]`) ?? null;
 
   it("wears the accessories on its face, above the eyes", async () => {
     await using screen = await render(
       <TotAvatar
-        avatar={{ ...avatar, accessories: [{ kind: "glasses" }] }}
+        avatar={{ ...avatar, accessories: [{ kind: "cardinal.glasses" }] }}
         state="idle"
         animation="still"
         size={64}
@@ -23,7 +25,9 @@ describe("TotAvatar accessories", () => {
 
     await vi.waitFor(() => expect(accessory(screen.container, "glasses")).not.toBeNull());
     const glasses = accessory(screen.container, "glasses")!;
-    // The layer sits inside the moving head, so it follows every pose.
+    // The namespaced catalog id reaches the component, and the layer sits inside the moving head.
+    expect(glasses.getAttribute("data-accessory-id")).toBe("cardinal.glasses");
+    expect(accessoryId(screen.container, "cardinal.glasses")).not.toBeNull();
     expect(glasses.closest("#headMotion")).not.toBeNull();
     expect(glasses.getAttribute("data-anchor")).toBe("eyes");
     expect(glasses.querySelectorAll("rect")).toHaveLength(2);
@@ -32,6 +36,27 @@ describe("TotAvatar accessories", () => {
     await vi.waitFor(() =>
       expect(face(screen.container).shadowRoot?.querySelector("[data-accessory]")).toBeNull(),
     );
+  });
+
+  it("maps a legacy bare kind and skips an id this catalog does not know", async () => {
+    await using screen = await render(
+      <TotAvatar
+        avatar={{ ...avatar, accessories: [{ kind: "glasses" }, { kind: "cardinal.storm-cloud" }] }}
+        state="idle"
+        animation="still"
+        size={64}
+      />,
+      { router: false /* a lone avatar, no routes */ },
+    );
+
+    await vi.waitFor(() => expect(accessory(screen.container, "glasses")).not.toBeNull());
+    expect(accessoryId(screen.container, "cardinal.glasses")).not.toBeNull();
+    // An unknown id would make setAccessories throw, so the client drops it instead.
+    expect(
+      face(screen.container).shadowRoot?.querySelector(
+        '[data-accessory-id="cardinal.storm-cloud"]',
+      ),
+    ).toBeNull();
   });
 
   it("keeps the antenna and the Tot shape working under a hat", async () => {
