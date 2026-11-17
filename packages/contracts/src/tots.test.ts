@@ -11,6 +11,7 @@ import {
   parseTotThreadId,
   TOT_FACE_ACTION,
   Tot,
+  TotAvatar,
   TotId,
   totLaunchedThreadId,
   totSlug,
@@ -87,6 +88,60 @@ describe("Tot settings", () => {
     expect(totWatchReportsOf(saved)).toBe("launched");
     expect(totWatchReportsOf({ watchReports: "explicit" })).toBe("explicit");
     expect(totWatchReportsOf({ watchReports: "off" })).toBe("off");
+  });
+});
+
+describe("Tot accessories", () => {
+  const decodeAvatar = Schema.decodeUnknownSync(TotAvatar);
+
+  it("lets a face wear each accessory once, with its own color", () => {
+    expect(
+      decodeAvatar({
+        color: "#0A7EA4",
+        accessories: [
+          { kind: "top-hat" },
+          { kind: "glasses", color: "#262b33" },
+          { kind: "halo", color: "#F4C84B" },
+        ],
+      }),
+    ).toEqual({
+      color: "#0A7EA4",
+      accessories: [
+        { kind: "top-hat" },
+        { kind: "glasses", color: "#262b33" },
+        { kind: "halo", color: "#F4C84B" },
+      ],
+    });
+  });
+
+  it("keeps accessories off a face that has none", () => {
+    expect(decodeAvatar({ color: "#0A7EA4" })).toEqual({ color: "#0A7EA4" });
+    expect(decodeAvatar({ color: "#0A7EA4", accessories: [] }).accessories).toEqual([]);
+  });
+
+  it("carries accessories through a Tot", () => {
+    const saved = decodeTot({
+      id: yui,
+      name: "Yui",
+      avatar: { color: "#0A7EA4", accessories: [{ kind: "glasses" }] },
+      scope: "all",
+      instructions: "",
+      projectId: null,
+      threadId: null,
+      modelSelection: null,
+      watchAll: false,
+      watches: [],
+    });
+    expect(saved.avatar.accessories).toEqual([{ kind: "glasses" }]);
+  });
+
+  it("refuses a fourth accessory, an unknown kind or a color that is not hex", () => {
+    const four = ["top-hat", "glasses", "halo", "top-hat"].map((kind) => ({ kind }));
+    expect(() => decodeAvatar({ color: "#0A7EA4", accessories: four })).toThrow();
+    expect(() => decodeAvatar({ color: "#0A7EA4", accessories: [{ kind: "crown" }] })).toThrow();
+    expect(() =>
+      decodeAvatar({ color: "#0A7EA4", accessories: [{ kind: "halo", color: "gold" }] }),
+    ).toThrow();
   });
 });
 

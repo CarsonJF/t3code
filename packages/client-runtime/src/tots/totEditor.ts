@@ -1,5 +1,6 @@
 import {
   type ModelSelection,
+  type TotAccessory,
   type TotAvatar,
   type TotCreateInput,
   type TotId,
@@ -15,6 +16,7 @@ export interface TotDraft {
   readonly skin: number | null;
   readonly shape?: TotShape;
   readonly antenna?: boolean;
+  readonly accessories?: ReadonlyArray<TotAccessory>;
   readonly scope: TotScope;
   readonly instructions: string;
   readonly modelSelection: ModelSelection;
@@ -53,6 +55,9 @@ export function validateTotDraft(
     ...(draft.skin === null ? {} : { skin: draft.skin }),
     ...(draft.shape === undefined || draft.shape === "round" ? {} : { shape: draft.shape }),
     ...(draft.antenna === true ? { antenna: true } : {}),
+    ...(draft.accessories === undefined || draft.accessories.length === 0
+      ? {}
+      : { accessories: draft.accessories }),
   };
   return {
     ok: true,

@@ -1,9 +1,17 @@
+import { TOT_ACCESSORY_LABELS, totAccessoryColor } from "@t3tools/client-runtime/tots/accessories";
 import {
   TOT_SKIN_SERIES,
   totSkinsIn,
   type TotSkinSeries,
 } from "@t3tools/client-runtime/tots/skins";
-import { TOT_SHAPES, type TotAvatar, type TotShape } from "@t3tools/contracts";
+import {
+  TOT_ACCESSORY_KINDS,
+  TOT_SHAPES,
+  type TotAccessory,
+  type TotAccessoryKind,
+  type TotAvatar,
+  type TotShape,
+} from "@t3tools/contracts";
 import type { ReactNode } from "react";
 
 import { Input } from "../ui/input";
@@ -19,11 +27,13 @@ export const totFaceOf = (
   skin: number | null,
   shape: TotShape,
   antenna: boolean,
+  accessories: ReadonlyArray<TotAccessory> = [],
 ): TotAvatar => ({
   color,
   ...(skin === null ? {} : { skin }),
   ...(shape === "round" ? {} : { shape }),
   ...(antenna ? { antenna } : {}),
+  ...(accessories.length === 0 ? {} : { accessories }),
 });
 
 /** The face controls from the Tot editor, shared with the Tot settings panel. */
@@ -40,17 +50,25 @@ export function TotFaceEditor(props: {
   const skin = value.skin ?? null;
   const shape = value.shape ?? "round";
   const antenna = value.antenna === true;
+  const accessories = value.accessories ?? [];
+  const worn = (kind: TotAccessoryKind) => accessories.find((entry) => entry.kind === kind);
+  const wearing = (kind: TotAccessoryKind, accessory: TotAccessory | null): TotAccessory[] => [
+    ...accessories.filter((entry) => entry.kind !== kind),
+    ...(accessory === null ? [] : [accessory]),
+  ];
   const face = (overrides: {
     color?: string;
     skin?: number | null;
     shape?: TotShape;
     antenna?: boolean;
+    accessories?: ReadonlyArray<TotAccessory>;
   }): TotAvatar =>
     totFaceOf(
       overrides.color ?? color,
       overrides.skin === undefined ? skin : overrides.skin,
       overrides.shape ?? shape,
       overrides.antenna === undefined ? antenna : overrides.antenna,
+      overrides.accessories ?? accessories,
     );
   return (
     <div className="flex flex-col gap-1.5">
@@ -85,13 +103,57 @@ export function TotFaceEditor(props: {
             onClick={() => props.onChange(face({ shape: choice }))}
           >
             <TotFace
-              avatar={totFaceOf(color, skin, choice, antenna)}
+              avatar={totFaceOf(color, skin, choice, antenna, accessories)}
               state="idle"
               animation="still"
               size={28}
             />
           </button>
         ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5" aria-label="Accessories" role="group">
+        {TOT_ACCESSORY_KINDS.map((kind) => {
+          const accessory = worn(kind);
+          return (
+            <div
+              key={kind}
+              className="flex items-center gap-1 rounded-md border border-border p-0.5"
+            >
+              <button
+                type="button"
+                aria-label={
+                  accessory === undefined
+                    ? `Wear ${TOT_ACCESSORY_LABELS[kind]}`
+                    : `Remove ${TOT_ACCESSORY_LABELS[kind]}`
+                }
+                aria-pressed={accessory !== undefined}
+                className="rounded px-1.5 py-1 text-xs aria-pressed:bg-muted aria-pressed:text-foreground"
+                onClick={() =>
+                  props.onChange(
+                    face({
+                      accessories: wearing(kind, accessory === undefined ? { kind } : null),
+                    }),
+                  )
+                }
+              >
+                {TOT_ACCESSORY_LABELS[kind]}
+              </button>
+              {accessory === undefined ? null : (
+                <input
+                  type="color"
+                  aria-label={`${TOT_ACCESSORY_LABELS[kind]} color`}
+                  className="size-5 cursor-pointer rounded border-0 bg-transparent p-0"
+                  value={totAccessoryColor(accessory)}
+                  onChange={(event) =>
+                    props.onChange(
+                      face({ accessories: wearing(kind, { kind, color: event.target.value }) }),
+                    )
+                  }
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
       {props.children}
       <div className="flex items-center justify-between gap-2">
@@ -135,7 +197,7 @@ export function TotFaceEditor(props: {
             onClick={() => props.onChange(face({ skin: choice }))}
           >
             <TotFace
-              avatar={totFaceOf(color, choice, shape, antenna)}
+              avatar={totFaceOf(color, choice, shape, antenna, accessories)}
               state="idle"
               animation="still"
               size={28}

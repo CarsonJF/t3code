@@ -70,6 +70,53 @@ describe("renderTotFace", () => {
 
     expect(pixelAt(png, 64, 30)).toEqual([10, 126, 164, 255]);
   });
+
+  it("draws each accessory where the app anchors it", () => {
+    const plain = read(renderTotFace(home));
+    const hat = read(renderTotFace({ ...home, accessories: [{ kind: "top-hat" }] }));
+    const glasses = read(renderTotFace({ ...home, accessories: [{ kind: "glasses" }] }));
+    const halo = read(renderTotFace({ ...home, accessories: [{ kind: "halo" }] }));
+
+    // Nothing above the head or over the eyes without them.
+    expect(pixelAt(plain, 64, 20)[3]).toBe(0);
+    expect(pixelAt(plain, 31, 72)).toEqual([10, 126, 164, 255]);
+
+    // The hat's default colour sits on the head top; the halo floats above it.
+    expect(pixelAt(hat, 64, 20)).toEqual([25, 27, 32, 255]);
+    const ring = pixelAt(halo, 64, 20);
+    expect(ring.slice(0, 3)).toEqual([244, 200, 75]);
+    expect(ring[3]).toBeGreaterThan(0);
+
+    // The glasses rim darkens the eye line without hiding the eye inside it.
+    const rim = pixelAt(glasses, 31, 72);
+    expect(rim[0]).toBeLessThan(60);
+    expect(rim[3]).toBe(255);
+  });
+
+  it("keeps the antenna visible over a hat, as BoopFace does", () => {
+    const hat = read(renderTotFace({ ...home, accessories: [{ kind: "top-hat" }] }));
+    const both = read(
+      renderTotFace({ ...home, antenna: true, accessories: [{ kind: "top-hat" }] }),
+    );
+
+    expect(pixelAt(hat, 64, 26)).toEqual([25, 27, 32, 255]);
+    expect(pixelAt(both, 64, 26)).toEqual([10, 126, 164, 255]);
+  });
+
+  it("draws accessories over the Tot's own shape", () => {
+    const flower = read(
+      renderTotFace({ ...home, shape: "flower", accessories: [{ kind: "top-hat" }] }),
+    );
+    const flowerPlain = read(renderTotFace({ ...home, shape: "flower" }));
+
+    let differs = 0;
+    for (let offset = 3; offset < flower.data.length; offset += 4) {
+      if (Math.abs((flower.data[offset] ?? 0) - (flowerPlain.data[offset] ?? 0)) > 128)
+        differs += 1;
+    }
+    expect(differs).toBeGreaterThan(100);
+    expect(pixelAt(flower, 64, 20)).toEqual([25, 27, 32, 255]);
+  });
 });
 
 describe("avatarSpecKey", () => {
@@ -79,6 +126,20 @@ describe("avatarSpecKey", () => {
     expect(avatarSpecKey(home)).not.toBe(avatarSpecKey({ ...home, skin: 305 }));
     expect(avatarSpecKey(home)).not.toBe(avatarSpecKey({ ...home, shape: "flower" }));
     expect(avatarSpecKey(home)).not.toBe(avatarSpecKey({ ...home, antenna: true }));
+  });
+
+  it("changes with the accessories, so an accessory change re-uploads", () => {
+    const key = avatarSpecKey(home);
+    expect(avatarSpecKey({ ...home, accessories: [] })).toBe(key);
+    expect(avatarSpecKey({ ...home, accessories: [{ kind: "glasses" }] })).not.toBe(key);
+    expect(
+      avatarSpecKey({ ...home, accessories: [{ kind: "glasses", color: "#ff0000" }] }),
+    ).not.toBe(avatarSpecKey({ ...home, accessories: [{ kind: "glasses" }] }));
+  });
+
+  it("no longer matches a face cached before accessories were drawn", () => {
+    // The hash of the pre-accessory spec, so every existing webhook uploads once.
+    expect(avatarSpecKey(home)).not.toBe("3a397cb1f116ccb9");
   });
 });
 
