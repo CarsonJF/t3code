@@ -48,11 +48,11 @@ describe("navigation tab order", () => {
     }
   });
 
-  it("shows every real section without overflow and keeps Settings selected during editing", () => {
-    expect(visibleNavigationTabs()).toEqual(NAVIGATION_TAB_ORDER);
-    expect(overflowNavigationTabs()).toEqual([]);
+  it("shows the first real sections without overflow and keeps the rest behind Settings", () => {
+    expect(visibleNavigationTabs()).toEqual(["threads", "tots", "pullRequests", "issues"]);
+    expect(overflowNavigationTabs()).toEqual(["usage"]);
     expect(selectedNavigationTab(undefined, "threads", true)).toBe("settings");
-    expect(selectedNavigationTab(undefined, "usage", false)).toBe("usage");
+    expect(selectedNavigationTab(undefined, "usage", false)).toBe("settings");
     expect(selectedNavigationTab(undefined, "usage", false, [], 2)).toBe("settings");
   });
 
