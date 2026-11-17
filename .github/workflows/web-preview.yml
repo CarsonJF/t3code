@@ -51,6 +51,11 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       # The Vercel CLI imports @vercel/config from here to read apps/web/vercel.ts.
       # No dependency lifecycle script runs in this job.
       - name: Setup Vite+
