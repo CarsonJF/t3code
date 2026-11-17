@@ -52,6 +52,7 @@ const reactTests = [
   "src/features/connection/useRetryEnvironment.test.tsx",
   "src/features/connection/ConnectionsNewRouteScreen.test.tsx",
   "src/features/connection/LinkedEnvironmentsSection.test.tsx",
+  "src/features/tots/TotStillFace.test.tsx",
   "src/features/devices/device-stream.browser.test.ts",
   "src/features/keyboard/keyboardControllerState.test.tsx",
 ];
