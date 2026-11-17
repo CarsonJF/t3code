@@ -28,6 +28,8 @@ on:
     secrets:
       EXPO_PRODUCTION_TOKEN:
         required: true
+      BOOPFACE_READ_KEY:
+        required: true
       MOBILE_SOURCEMAPS_R2:
         required: false
 
@@ -72,6 +74,11 @@ jobs:
             echo "built=true" >> "$GITHUB_OUTPUT"
             echo ":white_check_mark: android: \`$BUILD_TAG\` was built by an earlier run" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Build
         if: steps.record.outputs.built != 'true'
@@ -147,6 +154,11 @@ jobs:
             echo "built=true" >> "$GITHUB_OUTPUT"
             echo ":white_check_mark: ios: \`$BUILD_TAG\` was built by an earlier run" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Build
         if: steps.record.outputs.built != 'true'
