@@ -176,6 +176,14 @@ vi.mock("../state/projects", () => ({
   },
 }));
 vi.mock("../state/server", () => ({ serverEnvironment: {} }));
+vi.mock("../state/tots", () => ({
+  useAnimateTotAvatars: () => false,
+  useThreadTot: () => null,
+  useTotFace: () => "sleep",
+  useTots: () => [],
+}));
+// Metro maps the Tot face bundle; this test only needs the feed around it.
+vi.mock("../features/tots/TotLiveFace", () => ({ TotLiveFace: () => null }));
 vi.mock("../state/session", () => ({
   readEnvironmentScope: () => true,
   usePreparedConnection: () => ({ _tag: "Some", value: { httpBaseUrl: "https://example.com" } }),
