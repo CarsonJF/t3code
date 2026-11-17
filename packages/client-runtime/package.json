@@ -335,6 +335,10 @@
       "types": "./src/tots/tots.ts",
       "default": "./src/tots/tots.ts"
     },
+    "./tots/accessories": {
+      "types": "./src/tots/accessories.ts",
+      "default": "./src/tots/accessories.ts"
+    },
     "./tots/editor": {
       "types": "./src/tots/totEditor.ts",
       "default": "./src/tots/totEditor.ts"
