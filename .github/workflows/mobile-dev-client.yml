@@ -158,6 +158,11 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq ccache
           ccache --zero-stats
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
         with:
@@ -272,6 +277,11 @@ jobs:
             echo "::error::checkout credentials are still present"
             exit 1
           fi
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps

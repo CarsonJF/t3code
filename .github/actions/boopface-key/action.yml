@@ -1,0 +1,30 @@
+name: BoopFace read key
+description: Gives git the read-only deploy key for the private BoopFace fork. Run before any install.
+inputs:
+  key:
+    description: The private key from the BOOPFACE_READ_KEY repository secret.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Use the BoopFace read key
+      shell: bash
+      env:
+        BOOPFACE_READ_KEY: ${{ inputs.key }}
+      run: |
+        if [ -z "$BOOPFACE_READ_KEY" ]; then
+          echo "::error::BOOPFACE_READ_KEY is empty. Add the read-only deploy key for CarsonJF/boopface-fork as the BOOPFACE_READ_KEY repository secret, then re-run this job."
+          exit 1
+        fi
+        key="$RUNNER_TEMP/boopface-read-key"
+        (umask 077; printf '%s\n' "$BOOPFACE_READ_KEY" | tr -d '\r' > "$key")
+        chmod 600 "$key"
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          # Git for Windows hands ssh a Windows path, while bash sees /d/...
+          key="$(cygpath -w "$key")"
+        fi
+        echo "GIT_SSH_COMMAND=ssh -i \"$key\" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" >> "$GITHUB_ENV"
+        # pnpm records the fork's repo over HTTPS even for a git+ssh specifier,
+        # so map that one URL to SSH. The rewrite is scoped to the fork: pushes
+        # to t3code keep using the job's own credentials.
+        git config --global url."git@github.com:CarsonJF/boopface-fork.git".insteadOf "https://github.com/CarsonJF/boopface-fork.git"
