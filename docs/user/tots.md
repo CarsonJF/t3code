@@ -49,6 +49,8 @@ A Tot lives on one machine. To move it, open **Edit**, choose another machine un
 
 Tots sit under the search bar. Each row shows what the Tot is doing (working, needs you, failed, off) and a filled dot when it has replied since you last looked. Right-click a Tot to open, edit, open its memory, start fresh, turn it off or delete it. The **Tots** button at the bottom opens Tots settings.
 
+Click the section header to fold the list; its count stays visible while folded. Drag a Tot onto another Tot to reorder the section. The order is saved on that device rather than on the server, so each device can arrange the list differently, and rearranging never moves a Tot between machines. Group chats share the section and stay below the Tots.
+
 Turn on **Tot toasts** in Appearance settings to get a toast when a Tot replies, needs you or fails while you are in another thread.
 
 A Tot's replies are drawn in its color, with its face and name beside them.
