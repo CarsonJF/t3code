@@ -718,7 +718,12 @@ jobs:
           gh release edit "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --notes "$notes"
 
       - name: Close failure issue
-        if: needs.build.result != 'failure' && needs.build_linux.result != 'failure' && needs.build_mac.result != 'failure' && needs.build_android.result != 'failure'
+        # A build GitHub never scheduled is cancelled, not failed; keep the issue open for it.
+        if: >-
+          needs.build.result != 'failure' && needs.build.result != 'cancelled' &&
+          needs.build_linux.result != 'failure' && needs.build_linux.result != 'cancelled' &&
+          needs.build_mac.result != 'failure' && needs.build_mac.result != 'cancelled' &&
+          needs.build_android.result != 'failure' && needs.build_android.result != 'cancelled'
         run: |
           set -euo pipefail
           for n in $(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "custom-nightly failed"' --json number -q '.[].number'); do
@@ -728,7 +733,8 @@ jobs:
   report_failure:
     name: Report failure
     needs: [prepare, build, build_linux, build_mac, build_android, publish]
-    if: failure()
+    # GitHub cancels a job it never acquired (no runner capacity), which failure() misses.
+    if: failure() || contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
