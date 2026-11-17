@@ -343,3 +343,132 @@ it("keeps the touch keyboard down while choosing a provider", async () => {
   await expect.element(page.getByRole("option", { name: /Claude model/ })).toBeVisible();
   await expect.element(search).not.toHaveFocus();
 });
+
+function identityCardTexts(): ReadonlyArray<string> {
+  return Array.from(
+    document.querySelectorAll('[data-model-identity-tooltip="true"]'),
+    (card) => card.textContent ?? "",
+  );
+}
+
+async function waitForOnlyIdentityCard(): Promise<string> {
+  // The composer trigger sits outside the picker's zero-delay provider, so its tooltip rests first.
+  await vi.waitFor(() => expect(identityCardTexts()).toHaveLength(1), { timeout: 3000 });
+  return identityCardTexts()[0] ?? "";
+}
+
+const OPENCODE_ENTRIES = deriveProviderInstanceEntries([
+  {
+    instanceId: ProviderInstanceId.make("opencode"),
+    driver: ProviderDriverKind.make("opencode"),
+    displayName: "OpenCode",
+    enabled: true,
+    installed: true,
+    version: null,
+    status: "ready",
+    auth: { status: "authenticated" },
+    checkedAt: "2026-01-01T00:00:00.000Z",
+    models: [],
+    slashCommands: [],
+    skills: [],
+  },
+]);
+const OPENCODE_ID = OPENCODE_ENTRIES[0]!.instanceId;
+const OPENCODE_MODELS = [
+  {
+    slug: "opencode-go/deepseek-v4.1-flash",
+    name: "DeepSeek V4.1 Flash",
+    subProvider: "OpenCode Go",
+  },
+  { slug: "opencode-go/kimi-k3", name: "Kimi K3", subProvider: "OpenCode Go" },
+];
+
+it("names a highlighted model's full identity, channel and slug in a tooltip", async () => {
+  function Picker() {
+    const [model, setModel] = useState(OPENCODE_MODELS[0]!.slug);
+    return (
+      <ProviderModelPicker
+        environmentId={null}
+        activeInstanceId={OPENCODE_ID}
+        model={model}
+        lockedProvider={null}
+        instanceEntries={OPENCODE_ENTRIES}
+        modelOptionsByInstance={new Map([[OPENCODE_ID, OPENCODE_MODELS]])}
+        triggerAriaLabel="Choose model"
+        onInstanceModelChange={(_, selected) => setModel(selected)}
+      />
+    );
+  }
+
+  await using screen = await render(<Picker />);
+  await screen.getByRole("button", { name: "Choose model" }).click();
+  await userEvent.hover(page.getByRole("option", { name: /DeepSeek V4\.1 Flash/ }));
+  const hovered = await waitForOnlyIdentityCard();
+  expect(hovered).toContain("DeepSeek V4.1 Flash");
+  expect(hovered).toContain("OpenCode · OpenCode Go");
+  expect(hovered).toContain("opencode-go/deepseek-v4.1-flash");
+
+  // The pointer stays over the first row; the arrow keys move the card to the highlighted one.
+  await userEvent.keyboard("{ArrowDown}");
+  const keyboard = await waitForOnlyIdentityCard();
+  expect(keyboard).toContain("Kimi K3");
+  expect(keyboard).not.toContain("DeepSeek");
+  expect(keyboard).toContain("opencode-go/kimi-k3");
+
+  await page.getByRole("option", { name: /Kimi K3/ }).click();
+  await expect
+    .element(page.getByRole("button", { name: "Choose model" }))
+    .toHaveTextContent("Kimi K3");
+});
+
+it("names the composer trigger's selected model in full", async () => {
+  const [model] = OPENCODE_MODELS;
+  await using _screen = await render(
+    <ProviderModelPicker
+      environmentId={null}
+      activeInstanceId={OPENCODE_ID}
+      model={model!.slug}
+      lockedProvider={null}
+      instanceEntries={OPENCODE_ENTRIES}
+      modelOptionsByInstance={new Map([[OPENCODE_ID, OPENCODE_MODELS]])}
+      isComposerOwned
+      triggerAriaLabel="Choose model"
+      onInstanceModelChange={() => {}}
+    />,
+  );
+
+  const label = document.querySelector("[data-chat-provider-model-picker-label]");
+  expect(label).not.toBeNull();
+  await userEvent.hover(page.elementLocator(label!));
+  const card = await waitForOnlyIdentityCard();
+  expect(card).toContain("DeepSeek V4.1 Flash");
+  expect(card).toContain("OpenCode · OpenCode Go");
+  expect(card).toContain("opencode-go/deepseek-v4.1-flash");
+});
+
+it("keeps the identity card out of the way while a typed query highlights the top match", async () => {
+  function Picker() {
+    return (
+      <ProviderModelPicker
+        environmentId={null}
+        activeInstanceId={OPENCODE_ID}
+        model={OPENCODE_MODELS[0]!.slug}
+        lockedProvider={null}
+        instanceEntries={OPENCODE_ENTRIES}
+        modelOptionsByInstance={new Map([[OPENCODE_ID, OPENCODE_MODELS]])}
+        triggerAriaLabel="Choose model"
+        onInstanceModelChange={() => {}}
+      />
+    );
+  }
+
+  await using screen = await render(<Picker />);
+  await screen.getByRole("button", { name: "Choose model" }).click();
+  await userEvent.keyboard("kimi");
+  await expect.element(page.getByRole("option", { name: /Kimi K3/ })).toBeVisible();
+  expect(identityCardTexts()).toHaveLength(0);
+
+  // Pointing at the auto-highlighted row still brings up its full identity.
+  await userEvent.hover(page.getByRole("option", { name: /Kimi K3/ }));
+  expect(await waitForOnlyIdentityCard()).toContain("opencode-go/kimi-k3");
+});
