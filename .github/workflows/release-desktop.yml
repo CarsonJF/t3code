@@ -176,6 +176,11 @@ jobs:
           name: release-dependency-verification
           path: ${{ runner.temp }}/pnpm-metadata
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup dependencies
         uses: ./.github/actions/setup-ci-deps
         with:

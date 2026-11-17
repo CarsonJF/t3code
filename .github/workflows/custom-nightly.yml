@@ -199,6 +199,11 @@ jobs:
           cache: true
           run-install: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - id: budget
         name: Regenerate the agent context budget
         if: steps.resolve.outputs.mode == 'full'
@@ -278,6 +283,11 @@ jobs:
           cache: false
           run-install: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Install
         run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/scripts...
 
@@ -356,6 +366,11 @@ jobs:
           node-version-file: package.json
           cache: false
           run-install: false
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Install
         run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
@@ -439,6 +454,11 @@ jobs:
           node-version-file: package.json
           cache: false
           run-install: false
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Install
         run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
@@ -586,6 +606,11 @@ jobs:
           node-version-file: package.json
           cache: false
           run-install: false
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Install
         run: vp install --filter=@t3tools/mobile... --filter=@t3tools/scripts...
