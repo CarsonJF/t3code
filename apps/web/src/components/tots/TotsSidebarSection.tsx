@@ -9,22 +9,38 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { HOME_TOT_ID, type TotFaceState } from "@t3tools/contracts";
 import type { EnvironmentGroupChat } from "@t3tools/client-runtime/tots";
-import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import * as Schema from "effect/Schema";
+import {
+  memo,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { useShownThreadRouteTarget } from "~/hooks/useShownThreadRouteTarget";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useThreadShell } from "~/state/entities";
 import { useGroupChats, useTots } from "~/state/tots";
+import { cn } from "../../lib/utils";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { readLocalApi } from "../../localApi";
+import { useUiStateStore } from "../../uiStateStore";
+import { CollapsibleSectionHeader } from "../ui/collapsible-section-header";
 import { toastManager } from "../ui/toast";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
+import { moveTotOrder, orderTots, totOrderKey, withVisibleTotKeys } from "./totsSidebarOrder";
 import { GroupChatAvatar, useGroupChatMembers } from "./GroupChatAvatar";
 import { TotAvatar } from "./TotAvatar";
 import { useGroupChatActions } from "./useGroupChatActions";
 import { useTotAccent } from "./totAccent";
 import { useTotActions } from "./useTotActions";
+
+const DRAG_TYPE = "application/x-t3-tot";
+const SECTION_EXPANDED_KEY = "t3code:sidebar:tots-expanded";
 
 const STATUS_TONE: Partial<Record<TotFaceState, string>> = {
   working: "text-muted-foreground",
@@ -56,7 +72,12 @@ function TotStatus(props: { readonly state: TotFaceState; readonly accent: strin
 
 const TotRow = memo(function TotRow(props: {
   readonly entry: EnvironmentTot;
+  readonly rowKey: string;
   readonly active: boolean;
+  /** Set while this row is the drop target of a dragged Tot. */
+  readonly dropEdge: "before" | "after" | null;
+  readonly onDropEdge: (rowKey: string, edge: "before" | "after" | null) => void;
+  readonly onReorder: (draggedKey: string, targetKey: string, edge: "before" | "after") => void;
 }) {
   const { environmentId, tot } = props.entry;
   const navigate = useNavigate();
@@ -158,13 +179,46 @@ const TotRow = memo(function TotRow(props: {
     }
     void navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(ref) });
   };
+  const edgeOf = (event: ReactDragEvent<HTMLLIElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  };
   return (
     <SidebarMenuItem
       data-testid={`sidebar-tot-${tot.id}`}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData(DRAG_TYPE, props.rowKey);
+      }}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes(DRAG_TYPE)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        props.onDropEdge(props.rowKey, edgeOf(event));
+      }}
+      onDragLeave={() => props.onDropEdge(props.rowKey, null)}
+      onDrop={(event) => {
+        props.onDropEdge(props.rowKey, null);
+        const draggedKey = event.dataTransfer.getData(DRAG_TYPE);
+        if (draggedKey === "") return;
+        event.preventDefault();
+        props.onReorder(draggedKey, props.rowKey, edgeOf(event));
+      }}
       onContextMenu={handleContextMenu}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
     >
+      {props.dropEdge === null ? null : (
+        <span
+          aria-hidden
+          data-testid="sidebar-tot-drop-indicator"
+          className={cn(
+            "pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-ring",
+            props.dropEdge === "before" ? "-top-px" : "-bottom-px",
+          )}
+        />
+      )}
       {props.active ? (
         <span
           aria-hidden
@@ -248,36 +302,81 @@ export const TotsSidebarSection = memo(function TotsSidebarSection() {
   const tots = useTots();
   const rooms = useGroupChats();
   const shown = useShownThreadRouteTarget().shownTarget;
+  const totOrder = useUiStateStore((state) => state.totOrder);
+  const setTotOrder = useUiStateStore((state) => state.setTotOrder);
+  const [expanded, setExpanded] = useLocalStorage(SECTION_EXPANDED_KEY, true, Schema.Boolean);
+  const [dropTarget, setDropTarget] = useState<{
+    readonly key: string;
+    readonly edge: "before" | "after";
+  } | null>(null);
+  const orderedTots = orderTots(tots, totOrder);
+  const reorder = (draggedKey: string, targetKey: string, edge: "before" | "after") => {
+    const current = withVisibleTotKeys(totOrder, orderTots(tots, totOrder).map(totOrderKey));
+    const next = moveTotOrder(current, draggedKey, targetKey, edge);
+    if (next !== current) setTotOrder(next);
+  };
+  const setRowDropEdge = (rowKey: string, edge: "before" | "after" | null) =>
+    setDropTarget((current) => {
+      if (edge === null) return current?.key === rowKey ? null : current;
+      return current?.key === rowKey && current.edge === edge ? current : { key: rowKey, edge };
+    });
   if (tots.length === 0 && rooms.length === 0) return null;
   const shownThread = shown?.kind === "server" ? shown.threadRef : null;
   return (
     <div className="mt-1 mb-1 border-border/60 border-b pb-1">
-      <SidebarMenu aria-label="Tots" data-testid="sidebar-tots">
-        {tots.map((entry) => (
-          <TotRow
-            key={`${entry.environmentId}:${entry.tot.id}`}
-            entry={entry}
-            active={
-              shownThread !== null &&
-              entry.tot.threadId !== null &&
-              shownThread.environmentId === entry.environmentId &&
-              shownThread.threadId === entry.tot.threadId
-            }
-          />
-        ))}
-        {rooms.map((entry) => (
-          <GroupChatRow
-            key={`${entry.environmentId}:${entry.room.id}`}
-            entry={entry}
-            active={
-              shownThread !== null &&
-              entry.room.threadId !== null &&
-              shownThread.environmentId === entry.environmentId &&
-              shownThread.threadId === entry.room.threadId
-            }
-          />
-        ))}
-      </SidebarMenu>
+      <div className="mx-0.5 mb-1">
+        <CollapsibleSectionHeader
+          data-testid="sidebar-tots-toggle"
+          onClick={() => setExpanded((value) => !value)}
+          expanded={expanded}
+          accessory={
+            <span data-testid="sidebar-tots-count" className="font-normal tabular-nums">
+              {tots.length + rooms.length}
+            </span>
+          }
+        >
+          Tots
+        </CollapsibleSectionHeader>
+      </div>
+      {expanded ? (
+        <SidebarMenu
+          aria-label="Tots"
+          data-testid="sidebar-tots"
+          onDragEnd={() => setDropTarget(null)}
+        >
+          {orderedTots.map((entry) => {
+            const rowKey = totOrderKey(entry);
+            return (
+              <TotRow
+                key={rowKey}
+                rowKey={rowKey}
+                entry={entry}
+                onReorder={reorder}
+                onDropEdge={setRowDropEdge}
+                dropEdge={dropTarget?.key === rowKey ? dropTarget.edge : null}
+                active={
+                  shownThread !== null &&
+                  entry.tot.threadId !== null &&
+                  shownThread.environmentId === entry.environmentId &&
+                  shownThread.threadId === entry.tot.threadId
+                }
+              />
+            );
+          })}
+          {rooms.map((entry) => (
+            <GroupChatRow
+              key={`${entry.environmentId}:${entry.room.id}`}
+              entry={entry}
+              active={
+                shownThread !== null &&
+                entry.room.threadId !== null &&
+                shownThread.environmentId === entry.environmentId &&
+                shownThread.threadId === entry.room.threadId
+              }
+            />
+          ))}
+        </SidebarMenu>
+      ) : null}
     </div>
   );
 });
