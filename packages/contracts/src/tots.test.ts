@@ -11,6 +11,7 @@ import {
   parseTotThreadId,
   TOT_FACE_ACTION,
   Tot,
+  TotAvatar,
   TotId,
   totLaunchedThreadId,
   totSlug,
@@ -87,6 +88,82 @@ describe("Tot settings", () => {
     expect(totWatchReportsOf(saved)).toBe("launched");
     expect(totWatchReportsOf({ watchReports: "explicit" })).toBe("explicit");
     expect(totWatchReportsOf({ watchReports: "off" })).toBe("off");
+  });
+});
+
+describe("Tot accessories", () => {
+  const decodeAvatar = Schema.decodeUnknownSync(TotAvatar);
+
+  it("lets a face wear each accessory once, with its own color", () => {
+    expect(
+      decodeAvatar({
+        color: "#0A7EA4",
+        accessories: [
+          { kind: "cardinal.top-hat" },
+          { kind: "cardinal.glasses", color: "#262b33" },
+          { kind: "cardinal.halo", color: "#F4C84B" },
+        ],
+      }),
+    ).toEqual({
+      color: "#0A7EA4",
+      accessories: [
+        { kind: "cardinal.top-hat" },
+        { kind: "cardinal.glasses", color: "#262b33" },
+        { kind: "cardinal.halo", color: "#F4C84B" },
+      ],
+    });
+  });
+
+  it("takes an id this build does not know, so a newer catalog needs no release", () => {
+    const unknown = { kind: "cardinal.storm-cloud", color: "#94A3B8" };
+    expect(decodeAvatar({ color: "#0A7EA4", accessories: [unknown] }).accessories).toEqual([
+      unknown,
+    ]);
+  });
+
+  it("still decodes the bare kinds older Tots saved", () => {
+    expect(
+      decodeAvatar({ color: "#0A7EA4", accessories: [{ kind: "top-hat" }, { kind: "glasses" }] })
+        .accessories,
+    ).toEqual([{ kind: "top-hat" }, { kind: "glasses" }]);
+  });
+
+  it("keeps accessories off a face that has none", () => {
+    expect(decodeAvatar({ color: "#0A7EA4" })).toEqual({ color: "#0A7EA4" });
+    expect(decodeAvatar({ color: "#0A7EA4", accessories: [] }).accessories).toEqual([]);
+  });
+
+  it("carries accessories through a Tot", () => {
+    const saved = decodeTot({
+      id: yui,
+      name: "Yui",
+      avatar: { color: "#0A7EA4", accessories: [{ kind: "cardinal.glasses" }] },
+      scope: "all",
+      instructions: "",
+      projectId: null,
+      threadId: null,
+      modelSelection: null,
+      watchAll: false,
+      watches: [],
+    });
+    expect(saved.avatar.accessories).toEqual([{ kind: "cardinal.glasses" }]);
+  });
+
+  it("refuses a fourth accessory, a malformed id or a color that is not hex", () => {
+    const four = ["top-hat", "glasses", "halo", "cardinal.crown"].map((kind) => ({ kind }));
+    expect(() => decodeAvatar({ color: "#0A7EA4", accessories: four })).toThrow();
+    for (const kind of [
+      "Cardinal.Top-Hat",
+      "cardinal..hat",
+      "cardinal.top-hat-",
+      "-cardinal",
+      "",
+    ]) {
+      expect(() => decodeAvatar({ color: "#0A7EA4", accessories: [{ kind }] })).toThrow();
+    }
+    expect(() =>
+      decodeAvatar({ color: "#0A7EA4", accessories: [{ kind: "cardinal.halo", color: "gold" }] }),
+    ).toThrow();
   });
 });
 

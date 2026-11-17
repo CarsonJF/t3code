@@ -19,6 +19,8 @@ on:
     secrets:
       EXPO_PREVIEW_TOKEN:
         required: true
+      BOOPFACE_READ_KEY:
+        required: true
     outputs:
       client:
         description: Install link for the client with this fingerprint
@@ -65,6 +67,11 @@ jobs:
       # The steps below run dependency and build scripts; they get no token.
       - name: Drop checkout credentials
         uses: ./.github/actions/drop-checkout-credentials
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Build
         if: steps.record.outputs.built != 'true'
@@ -135,6 +142,11 @@ jobs:
       # The steps below run dependency and build scripts; they get no token.
       - name: Drop checkout credentials
         uses: ./.github/actions/drop-checkout-credentials
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Build
         if: steps.record.outputs.built != 'true'
