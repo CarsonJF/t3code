@@ -22,6 +22,7 @@ import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { cn } from "~/lib/utils";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { ModelPickerContent, resolveModelPickerSelectedModel } from "./ModelPickerContent";
+import { ModelIdentityTooltipContent } from "./ModelIdentityTooltip";
 import { retainedModelWhileProviderLocked } from "./ProviderModelPicker.logic";
 import { ChatGptSharingControl } from "./ChatGptSharingControl";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
@@ -433,7 +434,21 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             </span>
           ) : null}
           {props.isComposerOwned ? (
-            <span {...triggerTextProps}>{triggerText}</span>
+            <Tooltip>
+              <TooltipTrigger render={<span {...triggerTextProps} />}>{triggerText}</TooltipTrigger>
+              <TooltipPopup side="top" align="start">
+                {selectedEntries && selectedEntries.length > 1 ? (
+                  allModelNames
+                ) : (
+                  <ModelIdentityTooltipContent
+                    name={props.triggerLabel ?? triggerLabel}
+                    providerDisplayName={activeEntry?.displayName}
+                    source={selectedModel?.subProvider}
+                    slug={selectedModel?.slug ?? props.model}
+                  />
+                )}
+              </TooltipPopup>
+            </Tooltip>
           ) : (
             <SharedTooltipTrigger
               render={<span {...triggerTextProps} />}
