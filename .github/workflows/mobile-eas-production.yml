@@ -139,6 +139,11 @@ jobs:
           # `git clone --depth 1 file://<workspace>`, which fails (exit 128)
           # when the partial clone can't serve the unfetched blobs.
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Setup Vite+
         if: steps.expo-token.outputs.present == 'true'
         uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
@@ -495,6 +500,11 @@ jobs:
             echo ":white_check_mark: android: \`$BUILD_TAG\` was built by an earlier run" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Build
         if: steps.record.outputs.built != 'true'
         uses: ./.github/actions/eas-local-build
@@ -585,6 +595,11 @@ jobs:
             echo "built=true" >> "$GITHUB_OUTPUT"
             echo ":white_check_mark: ios: \`$BUILD_TAG\` was built by an earlier run" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
 
       - name: Build
         if: steps.record.outputs.built != 'true'
