@@ -259,7 +259,7 @@ function TotSettingsEditor(props: {
                 >
                   {tot.designs.map((design, index) => (
                     <button
-                      key={`${design.color}${design.skin ?? ""}${design.shape ?? ""}${design.antenna === true}`}
+                      key={`${design.color}${design.skin ?? ""}${design.shape ?? ""}${design.antenna === true}${JSON.stringify(design.accessories ?? [])}`}
                       type="button"
                       aria-label={`Use saved face ${index + 1}`}
                       className="rounded-md border border-transparent p-0.5 hover:border-ring"

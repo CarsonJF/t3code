@@ -116,6 +116,8 @@ function TotEditorForm(props: {
   const [name, setName] = useState(editing?.name ?? "");
   const [color, setColor] = useState(editing?.avatar.color ?? COLOR_CHOICES[0]!);
   const [shape, setShape] = useState<TotShape>(editing?.avatar.shape ?? "round");
+  const accessories = editing?.avatar.accessories ?? [];
+  const faceAvatar = accessories.length === 0 ? { color, shape } : { color, shape, accessories };
   const [scope, setScope] = useState<TotScope>(editing?.scope ?? "all");
   const [instructions, setInstructions] = useState(editing?.instructions ?? "");
   const [errors, setErrors] = useState<TotDraftErrors>({});
@@ -164,6 +166,7 @@ function TotEditorForm(props: {
         color,
         skin: editing?.avatar.skin ?? null,
         shape,
+        accessories,
         scope,
         instructions,
         modelSelection: model,
@@ -217,7 +220,7 @@ function TotEditorForm(props: {
     <ListSection title="Face" {...(errors.color ? { footer: errors.color } : {})}>
       <View className="gap-4 px-4 py-4">
         <View className="flex-row items-center gap-4">
-          <TotStillFace avatar={{ color, shape }} state="idle" size={72} />
+          <TotStillFace avatar={faceAvatar} state="idle" size={72} />
           <View className="min-w-0 flex-1 gap-1">
             <AppText textRole="footnote" className="font-t3-medium text-foreground-muted">
               Name
@@ -268,7 +271,15 @@ function TotEditorForm(props: {
                 borderColor: shape === choice ? color : "transparent",
               }}
             >
-              <TotStillFace avatar={{ color, shape: choice }} state="idle" size={36} />
+              <TotStillFace
+                avatar={{
+                  color,
+                  shape: choice,
+                  ...(accessories.length === 0 ? {} : { accessories }),
+                }}
+                state="idle"
+                size={36}
+              />
             </Pressable>
           ))}
         </View>
