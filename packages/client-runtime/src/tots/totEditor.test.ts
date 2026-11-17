@@ -73,5 +73,16 @@ describe("validateTotDraft", () => {
     expect(round.ok && round.value.avatar).toEqual({ color: "#0A7EA4" });
     const antenna = validateTotDraft(draft({ antenna: true }), [], null);
     expect(antenna.ok && antenna.value.avatar).toEqual({ color: "#0A7EA4", antenna: true });
+    const accessories = validateTotDraft(
+      draft({ accessories: [{ kind: "glasses" }, { kind: "halo", color: "#F4C84B" }] }),
+      [],
+      null,
+    );
+    expect(accessories.ok && accessories.value.avatar).toEqual({
+      color: "#0A7EA4",
+      accessories: [{ kind: "glasses" }, { kind: "halo", color: "#F4C84B" }],
+    });
+    const bare = validateTotDraft(draft({ accessories: [] }), [], null);
+    expect(bare.ok && bare.value.avatar).toEqual({ color: "#0A7EA4" });
   });
 });
