@@ -129,13 +129,38 @@ export const WATCH_REPORTS: Record<
   },
 };
 
-/** A Tot's routines target its own project, or one of the threads it has had. */
+/** A Tot's routines target its own project, one of the threads it has had, or its own MCP call. */
 export function scheduledTaskBelongsToTot(
-  task: Pick<ScheduledTask, "projectId" | "threadId">,
+  task: Pick<ScheduledTask, "projectId" | "threadId" | "createdByTotId">,
   tot: Pick<Tot, "id" | "projectId">,
 ): boolean {
+  if (task.createdByTotId === tot.id) return true;
   if (task.threadId !== null && parseTotThreadId(task.threadId) === tot.id) return true;
   return tot.projectId !== null && task.projectId === tot.projectId;
+}
+
+const PROJECT_ID_TAIL_LENGTH = 8;
+
+/** Where a routine lives: this thread, its project's name, or a project's id tail. */
+export function scheduledTaskScopeLabel(
+  task: Pick<ScheduledTask, "projectId" | "threadId">,
+  tot: Pick<Tot, "threadId">,
+  projectTitle: string | undefined,
+): string {
+  if (task.threadId !== null && task.threadId === tot.threadId) return "this thread";
+  const title = projectTitle?.trim() ?? "";
+  return title === ""
+    ? `another project · ${task.projectId.slice(-PROJECT_ID_TAIL_LENGTH)}`
+    : title;
+}
+
+/** One-off tasks that already ran and will not run again, so the panel can clear them. */
+export function finishedOneOffTasks<
+  Task extends Pick<ScheduledTask, "schedule" | "lastRunAt" | "nextRunAt">,
+>(tasks: ReadonlyArray<Task>): ReadonlyArray<Task> {
+  return tasks.filter(
+    (task) => task.schedule.type === "once" && task.lastRunAt !== null && task.nextRunAt === null,
+  );
 }
 
 export function webhookFilterSummary(

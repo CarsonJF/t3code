@@ -12,7 +12,9 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  finishedOneOffTasks,
   scheduledTaskBelongsToTot,
+  scheduledTaskScopeLabel,
   totSettingsDraftErrors,
   totSettingsDraftFromTot,
   totSettingsDraftKey,
@@ -35,11 +37,12 @@ const tot: Tot = {
   watches: [],
 };
 
-const task = (projectId: string, threadId: string | null) =>
+const task = (projectId: string, threadId: string | null, createdByTotId?: TotId) =>
   ({
     projectId: ProjectId.make(projectId),
     threadId: threadId === null ? null : ThreadId.make(threadId),
-  }) satisfies Pick<ScheduledTask, "projectId" | "threadId">;
+    ...(createdByTotId === undefined ? {} : { createdByTotId }),
+  }) satisfies Pick<ScheduledTask, "projectId" | "threadId" | "createdByTotId">;
 
 describe("tot settings draft", () => {
   it("tracks edits but ignores scope order and color case", () => {
@@ -164,6 +167,65 @@ describe("scheduledTaskBelongsToTot", () => {
     expect(scheduledTaskBelongsToTot(task("tot-yui", null), { ...tot, projectId: null })).toBe(
       false,
     );
+  });
+
+  it("matches a task the Tot created through MCP in another project", () => {
+    expect(scheduledTaskBelongsToTot(task("t3code", null, yui), tot)).toBe(true);
+    expect(
+      scheduledTaskBelongsToTot(task("t3code", totThreadId(TotId.make("bob"), "two"), yui), tot),
+    ).toBe(true);
+    expect(scheduledTaskBelongsToTot(task("t3code", null, TotId.make("bob")), tot)).toBe(false);
+  });
+});
+
+describe("scheduledTaskScopeLabel", () => {
+  it("names this thread, a known project, or a project's id tail", () => {
+    expect(scheduledTaskScopeLabel(task("other", tot.threadId), tot, "Other project")).toBe(
+      "this thread",
+    );
+    expect(scheduledTaskScopeLabel(task("project:app", null), tot, "App")).toBe("App");
+    expect(scheduledTaskScopeLabel(task("project:app", null), tot, undefined)).toBe(
+      "another project · ject:app",
+    );
+  });
+});
+
+describe("finishedOneOffTasks", () => {
+  const scheduled = (
+    schedule: ScheduledTask["schedule"],
+    lastRunAt: string | null,
+    nextRunAt: string | null,
+  ) => ({ schedule, lastRunAt, nextRunAt });
+
+  it("keeps only one-off tasks that ran and will not run again", () => {
+    const finished = scheduled(
+      { type: "once", runAt: "2026-11-16T09:00:00.000Z" },
+      "2026-11-16T09:00:01.000Z",
+      null,
+    );
+    const notYet = scheduled(
+      { type: "once", runAt: "2026-11-20T09:00:00.000Z" },
+      null,
+      "2026-11-20T09:00:00.000Z",
+    );
+    const stillScheduled = scheduled(
+      { type: "once", runAt: "2026-11-20T09:00:00.000Z" },
+      "2026-11-20T09:00:01.000Z",
+      "2026-11-20T09:00:00.000Z",
+    );
+    const recurring = scheduled(
+      { type: "interval", everyMs: 60_000 },
+      "2026-11-16T09:00:01.000Z",
+      null,
+    );
+    const webhook = scheduled(
+      { type: "webhook", signature: null },
+      "2026-11-16T09:00:01.000Z",
+      null,
+    );
+    expect(finishedOneOffTasks([finished, notYet, stillScheduled, recurring, webhook])).toEqual([
+      finished,
+    ]);
   });
 });
 

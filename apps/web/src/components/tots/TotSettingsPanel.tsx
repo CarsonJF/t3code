@@ -55,7 +55,9 @@ import { TotAvatar } from "./TotAvatar";
 import { TotFaceEditor } from "./TotFaceEditor";
 import {
   WATCH_REPORTS,
+  finishedOneOffTasks,
   scheduledTaskBelongsToTot,
+  scheduledTaskScopeLabel,
   totSettingsDraftErrors,
   totSettingsDraftFromTot,
   totSettingsDraftKey,
@@ -395,15 +397,19 @@ function TotSettingsEditor(props: {
 function PanelSection(props: {
   readonly title: string;
   readonly description?: string;
+  readonly action?: ReactNode;
   readonly children: ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-2.5">
-      <div>
-        <h3 className="font-medium text-foreground text-sm">{props.title}</h3>
-        {props.description ? (
-          <p className="text-muted-foreground text-xs">{props.description}</p>
-        ) : null}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="font-medium text-foreground text-sm">{props.title}</h3>
+          {props.description ? (
+            <p className="text-muted-foreground text-xs">{props.description}</p>
+          ) : null}
+        </div>
+        {props.action}
       </div>
       {props.children}
     </section>
@@ -520,17 +526,55 @@ function TotScheduledTasksSection(props: {
   const tasksQuery = useEnvironmentQuery(
     serverEnvironment.scheduledTasksLive({ environmentId: props.environmentId, input: {} }),
   );
+  const projects = useProjects();
   const canOperate = useAtomValue(
     serverEnvironment.setScheduledTaskEnabled.permissionAtom(props.environmentId),
   );
+  const remove = useAtomCommand(serverEnvironment.deleteScheduledTask, { reportFailure: false });
+  const [clearing, setClearing] = useState(false);
   const timeZone = tasksQuery.data?.timeZone;
   const tasks = (tasksQuery.data?.tasks ?? []).filter((task) =>
     scheduledTaskBelongsToTot(task, props.tot),
   );
+  const projectTitles = new Map(
+    projects
+      .filter((project) => project.environmentId === props.environmentId)
+      .map((project) => [project.id, project.title] as const),
+  );
+  const finished = finishedOneOffTasks(tasks);
+  const clearFinished = async () => {
+    if (clearing || finished.length === 0 || !canOperate) return;
+    if (!readEnvironmentScope(props.environmentId, AuthOrchestrationOperateScope)) return;
+    const count = finished.length;
+    const message = `Delete ${count} finished one-off ${count === 1 ? "task" : "tasks"}?\nThey already ran and will not run again. This cannot be undone.`;
+    const confirmed =
+      (await requestConfirmDialog(message, { variant: "destructive" })) ?? window.confirm(message);
+    if (!confirmed) return;
+    setClearing(true);
+    for (const task of finished) {
+      const result = await remove({ environmentId: props.environmentId, input: { id: task.id } });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        reportFailure(`Could not delete "${task.title}"`, squashAtomCommandFailure(result));
+      }
+    }
+    setClearing(false);
+  };
   return (
     <PanelSection
       title="Scheduled tasks"
       description="Routines this Tot runs on a schedule or from a webhook."
+      action={
+        finished.length === 0 ? undefined : (
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={clearing || !canOperate}
+            onClick={() => void clearFinished()}
+          >
+            {clearing ? "Clearing…" : "Clear finished"}
+          </Button>
+        )
+      }
     >
       {tasksQuery.error !== null ? (
         <p className="text-destructive-foreground text-xs">
@@ -543,7 +587,7 @@ function TotScheduledTasksSection(props: {
       ) : tasks.length === 0 ? (
         <div className="rounded-md border border-border/60 p-2.5">
           <p className="text-muted-foreground text-xs">
-            No scheduled tasks yet. Ask {props.tot.name} to make one.
+            No scheduled tasks for this Tot. Ask {props.tot.name} to make one.
           </p>
         </div>
       ) : (
@@ -553,6 +597,11 @@ function TotScheduledTasksSection(props: {
               key={task.id}
               environmentId={props.environmentId}
               task={task}
+              scopeLabel={scheduledTaskScopeLabel(
+                task,
+                props.tot,
+                projectTitles.get(task.projectId),
+              )}
               timeZone={timeZone}
               canOperate={canOperate}
             />
@@ -566,6 +615,7 @@ function TotScheduledTasksSection(props: {
 function TotScheduledTaskRow(props: {
   readonly environmentId: EnvironmentId;
   readonly task: ScheduledTask;
+  readonly scopeLabel: string;
   readonly timeZone: string | undefined;
   readonly canOperate: boolean;
 }) {
@@ -611,7 +661,10 @@ function TotScheduledTaskRow(props: {
     <li className="rounded-lg border border-border/60 bg-card/40 p-2.5">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium text-sm">{task.title}</p>
+          <div className="flex min-w-0 items-baseline gap-2">
+            <p className="min-w-0 truncate font-medium text-sm">{task.title}</p>
+            <span className="shrink-0 text-muted-foreground text-xs">{props.scopeLabel}</span>
+          </div>
           <p className="mt-0.5 text-muted-foreground text-xs">
             {isWebhook ? (
               <>
