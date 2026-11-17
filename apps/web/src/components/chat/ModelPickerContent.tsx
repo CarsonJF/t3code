@@ -85,6 +85,11 @@ type ModelPickerItem = {
   isUnavailable?: boolean | undefined;
 };
 
+type ModelPickerHighlight = {
+  readonly key: string;
+  readonly reason: "pointer" | "keyboard" | "none";
+};
+
 export function resolveModelPickerSelectedModel(input: {
   driverKind: ProviderDriverKind | undefined;
   model: string;
@@ -367,6 +372,8 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- publishes this picker's mount to global keydown handlers
   useLayoutEffect(() => registerModelPickerContent(), []);
   const highlightedModelKeyRef = useRef<string | null>(null);
+  // The highlighted row and why, so its identity card never opens over the search box while typing.
+  const [highlightedModel, setHighlightedModel] = useState<ModelPickerHighlight | null>(null);
   const { favorites } = useEnvironmentModelPreferences(props.environmentId);
   const activeEntry = props.instanceEntries.find(
     (entry) => entry.instanceId === props.activeInstanceId,
@@ -783,6 +790,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     modelJumpLabelByKey,
     activeModelKey,
     selectedModelKeySet,
+    highlightedModel,
   };
 
   const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -891,7 +899,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
           multiple={onToggleModel !== undefined}
           value={onToggleModel ? [...selectedModelKeySet] : activeModelKey}
           onItemHighlighted={(modelKey, eventDetails) => {
-            highlightedModelKeyRef.current = typeof modelKey === "string" ? modelKey : null;
+            const key = typeof modelKey === "string" ? modelKey : null;
+            highlightedModelKeyRef.current = key;
+            setHighlightedModel(key === null ? null : { key, reason: eventDetails.reason });
             if (eventDetails.reason === "keyboard" && eventDetails.index >= 0) {
               void modelListRef.current?.scrollIndexIntoView?.({
                 index: eventDetails.index,
@@ -1060,6 +1070,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                       selectedModelKeys !== undefined
                         ? selectedModelKeySet.has(modelKey)
                         : modelKey === activeModelKey
+                    }
+                    highlightedBy={
+                      highlightedModel?.key === modelKey ? highlightedModel.reason : null
                     }
                     favoriteStarOnHover={selectedInstanceId === "favorites" && !isSearching}
                     showInstanceBadge={badgedInstanceIds.has(model.instanceId)}
