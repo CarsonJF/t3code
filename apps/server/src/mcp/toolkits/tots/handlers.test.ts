@@ -286,6 +286,7 @@ it.effect("a Tot creates a notify listener in its own thread and gets the URL", 
         threadId: homeThread,
         projectId: "project:mcp-test",
         threadMode: "continue",
+        createdByTotId: "home",
         workspaceStrategy: { type: "root" },
         schedule: {
           type: "webhook",
