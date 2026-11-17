@@ -66,6 +66,10 @@ export function totSettingsDraftKey(draft: TotSettingsDraft): string {
       draft.avatar.skin ?? null,
       draft.avatar.shape ?? "round",
       draft.avatar.antenna === true,
+      (draft.avatar.accessories ?? []).map((accessory) => [
+        accessory.kind,
+        accessory.color?.toLowerCase() ?? null,
+      ]),
     ],
     scope: normalizedScope(draft.scope),
     instructions: draft.instructions,
