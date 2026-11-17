@@ -25,6 +25,7 @@ import {
   ProviderTurnId,
   RunId,
   ThreadId,
+  TotId,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2StoredEvent,
   type OrchestrationV2ThreadProjection,
@@ -4571,6 +4572,31 @@ describe("OrchestratorMcpService provider resolution", () => {
         assert.deepEqual(yield* Ref.get(saved), [
           { type: "worktree", baseRef: "origin/master", startFromOrigin: true },
         ]);
+      }),
+    );
+
+    it.effect("stamps the Tot that asked, and leaves user rows unattributed", () =>
+      Effect.gen(function* () {
+        const inputs = yield* Ref.make<ReadonlyArray<ScheduledTaskUpsertInput>>([]);
+        const mcp = yield* OrchestratorMcpService.OrchestratorMcpService.pipe(
+          Effect.provide(
+            service(
+              masterRepository,
+              yield* Ref.make<ReadonlyArray<ScheduledTask["workspaceStrategy"]>>([]),
+              existing,
+              inputs,
+            ),
+          ),
+        );
+        yield* mcp.scheduleTask(
+          client,
+          { projectId, prompt: "Check the build", schedule },
+          TotId.make("yui"),
+        );
+        yield* mcp.scheduleTask(client, { projectId, prompt: "Check the build", schedule });
+        const saved = yield* Ref.get(inputs);
+        assert.equal(saved[0]?.createdByTotId, "yui");
+        assert.isUndefined(saved[1]?.createdByTotId);
       }),
     );
 
