@@ -247,6 +247,7 @@ interface ScheduledTaskRow {
   readonly interaction_mode: string;
   readonly created_by: string;
   readonly creation_source: string;
+  readonly created_by_tot_id: string | null;
   readonly created_at: string;
   readonly updated_at: string;
   readonly next_run_at: string | null;
@@ -438,6 +439,7 @@ const decodeRow = Effect.fnUntraced(
       interactionMode: row.interaction_mode,
       createdBy: row.created_by,
       creationSource: row.creation_source,
+      ...(row.created_by_tot_id === null ? {} : { createdByTotId: row.created_by_tot_id }),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       nextRunAt: row.next_run_at,
@@ -565,6 +567,7 @@ export const layer = Layer.effect(
         interaction_mode,
         created_by,
         creation_source,
+        created_by_tot_id,
         created_at,
         updated_at,
         next_run_at,
@@ -607,6 +610,7 @@ export const layer = Layer.effect(
         interaction_mode,
         created_by,
         creation_source,
+        created_by_tot_id,
         created_at,
         updated_at,
         next_run_at,
@@ -687,6 +691,7 @@ export const layer = Layer.effect(
           interaction_mode,
           created_by,
           creation_source,
+          created_by_tot_id,
           created_at,
           updated_at,
           next_run_at,
@@ -712,6 +717,7 @@ export const layer = Layer.effect(
           ${task.interactionMode},
           ${task.createdBy},
           ${task.creationSource},
+          ${task.createdByTotId ?? null},
           ${task.createdAt},
           ${task.updatedAt},
           ${task.nextRunAt},
@@ -743,6 +749,8 @@ export const layer = Layer.effect(
           runtime_mode = excluded.runtime_mode,
           interaction_mode = excluded.interaction_mode,
           creation_source = excluded.creation_source,
+          -- A save from a client carries no author, so it keeps the one a Tot set.
+          created_by_tot_id = COALESCE(excluded.created_by_tot_id, scheduled_tasks.created_by_tot_id),
           updated_at = excluded.updated_at,
           -- Keep a next_run_at that a finishing run moved during this save, unless
           -- another edit changed the schedule or enabled state meanwhile.
@@ -1658,6 +1666,7 @@ export const layer = Layer.effect(
         isSameSchedule(existingTask.schedule, schedule);
       if (!scheduleUnchanged)
         yield* requireFutureOnce({ enabled: input.enabled, schedule }, now, id);
+      const createdByTotId = existingTask?.createdByTotId ?? input.createdByTotId;
       const task: ScheduledTask = {
         id,
         title: input.title,
@@ -1673,6 +1682,7 @@ export const layer = Layer.effect(
         interactionMode: input.interactionMode,
         createdBy: existingTask?.createdBy ?? input.createdBy ?? "user",
         creationSource: input.creationSource ?? "web",
+        ...(createdByTotId === undefined ? {} : { createdByTotId }),
         createdAt: existingTask?.createdAt ?? iso(now),
         updatedAt: iso(now),
         nextRunAt: scheduleUnchanged
