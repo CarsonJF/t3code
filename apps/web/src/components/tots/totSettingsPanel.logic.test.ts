@@ -70,6 +70,24 @@ describe("tot settings draft", () => {
       }),
     );
     expect(key).not.toBe(totSettingsDraftKey({ ...draft, instructions: "Changed." }));
+    expect(key).not.toBe(
+      totSettingsDraftKey({
+        ...draft,
+        avatar: { ...draft.avatar, accessories: [{ kind: "glasses" }] },
+      }),
+    );
+    // Accessory colors compare like the head's: case does not make a new face.
+    expect(
+      totSettingsDraftKey({
+        ...draft,
+        avatar: { ...draft.avatar, accessories: [{ kind: "halo", color: "#FFD166" }] },
+      }),
+    ).toBe(
+      totSettingsDraftKey({
+        ...draft,
+        avatar: { ...draft.avatar, accessories: [{ kind: "halo", color: "#ffd166" }] },
+      }),
+    );
   });
 
   it("requires a name, a hex color, and something to scope", () => {
