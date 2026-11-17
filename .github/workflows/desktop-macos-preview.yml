@@ -56,6 +56,11 @@ jobs:
           cache: true
           run-install: false
 
+      - name: Use the BoopFace read key
+        uses: ./.github/actions/boopface-key
+        with:
+          key: ${{ secrets.BOOPFACE_READ_KEY }}
+
       - name: Install bundle dependencies
         run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
 
