@@ -1,6 +1,6 @@
 import { type ProviderDriverKind, type ProviderInstanceId } from "@t3tools/contracts";
 import { T, useGT } from "gt-react";
-import { memo } from "react";
+import { memo, useState } from "react";
 import { CheckIcon, StarIcon } from "lucide-react";
 import { getDisplayModelName } from "./providerIconUtils";
 import { ComboboxItem } from "../ui/combobox";
@@ -9,6 +9,7 @@ import { Badge } from "../ui/badge";
 import { Kbd } from "../ui/kbd";
 import { cn } from "~/lib/utils";
 import { modelPickerModelKey } from "./modelPickerKeys";
+import { ModelIdentityTooltipContent } from "./ModelIdentityTooltip";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { SharedTooltipTrigger } from "../ui/shared-tooltip";
 
@@ -27,6 +28,8 @@ export const ModelListRow = memo(function ModelListRow(props: {
   /** In Favorites every row is starred, so the star shows only on hover. */
   favoriteStarOnHover?: boolean;
   isSelected: boolean;
+  /** Why the combobox highlights this row, or null when it does not. */
+  highlightedBy: "pointer" | "keyboard" | "none" | null;
   /** Marks this instance apart from another of the same provider. */
   showInstanceBadge: boolean;
   showNewBadge?: boolean;
@@ -36,38 +39,24 @@ export const ModelListRow = memo(function ModelListRow(props: {
   onToggleFavorite: (instanceId: ProviderInstanceId, slug: string) => void;
 }) {
   const gt = useGT();
+  const modelKey = modelPickerModelKey(props.instanceId, props.slug);
+  // Keyed, not a boolean: recycled rows reuse this state for a different model.
+  const [favoriteActiveKey, setFavoriteActiveKey] = useState<string | null>(null);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const model = {
     slug: props.slug,
     name: props.name,
     subProvider: props.subProvider,
   };
+  // The arrow keys own the card; the pointer owns it only on the row the combobox still
+  // highlights, so a resting cursor cannot fight the keyboard. Typing's auto-highlighted top
+  // match ("none") waits for the pointer rather than covering the search box mid-query.
+  const showIdentity =
+    (props.highlightedBy === "keyboard" ||
+      (props.highlightedBy !== null && hoveredKey === modelKey)) &&
+    favoriteActiveKey !== modelKey;
 
-  const row = (
-    <ComboboxItem
-      hideIndicator
-      selectedFill={false}
-      index={props.index}
-      value={modelPickerModelKey(props.instanceId, props.slug)}
-      disabled={Boolean(props.disabledReason)}
-      className={cn(
-        "group relative w-full !min-w-0 max-w-full cursor-pointer",
-        props.disabledReason &&
-          "data-disabled:pointer-events-auto data-disabled:cursor-not-allowed",
-      )}
-    >
-      {/* One row shape in every tab: the logo names the provider, so Favorites needs no second line. */}
-      <ProviderInstanceIcon
-        driverKind={props.driverKind}
-        displayName={props.providerDisplayName}
-        accentColor={props.providerAccentColor}
-        acpRegistryAgentId={props.acpRegistryAgentId}
-        acpRegistryIconUrl={props.acpRegistryIconUrl}
-        showBadge={props.showInstanceBadge}
-        className="size-4"
-        iconClassName="size-4"
-        indicatorBackground="var(--popover)"
-        badgeClassName="right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 px-0.5 text-5xs"
-      />
+  const label = (
       <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
         <div
           className="min-w-0 truncate text-sm font-normal leading-snug"
@@ -101,6 +90,53 @@ export const ModelListRow = memo(function ModelListRow(props: {
           </Badge>
         ) : null}
       </div>
+  );
+
+  const row = (
+    <ComboboxItem
+      hideIndicator
+      selectedFill={false}
+      index={props.index}
+      value={modelKey}
+      disabled={Boolean(props.disabledReason)}
+      onPointerEnter={() => setHoveredKey(modelKey)}
+      onPointerLeave={() => setHoveredKey((current) => (current === modelKey ? null : current))}
+      className={cn(
+        "group relative w-full !min-w-0 max-w-full cursor-pointer",
+        props.disabledReason &&
+          "data-disabled:pointer-events-auto data-disabled:cursor-not-allowed",
+      )}
+    >
+      {/* One row shape in every tab: the logo names the provider, so Favorites needs no second line. */}
+      <ProviderInstanceIcon
+        driverKind={props.driverKind}
+        displayName={props.providerDisplayName}
+        accentColor={props.providerAccentColor}
+        acpRegistryAgentId={props.acpRegistryAgentId}
+        acpRegistryIconUrl={props.acpRegistryIconUrl}
+        showBadge={props.showInstanceBadge}
+        className="size-4"
+        iconClassName="size-4"
+        indicatorBackground="var(--popover)"
+        badgeClassName="right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 px-0.5 text-5xs"
+      />
+      {/* Follows the highlighted row, so the arrow keys and the pointer show the same identity.
+          A disabled row keeps its whole-row reason tooltip instead. */}
+      {props.disabledReason ? (
+        label
+      ) : (
+        <Tooltip open={showIdentity}>
+          <TooltipTrigger render={label} />
+          <TooltipPopup side="top" align="start">
+            <ModelIdentityTooltipContent
+              name={getDisplayModelName(model)}
+              providerDisplayName={props.providerDisplayName}
+              source={props.subProvider}
+              slug={props.slug}
+            />
+          </TooltipPopup>
+        </Tooltip>
+      )}
 
       <div className="flex shrink-0 items-center gap-1.5">
         <SharedTooltipTrigger
@@ -115,6 +151,14 @@ export const ModelListRow = memo(function ModelListRow(props: {
               onKeyDown={(event) => {
                 event.stopPropagation();
               }}
+                onPointerEnter={() => setFavoriteActiveKey(modelKey)}
+                onPointerLeave={() =>
+                  setFavoriteActiveKey((current) => (current === modelKey ? null : current))
+                }
+                onFocus={() => setFavoriteActiveKey(modelKey)}
+                onBlur={() =>
+                  setFavoriteActiveKey((current) => (current === modelKey ? null : current))
+                }
               disabled={Boolean(props.disabledReason)}
               aria-label={props.isFavorite ? gt("Remove from favorites") : gt("Add to favorites")}
             >
