@@ -17,6 +17,7 @@ import {
   OrchestrationV2ThreadLaunchWorkspaceStrategy,
 } from "./orchestrationV2.ts";
 import { ProviderInteractionMode, RuntimeMode } from "./providerPolicy.ts";
+import { TotId } from "./tots.ts";
 
 const TimeOfDay = TrimmedNonEmptyString.check(
   Schema.isPattern(/^([01]?\d|2[0-3]):([0-5]\d)$/),
@@ -318,6 +319,8 @@ export const ScheduledTask = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   createdBy: OrchestrationV2Actor,
   creationSource: OrchestrationV2CreationSource,
+  /** The Tot whose MCP call created this task. Absent for tasks a person or client made. */
+  createdByTotId: Schema.optional(TotId),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   nextRunAt: Schema.NullOr(IsoDateTime),
@@ -365,6 +368,8 @@ export const ScheduledTaskUpsertInput = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   createdBy: Schema.optional(OrchestrationV2Actor),
   creationSource: Schema.optional(OrchestrationV2CreationSource),
+  /** Set by the Tot MCP toolkit; a web or client save leaves it absent. */
+  createdByTotId: Schema.optional(TotId),
 });
 export type ScheduledTaskUpsertInput = typeof ScheduledTaskUpsertInput.Type;
 
