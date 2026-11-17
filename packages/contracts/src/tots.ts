@@ -31,6 +31,32 @@ export const TOT_SHAPES = [
 export const TotShape = Schema.Literals(TOT_SHAPES);
 export type TotShape = typeof TotShape.Type;
 
+const TOT_ACCESSORY_ID_MAX_LENGTH = 64;
+
+/**
+ * A BoopFace accessory id: lowercase alphanumeric segments joined by dots or
+ * hyphens, such as `cardinal.top-hat`. Bare legacy ids (`top-hat`) still
+ * decode; an id this build does not know passes through and is skipped when
+ * drawn, so a newer catalog needs no T3 release.
+ */
+export const TotAccessoryId = Schema.String.check(
+  Schema.isMaxLength(TOT_ACCESSORY_ID_MAX_LENGTH),
+  Schema.isPattern(/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/),
+);
+export type TotAccessoryId = typeof TotAccessoryId.Type;
+
+/** One accessory on a Tot's face. */
+export const TotAccessory = Schema.Struct({
+  kind: TotAccessoryId.annotate({
+    description: "A BoopFace accessory id from its catalog, such as cardinal.top-hat.",
+  }),
+  /** Any hex color; the accessory's own color when absent. */
+  color: Schema.optional(Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/))),
+});
+export type TotAccessory = typeof TotAccessory.Type;
+
+const TOT_MAX_ACCESSORIES = 3;
+
 export const TotAvatar = Schema.Struct({
   color: Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
   /** A BoopFace skin number; the flat color when absent. */
@@ -39,6 +65,10 @@ export const TotAvatar = Schema.Struct({
   shape: Schema.optional(TotShape),
   /** BoopFace's antenna dot; hidden when absent. */
   antenna: Schema.optional(Schema.Boolean),
+  /** The accessories it wears, at most three; absent for older Tots, which wear none. */
+  accessories: Schema.optional(
+    Schema.Array(TotAccessory).check(Schema.isMaxLength(TOT_MAX_ACCESSORIES)),
+  ),
 });
 export type TotAvatar = typeof TotAvatar.Type;
 
