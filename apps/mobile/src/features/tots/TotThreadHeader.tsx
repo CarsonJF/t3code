@@ -1,18 +1,23 @@
 import { TOT_FACE_STATE_LABELS, type EnvironmentTot } from "@t3tools/client-runtime/tots";
 import type { TotThemeTokens } from "@t3tools/shared/totThemeTokens";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 
 import { AppText } from "../../components/ui/AppText";
+import { cn } from "../../lib/cn";
 import { useTotFace } from "../../state/tots";
 import { TotLiveFace } from "./TotLiveFace";
+import { TotStatePill } from "./TotStatePill";
 
-const FACE_SIZE = 36;
-const FACE_RING = 1.5;
+const FACE_RING = 6;
 
 /** How tall the pinned identity band is, so the feed can clear it. */
-export const TOT_THREAD_HEADER_HEIGHT = 52;
+export const TOT_THREAD_HEADER_HEIGHT = 64;
+const FACE_SIZE = 42;
 
-/** The Tot you are talking to: its face, name and what it is doing, above its thread. */
+/**
+ * The Tot you are talking to: its face, its name, what it is doing. It sits under the navigation
+ * bar on the Tot's own wash, so the thread header keeps the title and this keeps the identity.
+ */
 export function TotThreadHeader(props: {
   readonly entry: EnvironmentTot;
   readonly animate: boolean;
@@ -23,46 +28,63 @@ export function TotThreadHeader(props: {
   const state = useTotFace(props.entry);
   const label = TOT_FACE_STATE_LABELS[state];
   const tokens = props.tokens;
+  const accent = tot.avatar.color;
   const bandBackground = tokens["--tot-bg"];
-  const bandBorder = tokens["--tot-border"];
   const textColor = tokens["--tot-text"];
-  const mutedColor = tokens["--tot-muted"];
   return (
     <View
       accessible
       accessibilityRole="header"
       accessibilityLabel={`${tot.name}, Tot, ${label}`}
-      className="flex-row items-center gap-2.5 border-b border-separator bg-screen px-4"
+      className={cn(
+        "border-b border-separator",
+        Platform.OS === "android" ? "bg-thread-canvas" : "bg-screen",
+      )}
       style={{
         height: TOT_THREAD_HEADER_HEIGHT,
-        ...(bandBackground === undefined ? null : { backgroundColor: bandBackground }),
-        ...(bandBorder === undefined ? null : { borderBottomColor: bandBorder }),
+        ...(tokens["--tot-border"] === undefined
+          ? null
+          : { borderBottomColor: tokens["--tot-border"] }),
       }}
     >
+      {/* The feed scrolls under this band, so a theme's translucent --tot-bg and the accent wash
+          both sit over the opaque canvas colour instead of replacing it. */}
+      {bandBackground === undefined ? null : (
+        <View
+          pointerEvents="none"
+          className="absolute inset-0"
+          style={{ backgroundColor: bandBackground }}
+        />
+      )}
       <View
-        style={{
-          padding: FACE_RING,
-          borderRadius: 12,
-          borderWidth: FACE_RING,
-          borderColor: `${tot.avatar.color}73`,
-        }}
-      >
-        <TotLiveFace avatar={tot.avatar} state={state} size={FACE_SIZE} animate={props.animate} />
+        pointerEvents="none"
+        className="absolute inset-0"
+        style={{ backgroundColor: `${accent}14` }}
+      />
+      <View className="flex-1 flex-row items-center gap-3 px-4">
+        <View
+          className="items-center justify-center"
+          style={{
+            padding: FACE_RING,
+            borderRadius: 32,
+            backgroundColor: `${accent}21`,
+          }}
+        >
+          <TotLiveFace avatar={tot.avatar} state={state} size={FACE_SIZE} animate={props.animate} />
+        </View>
+        <View className="min-w-0 flex-1 justify-center gap-1">
+          <AppText
+            numberOfLines={1}
+            className="font-t3-semibold text-lg text-foreground"
+            style={textColor === undefined ? undefined : { color: textColor }}
+          >
+            {tot.name}
+          </AppText>
+          <View className="flex-row">
+            <TotStatePill size="band" state={state} accent={accent} />
+          </View>
+        </View>
       </View>
-      <AppText
-        numberOfLines={1}
-        className="min-w-0 flex-1 font-t3-bold text-sm text-foreground"
-        style={textColor === undefined ? undefined : { color: textColor }}
-      >
-        {tot.name}
-      </AppText>
-      <AppText
-        numberOfLines={1}
-        className="shrink-0 text-xs text-foreground-muted"
-        style={mutedColor === undefined ? undefined : { color: mutedColor }}
-      >
-        {label}
-      </AppText>
     </View>
   );
 }
