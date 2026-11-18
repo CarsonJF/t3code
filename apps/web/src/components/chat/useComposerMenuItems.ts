@@ -488,7 +488,8 @@ export function useComposerMenuItems({
     }
     return composerTriggerKind === "path"
       ? gt("No matching mentions.")
-      : gt("No matching command.");  })();
+      : gt("No matching command.");
+  })();
 
   return { items, isLoading, emptyState };
 }
