@@ -1,4 +1,8 @@
-import { isListedThreadLineage, type OrchestrationV2ThreadProjection } from "@t3tools/contracts";
+import {
+  isListedThreadLineage,
+  type OrchestrationV2ThreadProjection,
+  ProviderDriverKind,
+} from "@t3tools/contracts";
 import { COMPACTION_SUGGESTION_MIN_TOKENS } from "@t3tools/shared/claudeCompaction";
 import { derivePendingBackgroundWork } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import * as DateTime from "effect/DateTime";
@@ -10,6 +14,22 @@ const MIN_CONTEXT_TOKENS = COMPACTION_SUGGESTION_MIN_TOKENS;
 // Start this long before the cache expires: enough for the session to resume
 // and send the compaction while the cache is still warm.
 const LEAD_MS = 2 * 60_000;
+
+/**
+ * Prompt-cache lifetimes for providers that do not report one per request.
+ * Claude reports its own TTL (1h on subscriptions, 5m on API keys), so it is
+ * absent here. OpenCode's measured hit rate holds for roughly 15-30 minutes,
+ * falls to about half by 30-60 minutes, and almost always misses past 2 hours.
+ */
+export const PROVIDER_PROMPT_CACHE_TTL_MS: ReadonlyMap<ProviderDriverKind, number> = new Map([
+  [ProviderDriverKind.make("opencode"), 30 * 60_000],
+]);
+
+const IDLE_COMPACTION_DRIVERS: ReadonlySet<string> = new Set(["claudeAgent", "opencode"]);
+
+/** Drivers whose sessions can receive T3 Code's `/compact` and keep their prompt cache. */
+export const isIdleCompactionDriver = (driver: string | undefined): boolean =>
+  driver !== undefined && IDLE_COMPACTION_DRIVERS.has(driver);
 
 export type IdleCompactionRecords = Pick<
   OrchestrationV2ThreadProjection,
@@ -24,10 +44,9 @@ export type IdleCompactionRecords = Pick<
 >;
 
 /**
- * When an idle Claude thread should compact, or null when it should not. The
- * window ends when the prompt cache of Claude's last request expires (1h on
- * subscriptions, 5m on API keys); compacting after that pays a full uncached
- * read.
+ * When an idle Claude or OpenCode thread should compact, or null when it should
+ * not. The window ends when the last request's prompt cache expires, so
+ * compacting after that pays a full uncached read.
  */
 export function idleCompactionWindow(
   {
@@ -84,9 +103,10 @@ export function idleCompactionWindow(
   const providerThread = providerThreads.find(
     (candidate) => candidate.id === thread.activeProviderThreadId,
   );
-  // The thread's current selection receives the /compact, so it must still be this Claude session.
+  // The thread's current selection receives the /compact, so it must still be this session.
   if (
-    providerThread?.driver !== "claudeAgent" ||
+    !isIdleCompactionDriver(providerThread?.driver) ||
+    providerThread === undefined ||
     providerThread.id !== latestRun.providerThreadId ||
     providerThread.providerInstanceId !== thread.providerInstanceId ||
     latestRun.providerInstanceId !== thread.providerInstanceId
@@ -98,9 +118,16 @@ export function idleCompactionWindow(
     .toSorted((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
   if ((usages[0]?.usedTokens ?? 0) < MIN_CONTEXT_TOKENS) return null;
   // A request served fully from cache creates no cache entry and reports no
-  // TTL, but it still refreshes the cache. Treat it as unknown and skip.
+  // TTL, but it still refreshes the cache. Claude reports one; other providers
+  // use the measured lifetime counted from the last recorded request.
   const expiresAt = usages[0]?.promptCacheExpiresAt;
-  const endMs = expiresAt === undefined ? Number.NaN : Date.parse(expiresAt);
+  const measuredTtlMs = PROVIDER_PROMPT_CACHE_TTL_MS.get(providerThread.driver);
+  const endMs =
+    expiresAt === undefined
+      ? measuredTtlMs === undefined
+        ? Number.NaN
+        : Date.parse(usages[0]!.updatedAt) + measuredTtlMs
+      : Date.parse(expiresAt);
   if (!Number.isFinite(endMs) || nowMs >= endMs) return null;
   return { runId: latestRun.id, startMs: endMs - LEAD_MS, endMs };
 }

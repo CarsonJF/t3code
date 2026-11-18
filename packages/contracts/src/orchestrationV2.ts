@@ -1284,7 +1284,13 @@ export const OrchestrationV2ProviderTurn = Schema.Struct({
   ]),
   startedAt: Schema.NullOr(Schema.DateTimeUtc),
   completedAt: Schema.NullOr(Schema.DateTimeUtc),
+  /**
+   * The turn's last model step: the prompt it sent and that step's cache split.
+   * A multi-step turn reports each step separately in `turnTokenUsage`, so this
+   * is context size, not the turn's total spend.
+   */
   tokenUsage: Schema.optional(OrchestrationV2ProviderTurnTokenUsage),
+  /** Every main-agent step this turn summed, including compaction steps. */
   turnTokenUsage: Schema.optional(TurnTokenUsage),
   /** The model the provider reported running this turn's root agent, which can differ from the requested one. */
   model: Schema.optional(TrimmedNonEmptyString),
