@@ -51,15 +51,14 @@ export function TotThreadHeader(props: {
       </View>
       <AppText
         numberOfLines={1}
-        className="shrink font-t3-bold text-sm text-foreground"
+        className="min-w-0 flex-1 font-t3-bold text-sm text-foreground"
         style={textColor === undefined ? undefined : { color: textColor }}
       >
         {tot.name}
       </AppText>
-      <View className="flex-1" />
       <AppText
         numberOfLines={1}
-        className="shrink text-xs text-foreground-muted"
+        className="shrink-0 text-xs text-foreground-muted"
         style={mutedColor === undefined ? undefined : { color: mutedColor }}
       >
         {label}

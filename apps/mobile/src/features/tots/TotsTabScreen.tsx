@@ -30,11 +30,14 @@ import { useWorkspaceListBottomInset } from "../layout/workspace/workspace-list-
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { TotLiveFace } from "./TotLiveFace";
-import { TOT_ROW_FACE_SIZE, TotStillFace } from "./TotStillFace";
+import { TotStillFace } from "./TotStillFace";
 
 const NO_SETTINGS_ATOM = Atom.make<ServerSettings | null>(null).pipe(
   Atom.withLabel("mobile-tots-no-host"),
 );
+
+/** Big enough to read a Tot's face and its mood, which a list of people rows wants. */
+const TOT_LIST_FACE_SIZE = 40;
 
 // The unfolded Fold and tablets: hero beside the list, as wide as a desktop settings column.
 const WIDE_LAYOUT_MIN_WIDTH = 600;
@@ -66,7 +69,8 @@ function TotListRow(props: { readonly entry: EnvironmentTot; readonly machine: s
       className="bg-grouped-card"
     >
       <ListRowLayout
-        leading={<TotStillFace avatar={tot.avatar} state={state} size={TOT_ROW_FACE_SIZE} />}
+        leading={<TotStillFace avatar={tot.avatar} state={state} size={TOT_LIST_FACE_SIZE} />}
+        leadingSize={TOT_LIST_FACE_SIZE}
         label={tot.name}
         description={description}
         accessory={
