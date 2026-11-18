@@ -14,12 +14,15 @@ export interface ListRowContentProps {
   readonly detail?: string;
   /** Rich secondary content under the description, such as scores with emphasized values. */
   readonly meta?: ReactNode;
+  /** Room for a leading mark wider than the default glyph slot, such as a Tot's face. */
+  readonly leadingSize?: number;
   readonly disabled?: boolean;
 }
 
 export function ListRowLayout({
   icon,
   leading,
+  leadingSize = 24,
   label,
   description,
   detail,
@@ -49,7 +52,12 @@ export function ListRowLayout({
           />
         </View>
       ) : leading ? (
-        <View className="size-6 items-center justify-center">{leading}</View>
+        <View
+          className="items-center justify-center"
+          style={{ width: leadingSize, height: leadingSize }}
+        >
+          {leading}
+        </View>
       ) : null}
       <View className="min-w-0 flex-1 gap-1">
         <AppText
