@@ -9,6 +9,9 @@ export function PreviewImage(props: {
   readonly name: string;
   readonly mimeType?: string;
   readonly onError?: () => void;
+  /** Controlled expanded preview; the host owns it when `onExpandedChange` is provided. */
+  readonly expanded?: boolean;
+  readonly onExpandedChange?: (expanded: boolean) => void;
 }) {
   return (
     <Suspense fallback={<FileSurfaceLoading />}>

@@ -11,10 +11,19 @@ export default function PreviewImageContent(props: {
   readonly name: string;
   readonly mimeType?: string;
   readonly onError?: () => void;
+  /** Controlled expanded preview; internal state is used when `onExpandedChange` is absent. */
+  readonly expanded?: boolean;
+  readonly onExpandedChange?: (expanded: boolean) => void;
 }) {
   const gt = useGT();
   const [failed, setFailed] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const expanded =
+    props.onExpandedChange !== undefined ? (props.expanded ?? false) : internalExpanded;
+  const setExpanded = (next: boolean) => {
+    if (props.onExpandedChange !== undefined) props.onExpandedChange(next);
+    else setInternalExpanded(next);
+  };
   const [natural, setNatural] = useState({ width: 0, height: 0 });
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [zoom, setZoom] = useState<number | null>(null);
