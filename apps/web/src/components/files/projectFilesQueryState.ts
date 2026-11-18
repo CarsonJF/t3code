@@ -188,12 +188,14 @@ export function useProjectEntriesQuery(
   cwd: string,
   directoryPath?: string,
   revision?: string | null,
+  enabled = true,
 ): ProjectQueryState<ProjectListEntriesResult> {
   const fileAccess = useFilesystemReadAccess(environmentId);
   const { canReadFiles } = fileAccess;
-  const atom = canReadFiles
-    ? getProjectEntriesQueryAtom(environmentId, cwd, directoryPath)
-    : EMPTY_PROJECT_ENTRIES_QUERY_ATOM;
+  const atom =
+    enabled && canReadFiles
+      ? getProjectEntriesQueryAtom(environmentId, cwd, directoryPath)
+      : EMPTY_PROJECT_ENTRIES_QUERY_ATOM;
   const result = useAtomValue(revisionedQuery(atom, canReadFiles ? revision : undefined));
   const refreshAtom = useAtomRefresh(atom);
   const refresh = () => refreshAtom();
@@ -204,7 +206,7 @@ export function useProjectEntriesQuery(
       : canReadFiles
         ? errorMessage(failureCause(result))
         : (fileAccess.error ?? "This connection cannot read host files."),
-    isPending: fileAccess.isPending || result.waiting,
+    isPending: enabled && (fileAccess.isPending || result.waiting),
     refresh,
   };
 }
