@@ -64,6 +64,7 @@ import * as Stream from "effect/Stream";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import * as OpenCode2Client from "./OpenCode2Client.ts";
 import * as OpenCode2Server from "./OpenCode2Server.ts";
+import { openCodeStepTrace } from "./stepTrace.ts";
 import * as OpenCodeRuntime from "../OpenCodeRuntime.ts";
 import { readableProviderErrorMessage } from "../providerErrorMessage.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
@@ -258,6 +259,8 @@ interface ActiveTurn {
   steps: number;
   readonly models: Set<string>;
   lastStep: Tokens | undefined;
+  /** The model the current step started on, which can change between steps. */
+  stepModel: string | undefined;
   before: string | null | undefined;
   compaction: { readonly nativeId: string; readonly startedAt: DateTime.Utc } | undefined;
   compactions: number;
@@ -1670,6 +1673,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       steps: 0,
       models: new Set(),
       lastStep: undefined,
+      stepModel: undefined,
       before: undefined,
       compaction: undefined,
       compactions: 0,
@@ -2983,12 +2987,23 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           return yield* emitCompaction(state, turn, "failed");
         case "session.step.started":
           turn.startedSteps += 1;
-          turn.models.add(`${event.data.model.providerID}/${event.data.model.id}`);
+          turn.stepModel = `${event.data.model.providerID}/${event.data.model.id}`;
+          turn.models.add(turn.stepModel);
           return;
         case "session.step.ended":
         case "session.step.failed": {
           const tokens = event.data.tokens;
           if (tokens === undefined) return;
+          yield* Effect.logDebug(
+            "orchestration-v2.open-code-step",
+            openCodeStepTrace({
+              sessionId: event.data.sessionID,
+              model: turn.stepModel ?? turn.input.modelSelection.model,
+              tokens,
+              eventSeq: event.durable.seq,
+              data: event.data,
+            }),
+          );
           turn.steps += 1;
           turn.lastStep = tokens;
           turn.usage.input += tokens.input + tokens.cache.read + tokens.cache.write;
