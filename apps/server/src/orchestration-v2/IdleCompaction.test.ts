@@ -26,7 +26,12 @@ import * as IdleCompactionService from "./IdleCompactionService.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 
-import { idleCompactionWindow, type IdleCompactionRecords } from "./IdleCompaction.ts";
+import {
+  idleCompactionWindow,
+  isIdleCompactionDriver,
+  PROVIDER_PROMPT_CACHE_TTL_MS,
+  type IdleCompactionRecords,
+} from "./IdleCompaction.ts";
 
 const NOW_MS = Date.parse("2026-10-19T12:00:00.000Z");
 const MINUTE_MS = 60_000;
@@ -38,7 +43,11 @@ const providerThreadId = ProviderThreadId.make("provider-thread");
 const modelSelection = { instanceId, model: "claude-opus-5-5" };
 
 function records(
-  usage: { readonly usedTokens?: number; readonly cacheExpiresInMs?: number } = {},
+  usage: {
+    readonly usedTokens?: number;
+    readonly cacheExpiresInMs?: number;
+    readonly updatedAtOffsetMs?: number;
+  } = {},
 ): { -readonly [Key in keyof IdleCompactionRecords]: IdleCompactionRecords[Key] } {
   const messageId = MessageId.make("message-1");
   const nodeId = NodeId.make("root-node");
@@ -137,7 +146,7 @@ function records(
           ...(usage.cacheExpiresInMs === undefined
             ? {}
             : { promptCacheExpiresAt: DateTime.formatIso(at(usage.cacheExpiresInMs)) }),
-          updatedAt: DateTime.formatIso(at()),
+          updatedAt: DateTime.formatIso(at(usage.updatedAtOffsetMs ?? 0)),
         },
       },
     ],
@@ -192,6 +201,58 @@ describe("idleCompactionWindow", () => {
   });
 });
 
+describe("provider prompt cache lifetimes", () => {
+  it("gives OpenCode the measured 30 minutes and lists only drivers with a compact command", () => {
+    expect(PROVIDER_PROMPT_CACHE_TTL_MS.get(ProviderDriverKind.make("opencode"))).toBe(
+      30 * MINUTE_MS,
+    );
+    expect(
+      PROVIDER_PROMPT_CACHE_TTL_MS.get(ProviderDriverKind.make("claudeAgent")),
+    ).toBeUndefined();
+    expect(isIdleCompactionDriver("claudeAgent")).toBe(true);
+    expect(isIdleCompactionDriver("opencode")).toBe(true);
+    expect(isIdleCompactionDriver("codex")).toBe(false);
+    expect(isIdleCompactionDriver(undefined)).toBe(false);
+  });
+});
+
+describe("idleCompactionWindow for OpenCode", () => {
+  const openCode = (usage: Parameters<typeof records>[0] = {}) => {
+    const data = records(usage);
+    data.providerThreads = [
+      { ...data.providerThreads[0]!, driver: ProviderDriverKind.make("opencode") },
+    ];
+    return data;
+  };
+
+  it("starts two minutes before the measured cache lifetime", () => {
+    expect(idleCompactionWindow(openCode(), NOW_MS)).toEqual({
+      runId,
+      startMs: NOW_MS + 28 * MINUTE_MS,
+      endMs: NOW_MS + 30 * MINUTE_MS,
+    });
+  });
+
+  it("still offers the window while the cache is warm", () => {
+    expect(idleCompactionWindow(openCode(), NOW_MS + 29 * MINUTE_MS)?.runId).toBe(runId);
+  });
+
+  it("offers no window once the cached prefix has already missed", () => {
+    expect(idleCompactionWindow(openCode(), NOW_MS + 30 * MINUTE_MS)).toBeNull();
+    expect(idleCompactionWindow(openCode(), NOW_MS + 2 * 60 * MINUTE_MS)).toBeNull();
+  });
+
+  it("skips a context below the floor", () => {
+    expect(idleCompactionWindow(openCode({ usedTokens: 199_999 }), NOW_MS)).toBeNull();
+  });
+
+  it("does not compact twice in one idle spell", () => {
+    const compacted = openCode();
+    compacted.messages = [{ ...compacted.messages[0]!, text: "/compact" }];
+    expect(idleCompactionWindow(compacted, NOW_MS)).toBeNull();
+  });
+});
+
 describe("IdleCompactionService", () => {
   it.effect.each([
     { mode: "onReturn", reads: 0 },
@@ -204,6 +265,13 @@ describe("IdleCompactionService", () => {
     { mode: "beforeCacheExpires", driver: "codex", instance: "codex", reads: 0 },
     { mode: "beforeCacheExpires", driver: "codex", instance: "custom-codex", reads: 0 },
     { mode: "beforeCacheExpires", driver: "claudeAgent", instance: "custom-claude", reads: 1 },
+    {
+      mode: "beforeCacheExpires",
+      driver: "opencode",
+      instance: "opencode",
+      measuredTtl: true,
+      reads: 1,
+    },
     { mode: "beforeCacheExpires", unconfigured: true, reads: 1 },
   ] as const)(
     "loads history only for eligible idle compaction: $mode/$override/$enabled/$projectDisabled/$instance/$unconfigured",
@@ -220,7 +288,12 @@ describe("IdleCompactionService", () => {
           "instance" in test ? test.instance : "claudeAgent",
         );
         const driver = ProviderDriverKind.make("driver" in test ? test.driver : "claudeAgent");
-        const base = records({ cacheExpiresInMs: 2 * MINUTE_MS });
+        // The measured OpenCode TTL counts from the last request, so place it
+        // far enough back that the compaction is already due.
+        const base =
+          "measuredTtl" in test
+            ? records({ updatedAtOffsetMs: -28 * MINUTE_MS })
+            : records({ cacheExpiresInMs: 2 * MINUTE_MS });
         const data: OrchestrationV2ThreadProjection = {
           ...base,
           thread: {
