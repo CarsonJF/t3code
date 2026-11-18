@@ -240,6 +240,9 @@ jobs:
           OLD_TIP: ${{ steps.rebase.outputs.old_tip }}
         run: |
           set -euo pipefail
+          # The BoopFace read key exports GIT_SSH_COMMAND for later steps and would override
+          # the checkout's deploy key, so pushes authenticate with the deploy key instead.
+          unset GIT_SSH_COMMAND
           git push --force-with-lease="refs/heads/${BRANCH}:${OLD_TIP}" origin "HEAD:refs/heads/${BRANCH}"
           git push --force origin "refs/remotes/upstream/main:refs/heads/main"
 
