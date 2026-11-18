@@ -96,6 +96,7 @@ import { AttachmentFilePreview } from "./AttachmentFilePreview";
 import { AudioPreview } from "./AudioPreview";
 import { BrowserDocumentFrame, isPdfPreviewFile } from "./BrowserDocumentFrame";
 import { DelimitedTablePreview } from "./DelimitedTablePreview";
+import { MediaStepBar } from "./MediaStepBar";
 import { PreviewImage } from "./PreviewImage";
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileExplorerPane } from "./FileExplorerPane";
@@ -128,6 +129,7 @@ import { projectFileCacheKey } from "./fileContentRevision";
 import {
   filePreviewReadErrorMessage,
   isMarkdownPreviewFile,
+  isPreviewableMediaFile,
   resolveFilePreviewPath,
   shouldShowFileExplorer,
   workspaceAssetResource,
@@ -140,6 +142,7 @@ import {
   getProjectFileContents,
   getProjectFileQueryAtom,
   setProjectFileQueryData,
+  useProjectEntriesQuery,
   useProjectFileQuery,
 } from "./projectFilesQueryState";
 
@@ -190,6 +193,9 @@ function WorkspaceImagePreview(props: {
   readonly workspaceRoot: string;
   readonly alt: string;
   readonly workspaceMutationId: string | null;
+  /** Host-owned expanded preview, so the step bar can open the viewer fullscreen. */
+  readonly expanded: boolean;
+  readonly onExpandedChange: (expanded: boolean) => void;
 }) {
   const resource = workspaceAssetResource({
     kind:
@@ -228,7 +234,13 @@ function WorkspaceImagePreview(props: {
   return assetUrl._tag === "Success" && imageUrl !== null ? (
     <MediaActions source={actionsSource}>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <PreviewImage key={imageUrl} src={imageUrl} name={props.alt} />
+        <PreviewImage
+          key={imageUrl}
+          src={imageUrl}
+          name={props.alt}
+          expanded={props.expanded}
+          onExpandedChange={props.onExpandedChange}
+        />
       </div>
     </MediaActions>
   ) : (
@@ -1173,6 +1185,19 @@ function EditableFileSurface({
   );
 }
 
+/** Elements whose own arrow-key handling media stepping must not preempt. */
+function ownsMediaArrowKeys(target: EventTarget | null): boolean {
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target instanceof HTMLMediaElement
+  ) {
+    return true;
+  }
+  return target instanceof HTMLElement && target.isContentEditable;
+}
+
 function selectRenderedContentOnSelectAll(event: ReactKeyboardEvent<HTMLElement>) {
   const mac = isMacPlatform(navigator.platform);
   const selectAll =
@@ -1355,6 +1380,37 @@ export default function FilePreviewPanel({
     serverConfig?.shellRevealInFileManager === true;
   // Everything preview-related keys off previewPath; a folder has no preview.
   const previewPath = isFolder ? null : relativePath;
+  // Stepping reads the current folder's listing, the same projects.listEntries query the file
+  // tree and breadcrumb menus use, and only while a workspace media file is on screen.
+  const mediaStepDirectory =
+    attachment === undefined && !isHostFile && previewPath !== null && isMedia
+      ? previewPath.slice(0, Math.max(0, previewPath.lastIndexOf("/")))
+      : null;
+  const mediaEntriesQuery = useProjectEntriesQuery(
+    environmentId,
+    cwd,
+    mediaStepDirectory ?? undefined,
+    workspaceMutationId,
+    mediaStepDirectory !== null,
+  );
+  const mediaSiblingPaths: string[] = [];
+  if (mediaStepDirectory !== null) {
+    for (const entry of mediaEntriesQuery.data?.entries ?? []) {
+      if (entry.kind === "file" && isPreviewableMediaFile(entry.path)) {
+        mediaSiblingPaths.push(entry.path);
+      }
+    }
+    // The listing arrives in readdir order, so order the step list by file name.
+    mediaSiblingPaths.sort((left, right) =>
+      left.slice(left.lastIndexOf("/") + 1).localeCompare(right.slice(right.lastIndexOf("/") + 1)),
+    );
+  }
+  const mediaStepIndex = previewPath !== null ? mediaSiblingPaths.indexOf(previewPath) : -1;
+  // A lone media file keeps fullscreen where it already is; the bar exists to move between files.
+  const mediaStepReady = mediaStepIndex >= 0 && mediaSiblingPaths.length > 1;
+  const [mediaFullscreenFile, setMediaFullscreenFile] = useState<{ path: string } | null>(null);
+  const mediaFullscreenOpen = isImage && mediaFullscreenFile?.path === previewPath;
+  const mediaSurfaceRef = useRef<HTMLDivElement>(null);
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   const showExplorer = shouldShowFileExplorer({
     relativePath: previewPath,
@@ -1564,6 +1620,27 @@ export default function FilePreviewPanel({
     })();
   };
 
+  // Stepping reuses the panel's own open path, so tree selection, breadcrumbs and pending state
+  // follow exactly as if the file had been clicked. The ends wrap.
+  const stepMedia = (direction: -1 | 1) => {
+    if (!mediaStepReady) return;
+    const count = mediaSiblingPaths.length;
+    onOpenFile(mediaSiblingPaths[(mediaStepIndex + direction + count) % count]!);
+  };
+  // Arrows belong to the preview surface only while it holds focus; the tree and its search keep
+  // their own arrow keys.
+  const handleMediaStepKeydown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (!mediaStepReady || event.defaultPrevented) return;
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    if (ownsMediaArrowKeys(event.target)) return;
+    event.preventDefault();
+    stepMedia(event.key === "ArrowLeft" ? -1 : 1);
+  };
+  const setMediaFullscreen = (open: boolean) => {
+    setMediaFullscreenFile(open && previewPath !== null ? { path: previewPath } : null);
+  };
+
   if (attachment === undefined && !canReadFiles) {
     if (fileAccess.isPending) {
       return (
@@ -1691,7 +1768,12 @@ export default function FilePreviewPanel({
       ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
-          className={cn("min-w-0 flex-1 flex-col overflow-hidden", previewPath ? "flex" : "hidden")}
+          ref={mediaSurfaceRef}
+          onKeyDown={handleMediaStepKeydown}
+          className={cn(
+            "relative min-w-0 flex-1 flex-col overflow-hidden",
+            previewPath ? "flex" : "hidden",
+          )}
         >
           {mayOpenEditor ? (
             // Panel focus lands here and passes to the editor once it attaches. sr-only keeps the
@@ -1749,6 +1831,8 @@ export default function FilePreviewPanel({
               workspaceRoot={cwd}
               alt={relativePath}
               workspaceMutationId={workspaceMutationId}
+              expanded={mediaFullscreenOpen}
+              onExpandedChange={setMediaFullscreen}
             />
           ) : relativePath && renderBrowserFile && absolutePath ? (
             <WorkspaceBrowserPreview
@@ -1883,6 +1967,18 @@ export default function FilePreviewPanel({
                 />
               </DiffWorkerPoolProvider>
             )
+          ) : null}
+          {mediaStepReady && previewPath !== null ? (
+            <MediaStepBar
+              key={previewPath}
+              surfaceRef={mediaSurfaceRef}
+              index={mediaStepIndex}
+              count={mediaSiblingPaths.length}
+              fullscreen={isImage}
+              fullscreenOpen={mediaFullscreenOpen}
+              onStep={stepMedia}
+              onFullscreen={() => setMediaFullscreen(true)}
+            />
           ) : null}
         </div>
         {showExplorer ? (
