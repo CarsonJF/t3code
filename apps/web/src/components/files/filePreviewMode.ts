@@ -1,5 +1,10 @@
 import type { AssetResource, ProjectReadFileError, ScopedThreadRef } from "@t3tools/contracts";
 import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
+import {
+  isWorkspaceAudioPreviewPath,
+  isWorkspaceImagePreviewPath,
+  isWorkspaceVideoPreviewPath,
+} from "@t3tools/shared/filePreview";
 import { isHostPath, workspaceRelativeFilePath } from "@t3tools/shared/path";
 import { msg } from "gt-react";
 
@@ -12,6 +17,12 @@ export function resolveFilePreviewPath(path: string | null, cwd: string): string
 
 export const isMarkdownPreviewFile = (path: string): boolean =>
   /\.(?:md|mdx|markdown|mdown|mkd)$/i.test(path);
+
+/** Files the preview panel renders with its image, video, or audio viewer. */
+export const isPreviewableMediaFile = (path: string): boolean =>
+  isWorkspaceVideoPreviewPath(path) ||
+  isWorkspaceImagePreviewPath(path) ||
+  isWorkspaceAudioPreviewPath(path);
 
 export function filePreviewReadErrorMessage(
   error: ProjectReadFileError,
