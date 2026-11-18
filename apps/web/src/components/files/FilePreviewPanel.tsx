@@ -1391,6 +1391,7 @@ export default function FilePreviewPanel({
     cwd,
     mediaStepDirectory ?? undefined,
     workspaceMutationId,
+    m,
     mediaStepDirectory !== null,
   );
   const mediaSiblingPaths: string[] = [];
