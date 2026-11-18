@@ -200,6 +200,7 @@ jobs:
           run-install: false
 
       - name: Use the BoopFace read key
+        if: steps.resolve.outputs.mode == 'full'
         uses: ./.github/actions/boopface-key
         with:
           key: ${{ secrets.BOOPFACE_READ_KEY }}
