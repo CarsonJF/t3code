@@ -1,9 +1,14 @@
 import { DEFAULT_THEMES, preloadHighlighter } from "@pierre/diffs";
-import { EnvironmentId, ThreadId, type ProjectReadFileResult } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ThreadId,
+  type ProjectEntry,
+  type ProjectReadFileResult,
+} from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { StrictMode, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { cdp, userEvent } from "vite-plus/test/browser";
+import { cdp, page, userEvent } from "vite-plus/test/browser";
 import { act, fakeTimers, render } from "../../../test/render";
 import appCss from "~/index.css?inline";
 import { isMacPlatform } from "~/lib/utils";
@@ -22,6 +27,7 @@ const state = vi.hoisted(() => ({
   mintUrl: vi.fn<() => Promise<string | null>>(),
   browserAssetMints: 0,
   openedBrowserUrls: [] as string[],
+  entries: null as { readonly entries: ReadonlyArray<ProjectEntry>; truncated: boolean } | null,
 }));
 
 vi.mock(import("@t3tools/client-runtime/state/runtime"), async (original) => ({
@@ -132,6 +138,7 @@ vi.mock(import("./FileBreadcrumbs"), () => ({ FileBreadcrumbs: () => <></> }));
 vi.mock(import("./FileBrowserPanel"), () => ({
   default: () => (
     <div role="tree">
+      <input type="search" aria-label="Search files" />
       <button type="button" role="treeitem" data-item-path="src/">
         src
       </button>
@@ -146,6 +153,12 @@ vi.mock(import("../DiffWorkerPoolProvider"), () => ({
 }));
 vi.mock(import("./projectFilesQueryState"), async (original) => ({
   ...(await original()),
+  useProjectEntriesQuery: () => ({
+    data: state.entries,
+    error: null,
+    isPending: false,
+    refresh: vi.fn(),
+  }),
   useProjectFileQuery: () => ({
     data: state.file,
     error: null,
@@ -179,6 +192,7 @@ function setup() {
   localStorage.setItem(keys[1]!, "true");
   state.file = null;
   state.optimistic = null;
+  state.entries = null;
   state.assetUrl = { _tag: "Loading" };
   state.assetResources = [];
   state.openedBrowserUrls = [];
@@ -210,7 +224,11 @@ function markdownPreview(
   return filePreview(relativePath);
 }
 
-function filePreview(relativePath: string, workspaceMutationId: string | null = null) {
+function filePreview(
+  relativePath: string,
+  workspaceMutationId: string | null = null,
+  onOpenFile: (path: string) => void = vi.fn(),
+) {
   return (
     <FilePreviewPanel
       environmentId={environmentId}
@@ -224,7 +242,7 @@ function filePreview(relativePath: string, workspaceMutationId: string | null = 
       openInShortcutEnabled={false}
       revealLine={null}
       revealRequestId={0}
-      onOpenFile={vi.fn()}
+      onOpenFile={onOpenFile}
       onNavigateFolder={vi.fn()}
       folderTrail={undefined}
       onPendingChange={vi.fn()}
@@ -743,5 +761,180 @@ describe("rendered Markdown relative images", () => {
     expect(state.assetResources).toContainEqual(
       expect.objectContaining({ _tag: "media-file", path: expectedPath }),
     );
+  });
+});
+
+describe("media step controls", () => {
+  const image = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>';
+  const folder = (names: ReadonlyArray<string>): ReadonlyArray<ProjectEntry> =>
+    names.map((name) => ({ path: `shots/${name}`, kind: "file" as const }));
+  const showImage = () => {
+    state.file = null;
+    state.assetUrl = {
+      _tag: "Success",
+      url: image,
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      fileRevision: "revision-1",
+    };
+  };
+
+  it("steps in name order through the panel's open path and counts only media", async () => {
+    using _settings = setup();
+    showImage();
+    state.entries = {
+      entries: [
+        { path: "shots/c.png", kind: "file" },
+        { path: "shots/notes.txt", kind: "file" },
+        { path: "shots/a.png", kind: "file" },
+        { path: "shots/b.png", kind: "file" },
+        { path: "shots", kind: "directory" },
+      ],
+      truncated: false,
+    };
+    let path = "shots/a.png";
+    const onOpenFile = vi.fn((next: string) => {
+      path = next;
+    });
+    const panel = () => filePreview(path, null, onOpenFile);
+    await using screen = await render(panel());
+
+    await expect
+      .element(screen.getByRole("group", { name: "Media preview controls" }))
+      .toBeInTheDocument();
+    await expect.element(screen.getByText("1/3")).toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("button", { name: "Zoom shots/a.png" }))
+      .toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next media" }));
+    expect(onOpenFile).toHaveBeenCalledExactlyOnceWith("shots/b.png");
+    await screen.rerender(panel());
+    await expect.element(screen.getByText("2/3")).toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("button", { name: "Zoom shots/b.png" }))
+      .toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Previous media" }));
+    expect(onOpenFile).toHaveBeenLastCalledWith("shots/a.png");
+    await screen.rerender(panel());
+    await expect.element(screen.getByText("1/3")).toBeInTheDocument();
+  });
+
+  it("wraps stepping at both ends of the folder's media", async () => {
+    using _settings = setup();
+    showImage();
+    state.entries = { entries: folder(["a.png", "b.png", "c.png"]), truncated: false };
+    let path = "shots/a.png";
+    const onOpenFile = vi.fn((next: string) => {
+      path = next;
+    });
+    const panel = () => filePreview(path, null, onOpenFile);
+    await using screen = await render(panel());
+    await expect.element(screen.getByText("1/3")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Previous media" }));
+    expect(onOpenFile).toHaveBeenCalledExactlyOnceWith("shots/c.png");
+    await screen.rerender(panel());
+    await expect.element(screen.getByText("3/3")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next media" }));
+    expect(onOpenFile).toHaveBeenLastCalledWith("shots/a.png");
+    await screen.rerender(panel());
+    await expect.element(screen.getByText("1/3")).toBeInTheDocument();
+  });
+
+  it("hides the bar for a lone media file and for text files", async () => {
+    using _settings = setup();
+    showImage();
+    state.entries = {
+      entries: [
+        { path: "shots/a.png", kind: "file" },
+        { path: "shots/notes.txt", kind: "file" },
+      ],
+      truncated: false,
+    };
+    await using screen = await render(filePreview("shots/a.png"));
+    await expect
+      .element(screen.getByRole("button", { name: "Zoom shots/a.png" }))
+      .toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("group", { name: "Media preview controls" }))
+      .not.toBeInTheDocument();
+
+    state.entries = { entries: folder(["a.png", "b.png"]), truncated: false };
+    state.file = {
+      relativePath: "shots/notes.ts",
+      contents: "const x = 1;\n",
+      byteLength: 13,
+      truncated: false,
+    };
+    await screen.rerender(filePreview("shots/notes.ts"));
+    await expect
+      .element(screen.getByRole("group", { name: "Media preview controls" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("steps for audio and video but leaves fullscreen to their own players", async () => {
+    using _settings = setup();
+    state.entries = { entries: folder(["a.mp3", "b.mp3"]), truncated: false };
+    await using screen = await render(filePreview("shots/a.mp3"));
+    await expect
+      .element(screen.getByRole("group", { name: "Media preview controls" }))
+      .toBeInTheDocument();
+    await expect.element(screen.getByText("1/2")).toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("button", { name: "Fullscreen image" }))
+      .not.toBeInTheDocument();
+
+    state.entries = { entries: folder(["a.mp4", "b.mp4"]), truncated: false };
+    await screen.rerender(filePreview("shots/a.mp4"));
+    await expect
+      .element(screen.getByRole("group", { name: "Media preview controls" }))
+      .toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("button", { name: "Fullscreen image" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("steps with arrows in the preview, but not while the panel's search field has focus", async () => {
+    using _settings = setup();
+    localStorage.setItem("t3code.fileExplorerOpen", "true");
+    showImage();
+    state.entries = { entries: folder(["a.png", "b.png"]), truncated: false };
+    let path = "shots/a.png";
+    const onOpenFile = vi.fn((next: string) => {
+      path = next;
+    });
+    const panel = () => filePreview(path, null, onOpenFile);
+    await using screen = await render(panel());
+
+    await expect
+      .element(screen.getByRole("button", { name: "Zoom shots/a.png" }))
+      .toBeInTheDocument();
+    (screen.getByRole("button", { name: "Zoom shots/a.png" }).element() as HTMLElement).focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onOpenFile).toHaveBeenCalledExactlyOnceWith("shots/b.png");
+    await screen.rerender(panel());
+
+    (screen.getByRole("searchbox", { name: "Search files" }).element() as HTMLElement).focus();
+    await userEvent.keyboard("{ArrowRight}{ArrowLeft}");
+    expect(onOpenFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the viewer's fullscreen from the bar and exits with Escape", async () => {
+    using _settings = setup();
+    showImage();
+    state.entries = { entries: folder(["a.png", "b.png"]), truncated: false };
+    await using screen = await render(filePreview("shots/a.png"));
+
+    await userEvent.click(screen.getByRole("button", { name: "Fullscreen image" }));
+    await expect.element(page.getByRole("dialog")).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Back, close image preview" }))
+      .toBeVisible();
+
+    await userEvent.keyboard("{Escape}");
+    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "Fullscreen image" })).toHaveFocus();
   });
 });
