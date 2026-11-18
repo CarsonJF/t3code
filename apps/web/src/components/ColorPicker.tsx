@@ -1,6 +1,7 @@
 import { isNamedProjectColor, projectColorStop } from "@t3tools/client-runtime/thread-groups";
 import { CustomColor, type ProjectColor } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import { useMessages } from "gt-react";
 import { useState } from "react";
 
 import { PROJECT_ICON_COLORS } from "../projectIconOptions";
@@ -26,6 +27,7 @@ export function ColorPicker(props: {
   readonly onChange: (color: ProjectColor) => void;
 }) {
   const { value, onChange } = props;
+  const m = useMessages();
   const custom = value !== null && !isNamedProjectColor(value);
   const stop = custom ? projectColorStop(value) : null;
   const [hexDraft, setHexDraft] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export function ColorPicker(props: {
           <button
             key={option.value}
             type="button"
-            aria-label={option.label}
+            aria-label={m(option.label)}
             aria-pressed={value === option.value}
             className={cn(swatchClassName, value === option.value && "border-foreground/64")}
             onClick={() => onChange(option.value)}
