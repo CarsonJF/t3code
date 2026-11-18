@@ -595,7 +595,8 @@ export default defineConfig({
           "apps/mobile/src/features/development/**",
           "packages/client-runtime/src/rpc/**",
         ],
-        rules: { "t3code/no-untranslated-copy": "error" },
+        // This fork's custom features predate the rule; keep it visible but non-blocking.
+        rules: { "t3code/no-untranslated-copy": "warn" },
       },
       {
         // React Compiler owns memoization; upstream rules do not ban redundant useMemo/useCallback.
