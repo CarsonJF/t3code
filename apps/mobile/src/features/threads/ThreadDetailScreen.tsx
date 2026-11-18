@@ -201,6 +201,7 @@ import {
 import { ComposerPopoverHost } from "./ComposerPopoverHost";
 import { ThreadFeed, type ThreadFeedHistoryControls } from "./ThreadFeed";
 import { useTotThemeTokens } from "../tots/useTotThemeTokens";
+import { useThreadTot } from "../../state/tots";
 import { WorkspaceMutationIdProvider } from "./WorkspaceMutationIdProvider";
 import { useThreadTurnSubagents } from "./ThreadAgentsSheet";
 import { ComposerQueuedEditBanner } from "./ComposerQueuedEdit";
@@ -1374,6 +1375,8 @@ function ThreadDetailBody(
   const { themeAppearance } = useAppearancePreferences();
   const isDarkMode = themeAppearance === "dark";
   const totTheme = useTotThemeTokens(props.environmentId, props.selectedThread.id);
+  // The same shell the list resolves, so a Tot's card and its thread agree on whose it is.
+  const tot = useThreadTot(props.selectedThread);
 
   const handleFeedTouchStart = (event: GestureResponderEvent) => {
     feedTouchStartRef.current = {
@@ -1452,6 +1455,7 @@ function ThreadDetailBody(
                   toolCallVisibility={toolCallVisibility}
                   environmentId={props.environmentId}
                   threadId={props.selectedThread.id}
+                  tot={tot}
                   detailRef={props.selectedThreadDetailRef}
                   workspaceRoot={props.threadCwd}
                   feed={props.selectedThreadFeed}
