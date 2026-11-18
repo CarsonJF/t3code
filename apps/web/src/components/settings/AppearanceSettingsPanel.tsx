@@ -370,7 +370,7 @@ export function AppearanceSettingsPanel() {
           resetAction={
             settings.animateTotAvatars !== DEFAULT_UNIFIED_SETTINGS.animateTotAvatars ? (
               <SettingResetButton
-                label="Tot avatar animation"
+                ariaLabel={gt("Tot avatar animation")}
                 onClick={() =>
                   updateSettings({ animateTotAvatars: DEFAULT_UNIFIED_SETTINGS.animateTotAvatars })
                 }
@@ -391,7 +391,7 @@ export function AppearanceSettingsPanel() {
           resetAction={
             settings.totThemeEffects !== DEFAULT_UNIFIED_SETTINGS.totThemeEffects ? (
               <SettingResetButton
-                label="theme effects"
+                ariaLabel={gt("theme effects")}
                 onClick={() =>
                   updateSettings({ totThemeEffects: DEFAULT_UNIFIED_SETTINGS.totThemeEffects })
                 }
@@ -412,7 +412,7 @@ export function AppearanceSettingsPanel() {
           resetAction={
             settings.totToasts !== DEFAULT_UNIFIED_SETTINGS.totToasts ? (
               <SettingResetButton
-                label="Tot toasts"
+                ariaLabel={gt("Tot toasts")}
                 onClick={() => updateSettings({ totToasts: DEFAULT_UNIFIED_SETTINGS.totToasts })}
               />
             ) : null
