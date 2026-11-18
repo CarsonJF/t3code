@@ -4,7 +4,9 @@ import {
   MessageId,
   resolveIdleCompaction,
   resolveProjectProviderInstanceEnabled,
+  type ProviderInstanceId,
   type RunId,
+  type ServerSettings as ServerSettingsShape,
   type ThreadId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -15,15 +17,24 @@ import * as Stream from "effect/Stream";
 
 import { forkParked } from "../serverActivation.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import { idleCompactionWindow } from "./IdleCompaction.ts";
+import { idleCompactionWindow, isIdleCompactionDriver } from "./IdleCompaction.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 
+// A built-in instance id doubles as its driver, matching settings decoding.
+const driverOf = (
+  settings: Pick<ServerSettingsShape, "providerInstances">,
+  instanceId: ProviderInstanceId,
+) =>
+  Object.hasOwn(settings.providerInstances, instanceId)
+    ? settings.providerInstances[instanceId]?.driver
+    : instanceId;
+
 /**
- * Beta: when a run completes on a Claude instance set to compact before the
- * cache expires, waits until shortly before its prompt cache expires and sends
- * `/compact` as a visible T3 Code turn. Timers live in
- * memory, so a server restart skips compactions that were still waiting.
+ * Beta: when a run completes on a Claude or OpenCode instance set to compact
+ * before the cache expires, waits until shortly before its prompt cache expires
+ * and sends `/compact` as a visible T3 Code turn. Timers live in memory, so a
+ * server restart skips compactions that were still waiting.
  */
 export const make = Effect.gen(function* () {
   const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -37,11 +48,8 @@ export const make = Effect.gen(function* () {
       while (true) {
         const current = yield* settings.getSettings;
         const thread = yield* projections.getThread(threadId);
-        const claudeInstance = Object.hasOwn(current.providerInstances, thread.providerInstanceId)
-          ? current.providerInstances[thread.providerInstanceId]?.driver === "claudeAgent"
-          : thread.providerInstanceId === "claudeAgent";
         if (
-          !claudeInstance ||
+          !isIdleCompactionDriver(driverOf(current, thread.providerInstanceId)) ||
           resolveIdleCompaction(current, thread.providerInstanceId) !== "beforeCacheExpires" ||
           !resolveProjectProviderInstanceEnabled(
             current,
@@ -79,6 +87,7 @@ export const make = Effect.gen(function* () {
           },
         );
         if (
+          !isIdleCompactionDriver(driverOf(current, records.thread.providerInstanceId)) ||
           resolveIdleCompaction(current, records.thread.providerInstanceId) !==
             "beforeCacheExpires" ||
           !resolveProjectProviderInstanceEnabled(
