@@ -285,7 +285,10 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
                   ),
                 );
           if (project !== undefined && input.workspaceStrategy?.type === "existing_worktree")
-            yield* assertProjectWorktree(project.workspaceRoot, input.workspaceStrategy.worktreePath);
+            yield* assertProjectWorktree(
+              project.workspaceRoot,
+              input.workspaceStrategy.worktreePath,
+            );
           if (!replaying && input.modelSelection !== undefined) {
             const { instanceId, model } = input.modelSelection;
             const providers = yield* (yield* ProviderRegistry.ProviderRegistry).getProviders;
