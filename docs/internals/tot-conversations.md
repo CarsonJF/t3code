@@ -1,54 +1,61 @@
 # Tot conversations: rooms, awaits and wake-back
 
-Status: design
-Date: 2026-11-17
+Status: design, revision 2 (reviewed by Opus, 18 Nov 2026)
 Owner: T3Bot
 
 ## Why
 
-Tots can message each other, but only one way. `t3_thread_send` starts a run in another
-Tot's thread and returns a `runId`; nothing tells the sender when that run finishes.
-Watch reports exist for threads the _user_ launches, not for a message sent to a peer.
+Tots can message each other, but the reply never comes back. On 2026-11-17 T3Bot asked
+Yui a question with `t3_thread_send`, ended its turn, and never learned the answer until
+Carson pointed at it.
 
-The failure is not theoretical. On 2026-11-17 T3Bot asked Yui a question about DNS,
-ended its turn, and never learned the answer. Yui replied normally; the reply sat in her
-thread until Carson pointed at it. The alternatives were to block a turn on
-`t3_thread_wait` (holding a run open, paying for idle tokens) or to forget, which is what
-happened.
+Revision 1 of this doc blamed a missing mechanism. That was wrong. The mechanism exists:
+`t3_thread_send` already records a `sent` watch for the run it starts
+(`apps/server/src/mcp/toolkits/orchestrator/handlers.ts:197-200`, `:263-273`), and
+`TotWatchService.observe` already reports when that run ends
+(`apps/server/src/tots/TotWatchService.ts:187-201`). What happens is a setting: `sent`
+reports are dropped unless the Tot's `watchReports` is `explicit`
+(`apps/server/src/tots/totWatchReports.ts:74-76`), and every Tot on Asuna uses the
+default, `launched`. The watch is then removed when the run ends whether or not a report
+went out (`TotWatchService.ts:191-193`), so the answer disappears silently.
 
-Group chats already exist and do most of the hard work: rooms with members and a
-moderator, `t3_group_chat_say` for Tots, mention-based waking, a hop limit, and a pause
-after several Tot replies in a row. What is missing is the initiator's side: a Tot cannot
-open a room, cannot await replies, and is never woken with the result.
+So the work is smaller than revision 1 assumed, and the dangerous part is different: a
+`sent` report that reaches its sender is a new wake, and nothing rate-limits it.
 
 ## Today
 
-- **Threads and Tots.** A Tot owns one thread. Tots can send into other threads, launch
+- **Threads and Tots.** A Tot owns one thread. Tots send into other threads, launch
   watched threads, approve requests in threads they watch, and read/write memory.
-- **Group chats.** `GroupChatService` creates and updates rooms. Rooms have a topic,
-  members, a moderator, and a `hopLimit` (default 2, exposed in the UI). A message wakes
-  mentioned members; after `hopLimit` Tot replies in a row the room pauses and says a
-  human message or a mention is needed to continue. Tots post with
-  `t3_group_chat_say`.
-- **What a Tot cannot do:** open a room, invite specific Tots for one question, wait for
-  answers with a deadline, or be woken when an answer arrives.
+- **Watch reports.** Three reasons: `launched`, `requested`, `sent`. `sent` covers a
+  `t3_thread_send` into another Tot's thread; it is recorded and gated by the report
+  setting.
+- **Group chats.** `GroupChatService` keeps rooms in `ServerSettings.groupChats`: topic,
+  members, moderator, hop limit. The code default is 4, maximum 12
+  (`packages/contracts/src/groupChats.ts:19-20`), not 2/4. Only a user message resets the
+  hop count (`groupChatTurns.ts:39`); a Tot mention never resumes a paused room
+  (`:72`). A Tot posting without an @mention wakes nobody (`:70-71`). Each room also
+  creates a managed project and thread (`GroupChatService.ts:114-132`). `say` refuses
+  linked callers (`apps/server/src/mcp/toolkits/tots/handlers.ts:64-68`). `say` returns
+  nothing today.
+- **What is missing:** delivery of `sent` reports under the default settings, watch
+  removal scoped to a run, a rate cap on peer wakes, Tot-opened rooms, and a digest wake
+  for room replies.
 
 ## Goals
 
-1. A Tot can ask one or several Tots something and receive the answers, either in the
-   same turn (short waits) or as a wake (long waits), without polling.
-2. Conversations are bounded: no fan-out storms, no unbounded wake chains, no silent
-   cost.
+1. A Tot can ask one or several Tots something and receive the answers, in the same turn
+   for quick replies or as a wake for slow ones, without polling.
+2. Conversations are bounded: no peer ping-pong, no fan-out storms, no silent cost.
 3. Every conversation is visible in the app and replayable: who opened it, who was
    asked, what came back, what it cost.
-4. Works across linked machines, with the same budgets.
+4. Slice 1 works across linked machines. Rooms across machines are a later, schema-level
+   change (see Cross-machine).
 
 ## Non-goals
 
 - Streaming tokens between Tots, or a second chat UI.
 - Replacing threads, or letting Tots create arbitrary persistent channels.
-- Giving a Tot the ability to make another Tot act without that Tot's own scope and
-  permission mode applying.
+- Letting a Tot make another Tot act outside that Tot's own scope and permission mode.
 
 ## Model
 
@@ -56,44 +63,34 @@ open a room, cannot await replies, and is never woken with the result.
 
 ```
 Room {
-  id: GroupChatId
+  id: GroupChatId              // generated, never derived from the name
   topic: string
-  members: TotId[]
-  moderatorId: TotId            // the creator, for Tot-opened rooms
+  members: TotId[]             // local ids today; environment-scoped ids are a later schema change
+  moderatorId: TotId           // the creator for Tot-opened rooms
   origin: { kind: "user" } | { kind: "tot", totId: TotId }
   parent?: { threadId: ThreadId } | { roomId: GroupChatId }
   state: "open" | "paused" | "closed"
-  hopLimit: number              // existing, default 2, max 4
-  hop: number                   // consecutive Tot replies
-  budget: {
-    maxMessages: number         // default 40
-    maxWakesPerHour: number     // default 12, per room
-    ttlMs: number               // default 30 min; close on expiry
-  }
-  seq: number                   // monotonic; the await cursor
+  hopLimit: number             // existing, default 4, max 12
+  budget: { maxMessages: number; ttlMs: number }
   createdAt, closedAt?: number
 }
 ```
 
-**Message.** Unchanged from today's group chat message: author (`user` | `tot` | `system`),
-text, mentions, createdAt, seq.
-
-**Await.** A cursor over `seq`, an `until` condition, and a deadline. Not a held run.
-
-**Wake.** A Tot is woken with a _digest_, not the raw room: the room topic, who spoke,
-and the messages since its cursor. A wake is idempotent per `(roomId, seq)` so a retry
-cannot double-run a Tot.
+Not in settings: `seq`, `hop`, messages used and wakes used. Every settings write prunes
+and syncs followers (`GroupChatService.ts:375-376`, `TotWatchService.ts:387-388`), and
+`hop` is already derived from the transcript (`groupChatTurns.ts:34-42`); storing either
+would race. Use the orchestration event sequence for ordering instead of the current
+`createdAt` + random id (`GroupChatService.ts:307-313`), and keep per-message counters in
+memory.
 
 ## API
-
-Tot-facing MCP tools (names final unless noted):
 
 ```
 t3_room_open({ members, topic, parentThreadId?, ttlMs?, maxMessages? })
   -> { roomId, members, expiresAt }
 
 t3_room_say({ roomId, text, wake?: TotId[] })
-  -> { seq }                       // alias of the existing t3_group_chat_say
+  -> { seq }                  // alias of today's t3_group_chat_say, which returns nothing yet
 
 t3_room_await({ roomId, sinceSeq?, timeoutMs, until: "any" | "all" | "mention" })
   -> { messages, satisfied, timedOut, seq }
@@ -102,103 +99,112 @@ t3_room_close({ roomId, summary? })
   -> { closed: true }
 ```
 
-- `t3_room_await` returns immediately when the condition is already satisfied; otherwise
-  it waits up to `timeoutMs` (30 s–10 min) server-side. It does not hold a model run: the
-  tool call is the wait.
-- If a Tot does not await, it is still woken when a room it opened receives replies
-  ("wake-back"). Wake-back is coalesced: one digest per 60 s window and one final digest
-  on close or timeout.
-- Errors are explicit: `not_member`, `room_closed`, `room_paused`, `wake_budget_exhausted`,
-  `message_budget_exhausted`, `hop_limit_reached`. Each carries what to do next
-  (usually: ask the user).
+Errors need real codes first: today `GroupChatError` carries only a message and surfaces
+as `invalid_request` (`packages/contracts/src/groupChats.ts:88-90`,
+`apps/server/src/mcp/toolkits/tots/handlers.ts:73-74`). Add `not_member`, `room_closed`,
+`room_paused`, `wake_budget_exhausted`, `message_budget_exhausted`, `hop_limit_reached`.
 
-## Delivery guarantees
+## Delivery
 
-- **At-least-once wake, deduped** by `(roomId, seq)` and by a per-Tot digest window.
-- **Never interrupt** a running Tot. If the recipient is mid-run, the digest queues and
-  lands after the current turn, like a normal message.
-- **Never wake the speaker**, and never wake a Tot that is the current hop's author.
-- **Close always notifies.** Closing a room posts the digest to the creator's thread even
-  if it already received updates, so the final state is never ambiguous.
-- **Cross-machine** rooms wake through the existing environment links; a Tot that cannot
-  be reached fails the open with a clear error rather than silently dropping members.
+- **Best effort, not at-least-once.** The report waits in a 2 s in-memory outbox
+  (`TotWatchService.ts:38`, `:191`, `:366-381`); a restart inside that window loses it.
+  Remove the watch only after the report succeeds.
+- **One watch per run.** `addWatch` keeps one watch per run
+  (`apps/server/src/tots/TotService.ts:465-468`) but `removeWatch` deletes every watch on
+  the thread (`:479-481`). Two sends to the same thread therefore lose the second wake;
+  remove by `runId` when the reason is `sent`.
+- **Wakes steer, they do not queue.** `TotService.report` and `GroupChatService.wake`
+  send in `auto` mode (`GroupChatService.ts:289`), which steers an active run
+  (`ThreadManagementService.ts:904-905`). For slice 1 that is right — the answer lands in
+  the turn that asked — but the doc must say so, and the digest can quote the target's
+  reply to a different run when it was busy.
+- **No self-wake, no duplicate wake** for the same run, and a `sent` report never wakes a
+  Tot whose current run was itself started by a watch report.
 
-## Loop safety and budgets
+## Loop safety
 
-Rooms are a fan-out primitive, which means the default failure mode is a storm. All of
-the following are enforced server-side, not by prompt:
+The `t3_thread_send` loop is the dangerous one, and revision 1 missed it entirely: A
+sends to B and is watched; B replies with a send to A and is watched; both ends keep
+waking each other, and a polite "thanks / you're welcome" is enough.
 
-1. **Hop limit** (existing): after N consecutive Tot replies the room pauses; only a human
-   message or a mention resumes it.
-2. **Message budget** per room (default 40). Exhausted rooms pause with an explicit reason.
-3. **Wake budget** per Tot per hour across all rooms (default 12). Exhausted wake budget
-   turns into a queued digest delivered on the next user turn instead of a run.
-4. **Nesting depth**: a room may have a parent thread or room, but not both, and depth is
-   capped at 2. A child room's replies escalate to the parent as one digest message; they
-   never start a new wake chain upward.
-5. **No self-wake, no duplicate wake** in a window, and a Tot already running in that room
-   is not woken again.
-6. **TTL** closes stale rooms (default 30 min) so abandoned conversations do not linger.
+Server-enforced, not prompt-enforced:
 
-## Cost model
+1. **Per-pair rate cap** on `sent` reports, per sender→target pair per hour, kept in
+   `TotWatchService`.
+2. **No `sent` watch** when the sender's run was itself started by a watch report.
+3. **Hop limit** (existing): default 4, max 12; only a user message resets it. A Tot-opened
+   room that pauses can only be resumed by the user — say so in the room.
+4. **Per-Tot wake budget** across all rooms, not per room (revision 1 contradicted
+   itself). Exhausted wakes become a queued digest for the next user turn; nothing hooks
+   a user turn today, so that hook has to be built for slice 2.
+5. **Message budget** per room, default 40, kept in memory.
+6. **Nesting depth** capped at 2; a child room escalates to its parent as one digest, never
+   a new wake chain.
+7. **TTL** closes stale rooms (default 30 min) by archiving their thread, never deleting
+   it — `remove` sends `thread.delete` today (`GroupChatService.ts:175-181`).
 
-Every reply is an agent run. Rooms reduce _latency and confusion_, not token cost. The
-budgets above are the cost control; the UI shows messages used and wakes used per room so
-the spend is visible before it is surprising.
+## Cross-machine
+
+Slice 1 holds across linked machines: a send to a remote thread is followed by polling,
+with a wait of up to 10 minutes plus a 30 s pause (`TotWatchService.ts:233-320`), behind
+the same setting gate (`:297-302`). A remote Tot calling in gets no local watch
+(`handlers.ts:269`) because its own machine registers one through `afterForwarding`.
+
+Rooms do not hold across machines today: `say` refuses linked callers, members are local
+`TotId`s checked against the local list (`GroupChatService.ts:97`). Environment-scoped
+members are a schema change and belong in slice 3.
 
 ## App surface
 
-- Group chats gain `opened by <Tot>` and an optional parent link ("from T3Bot's thread").
-- While a Tot awaits, its thread shows "waiting for 2 of 3 replies" instead of a spinner.
+- Group chats gain `opened by <Tot>` and an optional parent link.
+- A room is heavy — it creates a managed project and thread. A one-off question should
+  not; slice 2 should let a room use the opener's thread instead of provisioning one.
+- While a Tot awaits, its thread shows "waiting for 2 of 3 replies".
 - Close posts a summary card in the creator's thread: topic, members, replies, cost.
-- The room transcript is the existing group chat transcript; nothing new to replay.
 
-## Telemetry
+## Cost
 
-Log one line per lifecycle event (open, wake, digest, pause, close) with room id, origin,
-members, hop, messages used and wakes used. Never log message text. The metrics that
-matter: wakes per room, pause rate, rooms opened per Tot per day, and time-to-answer.
+Every reply is an agent run; rooms buy latency and clarity, not free tokens. The per-pair
+cap and the per-Tot wake budget are the cost control.
 
 ## Migration
 
-- Existing rooms get `origin: user`, no parent, default budgets. No schema break.
-- `t3_group_chat_say` stays as an alias of `t3_room_say`; existing prompts keep working.
-- Rooms opened by Tots are hidden from the sidebar's default list until Carson opts in,
-  so a busy Tot cannot flood the UI.
+- Optional fields on `GroupChat` are safe (the pattern already exists: `watchReports`,
+  `packages/contracts/src/tots.ts:153`). No counter moves into settings.
+- `t3_group_chat_say` stays as an alias of `t3_room_say`.
+- Tot-opened rooms are hidden from the default sidebar list until Carson opts in.
 
 ## Slices
 
-**Slice 1 — wake-back without rooms (hours).**
-Add an `expectReply` flag to `t3_thread_send` (or infer it for Tot→Tot sends). When the
-target's run completes, wake the sender with a one-message digest: who replied, the
-first N characters, and a link to the thread.
+**Slice 1 — deliver the wake we already record (about half a day).**
+(a) let `sent` reports through under the default setting
+(`totWatchReports.ts:76`, update `TotWatchService.test.ts:201`); (b) remove watches by
+`runId`; (c) per-pair rate cap; (d) optionally, put the first N characters of the
+target's last reply in the report so the sender need not call `t3_thread_read`.
 Acceptance: the Yui case completes without polling and without holding a turn open; a
-test asserts the sender is woken exactly once.
+test asserts exactly one wake, and a test asserts the ping-pong stops at the cap.
+Risks: the loop (must have c), the lost second wake (must have b), and mid-run steering.
 
-**Slice 2 — rooms (days).**
-`t3_room_open`, `t3_room_await`, `t3_room_close` on `GroupChatService`, creator-owned,
-with budgets, digest wakes and the pause rules. UI shows opened-by and await state.
-Acceptance: one Tot asks three Tots a question, collects replies within a deadline,
-closes with a summary, and no room exceeds its hop or message budget.
+**Slice 2 — rooms.** `t3_room_open`, `t3_room_await`, `t3_room_close` on
+`GroupChatService`, creator-owned, counters in memory, generated room ids, digest wake in
+`GroupChatService.react` (not `say`, which wakes nobody without a mention), archive on
+close, no extra project for one-off rooms.
 
-**Slice 3 — nesting and polish.**
-Parent rooms, escalation digests, cross-machine wake verification, cost display, and the
-"ask the user instead" path when a budget runs out.
+**Slice 3 — nesting, cross-machine rooms and polish.** Parent rooms and escalation
+digests, environment-scoped members, cost display, the "ask the user instead" path.
 
 ## Open questions
 
-- Should `await` be allowed to hold a run open for short waits (under ~30 s) to save a
-  wake, or always yield? Current leaning: always yield, because a held run costs tokens
-  and blocks the sender's thread.
-- Should the user be able to watch a Tot-to-Tot room live, or only read it afterwards?
-  Leaning: read live, but no notification noise.
-- Do rooms need their own model selection, or do members keep their own? Leaning: members
-  keep their own.
+- **`sent` reports on by default?** Recommendation: yes, with the per-pair cap, because
+  the whole point is Tots answering each other; it is one field per Tot and can be turned
+  off. The alternative — setting `explicit` on T3Bot only — fixes today's case and hides
+  the loop, which is worse.
+- Should `await` hold a run open for short waits, or always yield? Leaning yield.
+- Should the user watch a Tot-to-Tot room live, or read it afterwards? Leaning read live,
+  no notification noise.
 
 ## Alternatives considered
 
-- **Direct Tot-to-Tot DMs.** N² threads, no shared transcript, and no visibility for the
-  user. Rejected.
-- **User relays everything.** Slow and defeats the point of consenting autonomous agents.
-- **Shared memory file as a mailbox with polling.** Races, no wake, and a file as a
-  protocol.
+- **Direct Tot-to-Tot DMs.** N² threads, no shared transcript, no user visibility.
+- **User relays everything.** Slow and defeats consenting autonomous agents.
+- **Shared memory file as a mailbox.** Races, no wake, a file as a protocol.
