@@ -57,7 +57,7 @@ import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { useViewabilityAmount, type LegendListRef } from "@legendapp/list/react-native";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { TOT_FACE_STATE_LABELS } from "@t3tools/client-runtime/tots";
+import { TOT_FACE_STATE_LABELS, type EnvironmentTot } from "@t3tools/client-runtime/tots";
 import type { HandoffEndpoints } from "@t3tools/client-runtime/handoff";
 import {
   IDLE_COMPACTING_LABELS,
@@ -340,7 +340,7 @@ import {
   THREAD_FEED_MAINTAIN_SCROLL_AT_END_THRESHOLD,
 } from "./threadFeedEndFollow";
 import { useMessageTimeFormatter } from "./useMessageTimeFormatter";
-import { useAnimateTotAvatars, useThreadTot, useTotFace } from "../../state/tots";
+import { useAnimateTotAvatars, useTotFace } from "../../state/tots";
 import { totThemeColor, useTotThemeTokens } from "../tots/useTotThemeTokens";
 import { TotLiveFace } from "../tots/TotLiveFace";
 import { TOT_THREAD_HEADER_HEIGHT, TotThreadHeader } from "../tots/TotThreadHeader";
@@ -381,6 +381,8 @@ export interface ThreadFeedProps {
   readonly onEditPendingMessage: ((message: QueuedThreadMessage) => void) | null;
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
+  /** The Tot whose thread this is, resolved from the thread shell as the list resolves it. */
+  readonly tot: EnvironmentTot | null;
   /** Null while the thread's creation is queued: reading detail then caches a not-found as deleted. */
   readonly detailRef: ScopedThreadRef | null;
   readonly threadTitle: string;
@@ -3201,8 +3203,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const gt = useGT();
   const m = useMessages();
   const formatMessageTime = useMessageTimeFormatter();
-  const { listRef, onIsAtEndChange, onHeaderMaterialVisibilityChange } = props;
-  const tot = useThreadTot({ environmentId: props.environmentId, id: props.threadId });
+  const { listRef, onIsAtEndChange, onHeaderMaterialVisibilityChange, tot } = props;
   const totTheme = useTotThemeTokens(props.environmentId, props.threadId);
   const totFace = useTotFace(tot);
   const animateTot = useAnimateTotAvatars();
