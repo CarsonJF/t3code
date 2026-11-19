@@ -9,6 +9,9 @@ const entry = (instanceId: string, status: string, enabled = true) =>
     enabled,
     isAvailable: true,
     status,
+    // Upstream's picker-readiness check reads the snapshot even for error rows.
+    snapshot: { auth: { status: "unknown" } },
+    models: [],
   }) as never;
 
 describe("firstReadyModel", () => {
