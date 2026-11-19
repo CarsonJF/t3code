@@ -45,6 +45,15 @@ const harness = vi.hoisted(() => ({
   },
 }));
 
+// The fork's thread-group picker would otherwise pull expo's Node-only async-require
+// setup into this jsdom test, where the React Native __DEV__ global is undefined.
+vi.mock("../../state/thread-groups", () => ({
+  useThreadGroupsView: () => ({
+    byEnvironment: new Map(),
+    groups: [],
+    writableEnvironmentIds: new Set(),
+  }),
+}));
 vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
   View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
