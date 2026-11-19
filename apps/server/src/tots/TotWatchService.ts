@@ -11,6 +11,7 @@ import {
   type TotId,
   totWatchReportsOf,
 } from "@t3tools/contracts";
+import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
 import * as Context from "effect/Context";
 import * as Fiber from "effect/Fiber";
@@ -87,6 +88,15 @@ const statusOf = (
   }
 };
 
+/**
+ * A completed run that still holds awaited background work is waiting, not done,
+ * matching how the MCP thread status reads the same shell.
+ */
+const watchedStatus = (shell: OrchestrationV2ThreadShell): WatchedThreadState["status"] =>
+  shell.status === "completed" && backgroundWorkHoldsCompletion(shell.pendingBackgroundTasks ?? [])
+    ? "waiting"
+    : statusOf(shell.status);
+
 const watchedStateFromShell = (shell: OrchestrationV2ThreadShell | null): WatchedThreadState => {
   if (
     shell === null ||
@@ -106,7 +116,7 @@ const watchedStateFromShell = (shell: OrchestrationV2ThreadShell | null): Watche
           ? null
           : "approval";
   return {
-    status: statusOf(shell.status),
+    status: watchedStatus(shell),
     pending,
     runId: shell.latestRunId,
     requestId: pending === null || request === null ? null : request.id,

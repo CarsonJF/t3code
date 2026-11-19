@@ -37,6 +37,7 @@ const shell = (
   id: ThreadId,
   status: OrchestrationV2ThreadShell["status"],
   runId = "run-1",
+  pendingBackgroundTasks: OrchestrationV2ThreadShell["pendingBackgroundTasks"] = [],
 ): OrchestrationV2ThreadShell =>
   ({
     id,
@@ -45,6 +46,7 @@ const shell = (
     status,
     latestRunId: RunId.make(runId),
     pendingRuntimeRequest: null,
+    pendingBackgroundTasks,
     archivedAt: null,
     deletedAt: null,
     settledOverride: null,
@@ -160,6 +162,104 @@ it.effect("a thread a Tot launched reports once when it completes", () => {
     expect(reports[0]!.lines[0]).toContain(" on Asuna");
     yield* flush;
     expect(reports).toHaveLength(1);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a run that ends while awaited background work remains reports nothing", () => {
+  const launched = ThreadId.make("tot-launched:home:c5");
+  const awaited: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]> = [
+    { taskId: "shell-1", kind: "command", awaited: true },
+  ];
+  const { reports, layer, step, flush } = makeHarness([
+    home({ watches: [watch(launched, "launched")] }),
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running"));
+    yield* step(shell(launched, "completed", "run-1", awaited));
+    yield* flush;
+    expect(reports).toHaveLength(0);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a run that waited on background work reports Completed once it settles", () => {
+  const launched = ThreadId.make("tot-launched:home:c6");
+  const awaited: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]> = [
+    { taskId: "shell-1", kind: "command", awaited: true },
+  ];
+  const { reports, layer, step, flush } = makeHarness([
+    home({ watches: [watch(launched, "launched")] }),
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running"));
+    yield* step(shell(launched, "completed", "run-1", awaited));
+    yield* flush;
+    expect(reports).toHaveLength(0);
+    yield* step(shell(launched, "completed"));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Completed: "),
+    ]);
+    yield* flush;
+    expect(reports).toHaveLength(1);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a question or an approval while background work holds still reports", () => {
+  const launched = ThreadId.make("tot-launched:home:c7");
+  const awaited: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]> = [
+    { taskId: "shell-1", kind: "command", awaited: true },
+  ];
+  const { reports, layer, step, flush } = makeHarness([
+    home({ watches: [watch(launched, "launched")] }),
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running"));
+    yield* step({
+      ...shell(launched, "completed", "run-1", awaited),
+      pendingRuntimeRequest: {
+        id: RuntimeRequestId.make("q1"),
+        kind: "user_input",
+        createdAt: DateTime.makeUnsafe(0),
+      },
+    });
+    yield* step({
+      ...shell(launched, "completed", "run-1", awaited),
+      pendingRuntimeRequest: {
+        id: RuntimeRequestId.make("q2"),
+        kind: "permission",
+        createdAt: DateTime.makeUnsafe(0),
+      },
+    });
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Asks a question: "),
+      expect.stringContaining("- Needs approval: "),
+    ]);
+    yield* step(shell(launched, "completed"));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Asks a question: "),
+      expect.stringContaining("- Needs approval: "),
+      expect.stringContaining("- Completed: "),
+    ]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a failed run still reports while awaited background work remains", () => {
+  const launched = ThreadId.make("tot-launched:home:c8");
+  const awaited: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]> = [
+    { taskId: "shell-1", kind: "command", awaited: true },
+  ];
+  const { reports, layer, step, flush } = makeHarness([
+    home({ watches: [watch(launched, "launched")] }),
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running"));
+    yield* step(shell(launched, "failed", "run-1", awaited));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Failed: "),
+    ]);
   }).pipe(Effect.provide(layer));
 });
 
