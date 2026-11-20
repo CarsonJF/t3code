@@ -113,13 +113,18 @@ describe("tot settings draft", () => {
     );
   });
 
-  it("edits watch reports, launched until set", () => {
+  it("edits watch reports and auto-settle, launched and off until set", () => {
     const draft = totSettingsDraftFromTot(tot);
     expect(draft.watchReports).toBe("launched");
     expect(totSettingsDraftKey({ ...draft, watchReports: "off" })).not.toBe(
       totSettingsDraftKey(draft),
     );
     expect(totSettingsDraftUpdate({ ...draft, watchReports: "off" }).watchReports).toBe("off");
+    expect(draft.autoSettle).toBe(false);
+    expect(totSettingsDraftKey({ ...draft, autoSettle: true })).not.toBe(
+      totSettingsDraftKey(draft),
+    );
+    expect(totSettingsDraftUpdate({ ...draft, autoSettle: true }).autoSettle).toBe(true);
     expect(totSettingsDraftFromTot({ ...tot, watchReports: "explicit" }).watchReports).toBe(
       "explicit",
     );
