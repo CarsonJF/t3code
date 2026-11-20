@@ -8,11 +8,11 @@ import { runMigrations } from "../Migrations.ts";
 
 const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layer({ filename: ":memory:" })));
 
-layer("103_ScheduledTaskCreatedByTot", (it) => {
+layer("099_ScheduledTaskCreatedByTot", (it) => {
   it.effect("keeps existing scheduled tasks and adds the Tot author column", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* runMigrations({ toMigrationInclusive: 102 });
+      yield* runMigrations({ toMigrationInclusive: 98 });
       yield* sql`INSERT INTO scheduled_tasks ${sql.insert({
         task_id: "existing",
         title: "task",
@@ -36,7 +36,7 @@ layer("103_ScheduledTaskCreatedByTot", (it) => {
         last_run_error: null,
         run_count: 0,
       })}`;
-      yield* runMigrations({ toMigrationInclusive: 103 });
+      yield* runMigrations({ toMigrationInclusive: 99 });
 
       const rows = yield* sql<{
         task_id: string;
