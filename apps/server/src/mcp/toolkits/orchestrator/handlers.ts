@@ -198,7 +198,7 @@ const handlers = {
           const service = yield* OrchestratorMcpService.OrchestratorMcpService;
           const sent = yield* service.sendToThread(scope, input);
           // A Tot hears when the run its message started ends.
-          yield* watchSentRun(scope.environmentId, input.threadId, sent.runId);
+          yield* watchSentRun(scope.environmentId, sent.threadId, sent.runId);
           return sent;
         }),
     ),
