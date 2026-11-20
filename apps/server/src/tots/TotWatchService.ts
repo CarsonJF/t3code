@@ -1,5 +1,6 @@
 import {
   type EnvironmentId,
+  isOrchestrationV2WorkActive,
   type OrchestratorMcpThreadWaitResult,
   type TotWatch,
   type OrchestrationV2DomainEvent,
@@ -11,7 +12,10 @@ import {
   type TotId,
   totWatchReportsOf,
 } from "@t3tools/contracts";
-import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import {
+  backgroundWorkHoldsCompletion,
+  turnItemUpdateCanEndBackgroundWork,
+} from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
 import * as Context from "effect/Context";
 import * as Fiber from "effect/Fiber";
@@ -139,10 +143,30 @@ const followerKey = (
   watch: Pick<TotWatch, "environmentId" | "threadId">,
 ) => [totId, totThreadId, watch.environmentId, watch.threadId].join(" ");
 
-const touchesWatches = (event: OrchestrationV2DomainEvent) =>
-  event.type === "run.updated" ||
-  event.type === "runtime-request.updated" ||
-  (event.type.startsWith("thread.") && !event.type.startsWith("thread.pull-request"));
+/** The events after which a watched thread can read differently, including awaited work ending. */
+const touchesWatches = (event: OrchestrationV2DomainEvent): boolean => {
+  switch (event.type) {
+    case "run.updated":
+    case "runtime-request.updated":
+    case "run.background-work-cancelled":
+      return true;
+    // The same "work can have ended" moments ThreadSettlementService sweeps on.
+    case "subagent.updated":
+      return !isOrchestrationV2WorkActive(event.payload.status);
+    case "provider-thread.updated":
+      return !backgroundWorkHoldsCompletion(event.payload.pendingBackgroundTasks ?? []);
+    case "turn-item.updated":
+      return turnItemUpdateCanEndBackgroundWork(event.payload);
+    default:
+      return event.type.startsWith("thread.") && !event.type.startsWith("thread.pull-request");
+  }
+};
+
+// IdleCompactionService's message ids: its compaction runs are housekeeping, not work to report.
+const isIdleCompactionRun = (
+  event: OrchestrationV2DomainEvent,
+): event is Extract<OrchestrationV2DomainEvent, { readonly type: "run.updated" }> =>
+  event.type === "run.updated" && event.payload.userMessageId.startsWith("idle-compact:");
 
 const inScope = (tot: Tot, environmentId: EnvironmentId, shell: OrchestrationV2ThreadShell) =>
   tot.scope === "all" ||
@@ -163,6 +187,8 @@ const make = Effect.gen(function* () {
   const layerScope = yield* Scope.Scope;
   const followers = new Map<string, Fiber.Fiber<void>>();
   const seen = new Map<ThreadId, WatchedThreadState>();
+  /** Each thread's latest idle-compaction run. */
+  const compactionRuns = new Map<ThreadId, string>();
   const outbox: Array<Outgoing> = [];
 
   // Untraced: runs for every thread event, under the stream's own span.
@@ -171,6 +197,8 @@ const make = Effect.gen(function* () {
     if (parseTotThreadId(threadId) !== null && !(yield* anySentWatch(threadId))) return;
     const shell = yield* threads.getThreadShell(threadId).pipe(Effect.orElseSucceed(() => null));
     const next = watchedStateFromShell(shell);
+    // A compaction run neither reports nor moves the baseline the next real run compares with.
+    if (!next.ended && next.runId !== null && compactionRuns.get(threadId) === next.runId) return;
     const previous = seen.get(threadId);
     seen.set(threadId, next);
     const owner = parseTotLaunchedThreadId(threadId);
@@ -200,6 +228,33 @@ const make = Effect.gen(function* () {
       const sentRun = onlySent && sent.some((watch) => watch.runId === next.runId);
       if (sentRun && runIsOver(next)) {
         yield* tots.removeWatch(tot.id, environmentId, threadId).pipe(Effect.ignore);
+      }
+      // A later run means the sent run is over even though no look saw it end. One that was
+      // waiting on awaited work completed when that work woke the thread into this run.
+      if (
+        onlySent &&
+        !sentRun &&
+        !next.ended &&
+        previous !== undefined &&
+        sent.some((watch) => watch.runId === previous.runId)
+      ) {
+        yield* tots.removeWatch(tot.id, environmentId, threadId).pipe(Effect.ignore);
+        if (
+          previous.status === "waiting" &&
+          previous.pending === null &&
+          deliversWatchReport({ mode, reasons: ["sent"], viaAll })
+        ) {
+          outbox.push({
+            totId: tot.id,
+            expectedThreadId: tot.threadId,
+            line: formatWatchLine(
+              "completed",
+              formatThreadLink({ environmentId, threadId }, shell?.title),
+              environmentLabel,
+            ),
+          });
+        }
+        continue;
       }
       if (event === null) continue;
       if (event === "ended") {
@@ -401,7 +456,12 @@ const make = Effect.gen(function* () {
     );
     yield* threads.streamDomainEvents.pipe(
       Stream.filter(touchesWatches),
-      Stream.runForEach((event) => observe(event.threadId)),
+      Stream.runForEach((event) =>
+        Effect.suspend(() => {
+          if (isIdleCompactionRun(event)) compactionRuns.set(event.threadId, event.payload.id);
+          return observe(event.threadId);
+        }),
+      ),
       Effect.ignore,
       Effect.forkScoped,
     );
