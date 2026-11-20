@@ -37,11 +37,11 @@ import {
   workflow,
 } from "./workflow.ts";
 import { type AgentResult, WorkflowAgentError, WorkflowAgents } from "./WorkflowAgents.ts";
-import WorkflowsMigration from "../persistence/Migrations/110_Workflows.ts";
-import WorkflowSkippedRunsMigration from "../persistence/Migrations/113_WorkflowSkippedRuns.ts";
+import WorkflowsMigration from "../persistence/Migrations/111_Workflows.ts";
+import WorkflowSkippedRunsMigration from "../persistence/Migrations/114_WorkflowSkippedRuns.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import WorkflowRunTagsMigration from "../persistence/Migrations/115_WorkflowRunTags.ts";
-import WorkflowMailSenderMigration from "../persistence/Migrations/117_WorkflowMailSender.ts";
+import WorkflowRunTagsMigration from "../persistence/Migrations/116_WorkflowRunTags.ts";
+import WorkflowMailSenderMigration from "../persistence/Migrations/118_WorkflowMailSender.ts";
 import * as WorkflowEngine from "./WorkflowEngine.ts";
 import {
   Issue,

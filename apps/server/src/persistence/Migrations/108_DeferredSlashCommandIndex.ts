@@ -7,7 +7,7 @@ export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   // The turn-start read now matches every slash command; a partial index is only used when its
-  // predicate spells the read's condition, so rebuild the one migration 100 made.
+  // predicate spells the read's condition, so rebuild the one migration 101 made.
   yield* sql`DROP INDEX IF EXISTS orchestration_v2_projection_messages_deferred_command_idx`;
   yield* sql.unsafe(`
     CREATE INDEX orchestration_v2_projection_messages_deferred_command_idx
