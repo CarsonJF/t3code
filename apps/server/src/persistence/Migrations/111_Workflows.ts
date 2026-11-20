@@ -6,7 +6,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    CREATE TABLE workflow_runs (
+    CREATE TABLE IF NOT EXISTS workflow_runs (
       run_id TEXT PRIMARY KEY,
       workflow TEXT NOT NULL,
       version INTEGER NOT NULL,
@@ -31,16 +31,16 @@ export default Effect.gen(function* () {
       engine_pruned_at TEXT
     )
   `;
-  yield* sql`CREATE INDEX workflow_runs_status ON workflow_runs (status, updated_at)`;
-  yield* sql`CREATE INDEX workflow_runs_parent ON workflow_runs (parent_run_id)`;
+  yield* sql`CREATE INDEX IF NOT EXISTS workflow_runs_status ON workflow_runs (status, updated_at)`;
+  yield* sql`CREATE INDEX IF NOT EXISTS workflow_runs_parent ON workflow_runs (parent_run_id)`;
   // A key names one run of a workflow whatever its version: the row that takes it is that run.
-  yield* sql`CREATE UNIQUE INDEX workflow_runs_key ON workflow_runs (workflow, idempotency_key)`;
+  yield* sql`CREATE UNIQUE INDEX IF NOT EXISTS workflow_runs_key ON workflow_runs (workflow, idempotency_key)`;
   yield* sql`
-    CREATE INDEX workflow_runs_unpruned ON workflow_runs (ended_at)
+    CREATE INDEX IF NOT EXISTS workflow_runs_unpruned ON workflow_runs (ended_at)
     WHERE ended_at IS NOT NULL AND engine_pruned_at IS NULL
   `;
   yield* sql`
-    CREATE TABLE workflow_steps (
+    CREATE TABLE IF NOT EXISTS workflow_steps (
       run_id TEXT NOT NULL,
       name TEXT NOT NULL,
       kind TEXT NOT NULL,
@@ -62,7 +62,7 @@ export default Effect.gen(function* () {
     )
   `;
   yield* sql`
-    CREATE TABLE workflow_waits (
+    CREATE TABLE IF NOT EXISTS workflow_waits (
       run_id TEXT NOT NULL,
       name TEXT NOT NULL,
       workflow TEXT NOT NULL,
@@ -80,20 +80,20 @@ export default Effect.gen(function* () {
       PRIMARY KEY (run_id, name)
     )
   `;
-  yield* sql`CREATE INDEX workflow_waits_key ON workflow_waits (workflow, key)`;
+  yield* sql`CREATE INDEX IF NOT EXISTS workflow_waits_key ON workflow_waits (workflow, key)`;
   // A signal that arrived before its wait. `address` is `run:<id>:<wait>` or `key:<workflow>:<key>`.
   yield* sql`
-    CREATE TABLE workflow_mail (
+    CREATE TABLE IF NOT EXISTS workflow_mail (
       signal_id TEXT PRIMARY KEY,
       address TEXT NOT NULL,
       value_json TEXT NOT NULL,
       expires_at TEXT NOT NULL
     )
   `;
-  yield* sql`CREATE INDEX workflow_mail_address ON workflow_mail (address)`;
+  yield* sql`CREATE INDEX IF NOT EXISTS workflow_mail_address ON workflow_mail (address)`;
   // How often a run reached a point it must not pass twice without a person or a rest.
   yield* sql`
-    CREATE TABLE workflow_marks (
+    CREATE TABLE IF NOT EXISTS workflow_marks (
       run_id TEXT NOT NULL,
       name TEXT NOT NULL,
       count INTEGER NOT NULL,
@@ -103,28 +103,28 @@ export default Effect.gen(function* () {
   // Ids of signals that woke a wait, so a sender's retry of one is not a second signal. Kept at
   // least as long as any kept copy of the signal, which would otherwise wake a second wait.
   yield* sql`
-    CREATE TABLE workflow_signals (
+    CREATE TABLE IF NOT EXISTS workflow_signals (
       signal_id TEXT PRIMARY KEY,
       kept_until TEXT NOT NULL
     )
   `;
   // When each schedule trigger is next due.
   yield* sql`
-    CREATE TABLE workflow_triggers (
+    CREATE TABLE IF NOT EXISTS workflow_triggers (
       trigger_id TEXT PRIMARY KEY,
       next_at TEXT NOT NULL
     )
   `;
   // The secret half of each workflow hook's URL.
   yield* sql`
-    CREATE TABLE workflow_hooks (
+    CREATE TABLE IF NOT EXISTS workflow_hooks (
       hook_id TEXT PRIMARY KEY,
       token TEXT NOT NULL
     )
   `;
   // What workflows keep between runs: a cursor, a switch, a queue.
   yield* sql`
-    CREATE TABLE workflow_store (
+    CREATE TABLE IF NOT EXISTS workflow_store (
       key TEXT PRIMARY KEY,
       value_json TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -132,7 +132,7 @@ export default Effect.gen(function* () {
   `;
   // What a run touched, once per thing: a later touch updates the row and adds its step.
   yield* sql`
-    CREATE TABLE workflow_run_references (
+    CREATE TABLE IF NOT EXISTS workflow_run_references (
       run_id TEXT NOT NULL,
       kind TEXT NOT NULL,
       key TEXT NOT NULL,
