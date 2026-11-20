@@ -9,6 +9,17 @@ import * as SqlClient from "effect/sql/SqlClient";
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
+  // Fork: a history that recorded this at upstream's id replays it, so rebuild from scratch.
+  for (const trigger of [
+    "count_insert",
+    "count_update",
+    "count_delete",
+    "run_insert",
+    "run_delete",
+  ]) {
+    yield* sql.unsafe(`DROP TRIGGER IF EXISTS orchestration_v2_thread_item_counts_${trigger}`);
+  }
+  yield* sql`DROP TABLE IF EXISTS orchestration_v2_projection_thread_item_counts`;
   yield* sql`
     CREATE TABLE orchestration_v2_projection_thread_item_counts (
       thread_id TEXT PRIMARY KEY,
