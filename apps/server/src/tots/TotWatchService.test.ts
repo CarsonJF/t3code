@@ -9,10 +9,12 @@ import {
   RuntimeRequestId,
   ThreadId,
   TotId,
+  type OrchestrationV2DomainEvent,
   type OrchestrationV2ThreadShell,
   type Tot,
   type TotWatch,
 } from "@t3tools/contracts";
+import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -59,6 +61,25 @@ interface RemoteOptions {
   readonly onRemove?: Effect.Effect<void>;
 }
 
+const sentinelThread = ThreadId.make("sentinel");
+
+/** The domain events the watcher streams, and the threads it looked up, in order. */
+class EventFeed extends Context.Service<
+  EventFeed,
+  {
+    readonly events: Queue.Queue<OrchestrationV2DomainEvent>;
+    readonly lookups: Queue.Queue<ThreadId>;
+  }
+>()("t3/tots/TotWatchService.test/EventFeed") {}
+
+const layerEventFeed = Layer.effect(
+  EventFeed,
+  Effect.all({
+    events: Queue.unbounded<OrchestrationV2DomainEvent>(),
+    lookups: Queue.unbounded<ThreadId>(),
+  }),
+);
+
 const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
   const state = { tots: [...initial] };
   const shells = new Map<ThreadId, OrchestrationV2ThreadShell>();
@@ -89,10 +110,16 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
               );
             }).pipe(Effect.andThen(remote?.onRemove ?? Effect.void)),
         }),
-        Layer.mock(ThreadManagement.ThreadManagementService)({
-          getThreadShell: (threadId) => Effect.sync(() => shells.get(threadId) ?? null),
-          streamDomainEvents: Stream.never,
-        }),
+        Layer.unwrap(
+          Effect.gen(function* () {
+            const feed = yield* EventFeed;
+            return Layer.mock(ThreadManagement.ThreadManagementService)({
+              getThreadShell: (threadId) =>
+                Queue.offer(feed.lookups, threadId).pipe(Effect.as(shells.get(threadId) ?? null)),
+              streamDomainEvents: Stream.fromQueue(feed.events),
+            });
+          }),
+        ),
         Layer.mock(ServerEnvironment.ServerEnvironment)({
           getEnvironmentId: Effect.succeed(environmentId),
           getDescriptor: Effect.succeed({ label: "Asuna" } as never),
@@ -111,11 +138,26 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
         Layer.succeed(RemoteDelegation.FollowRetrySchedule, remote?.retry ?? Schedule.forever),
       ),
     ),
+    Layer.provideMerge(layerEventFeed),
   );
   const step = (next: OrchestrationV2ThreadShell) =>
     Effect.gen(function* () {
       shells.set(next.id, next);
       yield* (yield* TotWatchService.TotWatchService).observe(next.id);
+    });
+  /** Publishes domain events to a started watcher and returns once it has handled them. */
+  const emit = (...emitted: ReadonlyArray<OrchestrationV2DomainEvent>) =>
+    Effect.gen(function* () {
+      const { events, lookups } = yield* EventFeed;
+      for (const event of emitted) yield* Queue.offer(events, event);
+      // The watcher handles events in order, so its look at the sentinel follows the rest.
+      yield* Queue.offer(events, {
+        type: "thread.meta-updated",
+        threadId: sentinelThread,
+      } as unknown as OrchestrationV2DomainEvent);
+      while ((yield* Queue.take(lookups)) !== sentinelThread) {
+        // Earlier looks belong to the emitted events.
+      }
     });
   const flush = TotWatchService.TotWatchService.pipe(Effect.flatMap((service) => service.flush));
   const syncFollowers = TotWatchService.TotWatchService.pipe(
@@ -123,7 +165,7 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
   );
   shells.set(homeThread, shell(homeThread, "running"));
   shells.set(ThreadId.make("tot:home:fresh"), shell(ThreadId.make("tot:home:fresh"), "running"));
-  return { state, reports, removed, layer, step, flush, syncFollowers };
+  return { state, reports, removed, shells, layer, step, emit, flush, syncFollowers };
 };
 
 const watch = (threadId: ThreadId, reason: TotWatch["reason"], runId?: string): TotWatch => ({
@@ -203,6 +245,121 @@ it.effect("a run that waited on background work reports Completed once it settle
     expect(reports).toHaveLength(1);
   }).pipe(Effect.provide(layer));
 });
+
+const domainEvent = (
+  type: OrchestrationV2DomainEvent["type"],
+  threadId: ThreadId,
+  payload: Record<string, unknown> = {},
+) => ({ type, threadId, payload }) as unknown as OrchestrationV2DomainEvent;
+
+const runUpdated = (threadId: ThreadId, runId: string, status: string, userMessageId = "m1") =>
+  domainEvent("run.updated", threadId, { id: runId, status, userMessageId });
+
+// regression: the watcher saw `waiting` and never looked again when the awaited work ended.
+it.effect("reports Completed when awaited background work ends, from the domain events", () => {
+  const launched = ThreadId.make("tot-launched:home:e2e");
+  const awaited: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]> = [
+    { taskId: "shell-1", kind: "command", awaited: true },
+  ];
+  const { reports, shells, layer, emit, flush } = makeHarness([
+    home({ watches: [watch(launched, "launched")] }),
+  ]);
+  return Effect.gen(function* () {
+    yield* (yield* TotWatchService.TotWatchService).start;
+    shells.set(launched, shell(launched, "running"));
+    yield* emit(runUpdated(launched, "run-1", "running"));
+    shells.set(launched, shell(launched, "completed", "run-1", awaited));
+    yield* emit(runUpdated(launched, "run-1", "completed"));
+    yield* flush;
+    expect(reports).toHaveLength(0);
+
+    shells.set(launched, shell(launched, "completed"));
+    yield* emit(domainEvent("provider-thread.updated", launched, { pendingBackgroundTasks: [] }));
+    yield* flush;
+    const lines = reports.flatMap((report) => report.lines);
+    expect(lines).toEqual([expect.stringContaining("- Completed: ")]);
+    expect(lines[0]).toContain(launched);
+  }).pipe(Effect.provide(layer), Effect.scoped);
+});
+
+it.effect("each kind of work-ended event wakes the watcher", () => {
+  const { reports, shells, layer, emit, flush, state } = makeHarness([home({})]);
+  const awaited: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]> = [
+    { taskId: "shell-1", kind: "command", awaited: true },
+  ];
+  const cases = [
+    ["provider-thread.updated", { pendingBackgroundTasks: [] }],
+    ["turn-item.updated", { type: "command_execution", status: "completed" }],
+    ["subagent.updated", { status: "completed" }],
+    ["run.background-work-cancelled", {}],
+  ] as const;
+  const threadFor = (type: string) => ThreadId.make(`tot-launched:home:${type}`);
+  state.tots = [home({ watches: cases.map(([type]) => watch(threadFor(type), "launched")) })];
+  return Effect.gen(function* () {
+    yield* (yield* TotWatchService.TotWatchService).start;
+    for (const [type, payload] of cases) {
+      const thread = threadFor(type);
+      shells.set(thread, shell(thread, "completed", "run-1", awaited));
+      yield* emit(runUpdated(thread, "run-1", "completed"));
+      shells.set(thread, shell(thread, "completed"));
+      yield* emit(domainEvent(type, thread, payload));
+    }
+    yield* flush;
+    const lines = reports.flatMap((report) => report.lines);
+    expect(lines).toHaveLength(cases.length);
+    cases.forEach(([type], index) => {
+      expect(lines[index]).toContain("- Completed: ");
+      expect(lines[index]).toContain(threadFor(type));
+    });
+  }).pipe(Effect.provide(layer), Effect.scoped);
+});
+
+it.effect("an idle compaction run does not report, and the next real run still does", () => {
+  const launched = ThreadId.make("tot-launched:home:compacted");
+  const { reports, shells, layer, emit, flush } = makeHarness([
+    home({ watches: [watch(launched, "launched")] }),
+  ]);
+  return Effect.gen(function* () {
+    yield* (yield* TotWatchService.TotWatchService).start;
+    shells.set(launched, shell(launched, "completed", "run-1"));
+    yield* emit(runUpdated(launched, "run-1", "completed"));
+    const compaction = `idle-compact:${launched}:run-1`;
+    shells.set(launched, shell(launched, "running", "run-2"));
+    yield* emit(runUpdated(launched, "run-2", "running", compaction));
+    shells.set(launched, shell(launched, "completed", "run-2"));
+    yield* emit(runUpdated(launched, "run-2", "completed", compaction));
+    shells.set(launched, shell(launched, "completed", "run-3"));
+    yield* emit(runUpdated(launched, "run-3", "completed"));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Completed: "),
+      expect.stringContaining("- Completed: "),
+    ]);
+  }).pipe(Effect.provide(layer), Effect.scoped);
+});
+
+it.effect(
+  "a sent run left waiting on work reports and ends its watch when work wakes a new run",
+  () => {
+    const { reports, removed, layer, step, flush } = makeHarness([
+      home({ watchReports: "explicit", watches: [watch(yuiThread, "sent", "run-1")] }),
+      yui,
+    ]);
+    const awaited: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]> = [
+      { taskId: "shell-1", kind: "command", awaited: true },
+    ];
+    return Effect.gen(function* () {
+      yield* step(shell(yuiThread, "running", "run-1"));
+      yield* step(shell(yuiThread, "completed", "run-1", awaited));
+      yield* step(shell(yuiThread, "running", "run-2"));
+      yield* flush;
+      expect(reports.flatMap((report) => report.lines)).toEqual([
+        expect.stringContaining("- Completed: "),
+      ]);
+      expect(removed).toEqual([yuiThread]);
+    }).pipe(Effect.provide(layer));
+  },
+);
 
 it.effect("a question or an approval while background work holds still reports", () => {
   const launched = ThreadId.make("tot-launched:home:c7");
