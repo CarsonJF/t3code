@@ -8,6 +8,11 @@ import * as Path from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import { migrationManifest, runMigrations } from "./Migrations.ts";
+import ScheduledTaskCreatedByTot from "./Migrations/099_ScheduledTaskCreatedByTot.ts";
+import BackgroundRecoveryIndexes from "./Migrations/100_BackgroundRecoveryIndexes.ts";
+import TurnStartReadIndexes from "./Migrations/101_TurnStartReadIndexes.ts";
+import DelegatedTaskReadIndexes from "./Migrations/102_DelegatedTaskReadIndexes.ts";
+import ThreadItemCounts from "./Migrations/103_ThreadItemCounts.ts";
 
 const v2Migrations = migrationManifest.filter(([id]) => id >= 55);
 const newerMigrationId = Math.max(...migrationManifest.map(([id]) => id)) + 1;
@@ -185,6 +190,63 @@ describe("runMigrations", () => {
       );
       assert.deepStrictEqual(yield* history, migrationManifest);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
+  // regression: the .4941 custom build put upstream's 099 first, so databases that had recorded
+  // 99 as ScheduledTaskCreatedByTot refused to start.
+  it.effect("starts a custom database that recorded the Tot migration at 99", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* runMigrations({ toMigrationInclusive: 98 });
+      yield* sql`ALTER TABLE scheduled_tasks ADD COLUMN created_by_tot_id TEXT`;
+      yield* sql`
+        INSERT INTO effect_sql_migrations (migration_id, name)
+        VALUES (99, 'ScheduledTaskCreatedByTot')
+      `;
+
+      assert.deepStrictEqual(
+        yield* runMigrations(),
+        migrationManifest.filter(([id]) => id > 99),
+      );
+      assert.deepStrictEqual(yield* history, migrationManifest);
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
+  const otherOrders = {
+    "the .4941 custom build": [
+      [99, "BackgroundRecoveryIndexes", BackgroundRecoveryIndexes],
+      [100, "TurnStartReadIndexes", TurnStartReadIndexes],
+      [101, "ScheduledTaskCreatedByTot", ScheduledTaskCreatedByTot],
+    ],
+    "stock upstream": [
+      [99, "BackgroundRecoveryIndexes", BackgroundRecoveryIndexes],
+      [100, "TurnStartReadIndexes", TurnStartReadIndexes],
+      [101, "DelegatedTaskReadIndexes", DelegatedTaskReadIndexes],
+      [102, "ThreadItemCounts", ThreadItemCounts],
+    ],
+  } as const;
+  it.effect.each(Object.keys(otherOrders) as ReadonlyArray<keyof typeof otherOrders>)(
+    "replays the migrations %s recorded in its own order",
+    (build) =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* runMigrations({ toMigrationInclusive: 98 });
+        for (const [id, name, migration] of otherOrders[build]) {
+          yield* migration;
+          yield* sql`INSERT INTO effect_sql_migrations (migration_id, name) VALUES (${id}, ${name})`;
+        }
+
+        assert.deepStrictEqual(
+          yield* runMigrations(),
+          migrationManifest.filter(([id]) => id >= 99),
+        );
+        assert.deepStrictEqual(yield* history, migrationManifest);
+        const triggers = yield* sql`
+          SELECT name FROM sqlite_master
+          WHERE type = 'trigger' AND name LIKE 'orchestration_v2_thread_item_counts_%'
+        `;
+        assert.strictEqual(triggers.length, 5);
+      }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 
   it.effect("still starts after a newer build recorded a later V2 migration", () =>
