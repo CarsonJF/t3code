@@ -14,5 +14,8 @@ export default Effect.gen(function* () {
       PRIMARY KEY (tracker, account_id)
     ) WITHOUT ROWID
   `;
-  yield* sql`ALTER TABLE issue_tracker_bindings ADD COLUMN account_id TEXT`;
+  const columns = yield* sql<{ readonly name: string }>`PRAGMA table_info(issue_tracker_bindings)`;
+  if (!columns.some((column) => column.name === "account_id")) {
+    yield* sql`ALTER TABLE issue_tracker_bindings ADD COLUMN account_id TEXT`;
+  }
 });

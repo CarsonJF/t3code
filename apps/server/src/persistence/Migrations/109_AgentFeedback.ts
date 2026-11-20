@@ -3,7 +3,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`CREATE TABLE agent_feedback (
+  yield* sql`CREATE TABLE IF NOT EXISTS agent_feedback (
     id TEXT PRIMARY KEY, thread_id TEXT, run_id TEXT, created_at TEXT NOT NULL,
     kind TEXT NOT NULL, subject TEXT NOT NULL, expected TEXT NOT NULL,
     actual TEXT NOT NULL, workaround TEXT NOT NULL,
@@ -11,5 +11,5 @@ export default Effect.gen(function* () {
     sent INTEGER NOT NULL DEFAULT 0
   )`;
   // The per-turn limit counts by turn and kind; reports outside a turn are few.
-  yield* sql`CREATE INDEX agent_feedback_run_idx ON agent_feedback(run_id, user_requested)`;
+  yield* sql`CREATE INDEX IF NOT EXISTS agent_feedback_run_idx ON agent_feedback(run_id, user_requested)`;
 });
