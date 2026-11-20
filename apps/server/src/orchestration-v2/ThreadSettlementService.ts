@@ -8,6 +8,7 @@ import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import {
   CommandId,
   isOrchestrationV2WorkActive,
+  totThreadAutoSettles,
   type ThreadId,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2ThreadShell,
@@ -363,6 +364,7 @@ export const make = Effect.gen(function* () {
     const candidates = threads.filter(
       (thread) =>
         (automaticSettlementEnabled || thread.lineage.relationshipToParent === "subagent") &&
+        totThreadAutoSettles(thread.id, settings.tots) &&
         isAutoSettlementCandidate(thread, nowMs),
     );
 
