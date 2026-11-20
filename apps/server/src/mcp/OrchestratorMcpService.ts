@@ -124,6 +124,7 @@ import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import { totSendTarget } from "../tots/totSendTarget.ts";
 import {
   clientModeCeiling,
   type McpInvocationScope,
@@ -1330,24 +1331,14 @@ const make = Effect.gen(function* () {
   const gitDriver = yield* GitVcsDriver.GitVcsDriver;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
 
-  // A fresh start settles a Tot's thread and gives it a new one; agents that kept the old id
-  // reach the Tot's current thread instead of replying into its settled history.
   const currentTotThread = Effect.fn("OrchestratorMcpService.currentTotThread")(function* (
     threadId: ThreadId,
   ) {
-    const totId = parseTotThreadId(threadId);
-    if (totId === null) return threadId;
+    if (parseTotThreadId(threadId) === null) return threadId;
     const settings = yield* serverSettings.getSettings.pipe(
       Effect.mapError(() => failure("orchestration_error", "Unable to read server settings.")),
     );
-    const tot = settings.tots.find((candidate) => candidate.id === totId);
-    if (tot === undefined || tot.threadId === threadId) return threadId;
-    if (tot.threadId === null)
-      return yield* failure(
-        "thread_not_sendable",
-        `Thread ${threadId} is a former thread of the Tot ${tot.name}, which is off. Turn it on, then send to its current thread.`,
-      );
-    return tot.threadId;
+    return yield* totSendTarget(threadId, settings.tots);
   });
   const remoteDelegation = yield* RemoteDelegation.RemoteDelegation;
 
