@@ -1,4 +1,4 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
+import { DEFAULT_HOME_TOT, SourceControlProviderKind, TotId } from "@t3tools/contracts";
 import { assert, describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import {
@@ -1072,6 +1072,32 @@ describe("ThreadSettlementServiceV2 worker", () => {
         yield* startHarness(service, fixture.activation, fixture.snapshotReads);
         const commands = yield* Ref.get(fixture.commands);
         expect(commands.map((command) => command.threadId)).toEqual([thread.id]);
+      }).pipe(Effect.provide(fixture.layer));
+    }),
+  );
+
+  it.effect("keeps a Tot's own thread open unless its Tot opted in to settling", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(Date.parse(NOW));
+      const work = makeThread("idle-work");
+      const home = makeThread("tot:home:current");
+      const yui = makeThread("tot:yui:current");
+      const fixture = yield* makeHarness({
+        snapshot: makeSnapshot([work, home, yui]),
+        settings: {
+          ...DEFAULT_SERVER_SETTINGS,
+          sidebarAutoSettleAfterDays: 3,
+          tots: [
+            DEFAULT_HOME_TOT,
+            { ...DEFAULT_HOME_TOT, id: TotId.make("yui"), name: "Yui", autoSettle: true },
+          ],
+        },
+      });
+      yield* Effect.gen(function* () {
+        const service = yield* ThreadSettlementService.ThreadSettlementServiceV2;
+        yield* startHarness(service, fixture.activation, fixture.snapshotReads);
+        const settled = (yield* Ref.get(fixture.commands)).map((command) => command.threadId);
+        expect(settled.toSorted()).toEqual([work.id, yui.id].toSorted());
       }).pipe(Effect.provide(fixture.layer));
     }),
   );
