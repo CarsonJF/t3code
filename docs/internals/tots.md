@@ -21,7 +21,7 @@ Tot threads start with `tot:<totId>:`, threads a Tot launches with `tot-launched
 Watches live on the Tot and are evaluated on the host ([`TotWatchService`](../../apps/server/src/tots/TotWatchService.ts)):
 
 - Local threads are read from domain events.
-- A completed run that still holds awaited background work reads as `waiting`, as the MCP thread status does, so its Tot hears `Completed` only once that work settles. A remote follower sees the run's status but not its pending background tasks, so the rule covers local shells only.
+- A completed run that still holds awaited background work reads as `waiting`, as the MCP thread status does, so its Tot hears `Completed` only once that work settles. The watcher therefore looks again on the same work-ended events `ThreadSettlementService` sweeps on, not only on run and thread events; a `sent` watch whose run is passed by a later run ends there. Idle-compaction runs (`idle-compact:` message ids) neither report nor move the baseline. A remote follower sees the run's status but not its pending background tasks, so the rule covers local shells only.
 - Remote threads get a follower that loops the forwarded `t3_thread_wait` with `until: "attention"`, which also returns when a run stops to ask. After a look that did not time out, the follower rests (`TotFollowPause`), because the wait returns at once until a new run starts.
 - A first sighting is a baseline for watches the Tot asked for and for `watch_all`, so starting up never replays old state. Watches for work the Tot started compare with an empty state, so their first question is not missed.
 - A `sent` watch covers only the run one Tot started in another Tot's thread, so a coordinator is not woken by the user talking to that Tot directly.
