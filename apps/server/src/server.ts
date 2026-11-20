@@ -950,9 +950,11 @@ const layerMakeRoutes = Layer.mergeAll(
     ),
   ),
   Layer.provide(PreviewBrowser.layer),
-  Layer.provide(TotWatchService.layer),
-  Layer.provide(GroupChatService.layer),
-  Layer.provide(TotService.layer),
+  Layer.provide(
+    Layer.mergeAll(TotWatchService.layer, GroupChatService.layer).pipe(
+      Layer.provideMerge(TotService.layer),
+    ),
+  ),
   // Links to other environments, shared by clients (WebSocket) and agents (/mcp).
   Layer.provide(
     Layer.mergeAll(PeerForwarding.layer, PeerThreadRelay.layer, PeerClientPairing.layer).pipe(
