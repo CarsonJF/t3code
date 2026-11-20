@@ -25,6 +25,7 @@ import {
   ProviderTurnId,
   RunId,
   ThreadId,
+  DEFAULT_HOME_TOT,
   TotId,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2StoredEvent,
@@ -5543,6 +5544,7 @@ describe("OrchestratorMcpService thread lookup", () => {
     shells: ReadonlyArray<OrchestrationV2ThreadShell>,
     sent: Ref.Ref<number>,
     overrides: Partial<ThreadManagementService.ThreadManagementService["Service"]> = {},
+    settings: Parameters<typeof ServerSettings.layerTest>[0] = {},
   ) =>
     layerOrchestratorService.pipe(
       Layer.provide(
@@ -5555,7 +5557,7 @@ describe("OrchestratorMcpService thread lookup", () => {
             sendToThread: () => Ref.update(sent, (count) => count + 1).pipe(Effect.as({} as never)),
             ...overrides,
           }),
-          ServerSettings.layerTest(),
+          ServerSettings.layerTest(settings),
           Layer.mock(ProviderRegistry.ProviderRegistry)({ getProviders: Effect.succeed([]) }),
           Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({
             list: () => Effect.succeed([]),
@@ -5713,6 +5715,69 @@ describe("OrchestratorMcpService thread lookup", () => {
       assert.deepStrictEqual(fromLink?.linkedSender, sender);
       assert.isUndefined(fromLink?.senderThreadId);
       assert.isUndefined((yield* sendAs(linked()))?.linkedSender);
+    }),
+  );
+
+  it.effect("sends to a Tot's current thread when named a thread its fresh start settled", () =>
+    Effect.gen(function* () {
+      const former = liveThreadShell(ThreadId.make("tot:workbot:former"));
+      const current = liveThreadShell(ThreadId.make("tot:workbot:current"));
+      const workbot = {
+        ...DEFAULT_HOME_TOT,
+        id: TotId.make("workbot"),
+        name: "WorkBot",
+        projectId: current.projectId,
+      };
+      const sendTo = (threadId: ThreadId, tot: typeof workbot) =>
+        Effect.gen(function* () {
+          const targets: Array<ThreadId> = [];
+          const sent = yield* Ref.make(0);
+          const result = yield* Effect.gen(function* () {
+            const mcp = yield* OrchestratorMcpService.OrchestratorMcpService;
+            return yield* mcp
+              .sendToThread(client, { threadId, message: "hello" })
+              .pipe(Effect.result);
+          }).pipe(
+            Effect.provide(
+              service(
+                [former, current],
+                sent,
+                {
+                  getProjectThreadRecords: ({ threadId }) =>
+                    Effect.succeed(idleThreadProjection(threadId === former.id ? former : current)),
+                  sendToThread: (input) => {
+                    targets.push(input.threadId);
+                    return Effect.succeed({
+                      run: { id: RunId.make("run:sent"), status: "running" },
+                      delivery: "started",
+                    } as never);
+                  },
+                },
+                { tots: [tot] },
+              ),
+            ),
+          );
+          return { result, targets };
+        });
+
+      const redirected = yield* sendTo(former.id, { ...workbot, threadId: current.id });
+      assert.deepStrictEqual(redirected.targets, [current.id]);
+      assert.isTrue(Result.isSuccess(redirected.result));
+      if (Result.isSuccess(redirected.result)) {
+        assert.equal(redirected.result.success.threadId, current.id);
+      }
+      assert.deepStrictEqual(
+        (yield* sendTo(current.id, { ...workbot, threadId: current.id })).targets,
+        [current.id],
+      );
+
+      const off = yield* sendTo(former.id, { ...workbot, threadId: null });
+      assert.deepStrictEqual(off.targets, []);
+      assert.isTrue(Result.isFailure(off.result));
+      if (Result.isFailure(off.result)) {
+        assert.equal(off.result.failure.code, "thread_not_sendable");
+        assert.include(off.result.failure.message, "WorkBot, which is off");
+      }
     }),
   );
 
