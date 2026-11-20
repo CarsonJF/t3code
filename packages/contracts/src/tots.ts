@@ -154,6 +154,8 @@ export const Tot = Schema.Struct({
   /** Faces the Tot designed for itself, newest first, kept as options. */
   designs: Schema.optional(Schema.Array(TotAvatar).check(Schema.isMaxLength(TOT_MAX_DESIGNS))),
   theme: Schema.optional(TotTheme),
+  /** Opt-in: absent or false keeps the Tot's own thread out of automatic settlement. */
+  autoSettle: Schema.optional(Schema.Boolean),
 });
 export type Tot = typeof Tot.Type;
 
@@ -215,6 +217,12 @@ export const totLaunchedThreadId = (totId: TotId, commandId: string): ThreadId =
 export const parseTotLaunchedThreadId = (threadId: string): TotId | null =>
   parsePrefixed(TOT_LAUNCHED_THREAD_ID_PREFIX, threadId);
 
+/** A Tot's own thread settles automatically only when its Tot opted in. */
+export const totThreadAutoSettles = (threadId: string, tots: ReadonlyArray<Tot>): boolean => {
+  const owner = parseTotThreadId(threadId);
+  return owner === null || tots.some((tot) => tot.id === owner && tot.autoSettle === true);
+};
+
 /**
  * Whether a thread a Tot launched should stay quiet. Where no Tot settings
  * name its owner (a linked environment, or `tots` null), the Tot lives on
@@ -266,6 +274,7 @@ export const TotUpdateInput = Schema.Struct({
   modelSelection: Schema.optional(ModelSelection),
   theme: Schema.optional(TotThemePatch),
   watchReports: Schema.optional(TotWatchReports),
+  autoSettle: Schema.optional(Schema.Boolean),
 });
 export type TotUpdateInput = typeof TotUpdateInput.Type;
 
