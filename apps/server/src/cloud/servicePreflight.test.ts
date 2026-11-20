@@ -98,6 +98,24 @@ it.layer(NodeServices.layer)("service preflight database", (it) => {
           .status,
       ).toBe("ready");
 
+      // Startup replays migrations a stock upstream build recorded in its own order.
+      const upstream = path.join(path.dirname(databasePath), "upstream.sqlite");
+      const upstreamDb = new NodeSqlite.DatabaseSync(upstream);
+      upstreamDb.exec(
+        "CREATE TABLE effect_sql_migrations (migration_id INTEGER PRIMARY KEY, name TEXT)",
+      );
+      const insertUpstream = upstreamDb.prepare("INSERT INTO effect_sql_migrations VALUES (?, ?)");
+      for (const [id, name] of migrationManifest.filter(([id]) => id < 99)) {
+        insertUpstream.run(id, name);
+      }
+      insertUpstream.run(99, "BackgroundRecoveryIndexes");
+      insertUpstream.run(100, "TurnStartReadIndexes");
+      upstreamDb.close();
+      expect(
+        runServicePreflight({ databasePath: upstream, launcherProtocol: SERVICE_LAUNCHER_PROTOCOL })
+          .status,
+      ).toBe("ready");
+
       const newerId = Math.max(...migrationManifest.map(([id]) => id)) + 1;
       insert.run(newerId, "FromNightly");
       db.close();
