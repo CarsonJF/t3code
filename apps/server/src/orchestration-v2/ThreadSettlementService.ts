@@ -10,6 +10,7 @@ import {
   CommandId,
   isDelegatedAppThread,
   isOrchestrationV2WorkActive,
+  totThreadAutoSettles,
   type ThreadId,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2ThreadShell,
@@ -383,6 +384,7 @@ export const make = Effect.gen(function* () {
     const candidates = threads.filter(
       (thread) =>
         (automaticSettlementEnabled || isDelegatedAppThread(thread)) &&
+        totThreadAutoSettles(thread.id, settings.tots) &&
         isAutoSettlementCandidate(thread, nowMs),
     );
 

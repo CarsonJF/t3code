@@ -345,6 +345,7 @@ const make = Effect.gen(function* () {
       ...(input.instructions === undefined ? {} : { instructions: input.instructions }),
       ...(input.modelSelection === undefined ? {} : { modelSelection: input.modelSelection }),
       ...(input.watchReports === undefined ? {} : { watchReports: input.watchReports }),
+      ...(input.autoSettle === undefined ? {} : { autoSettle: input.autoSettle }),
     };
     const next = input.theme === undefined ? base : withTheme(base, input.theme);
     yield* replace(next);
