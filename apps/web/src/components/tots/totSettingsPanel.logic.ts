@@ -23,6 +23,7 @@ export interface TotSettingsDraft {
   readonly instructions: string;
   readonly theme: TotThemeDraft;
   readonly watchReports: TotWatchReports;
+  readonly autoSettle: boolean;
 }
 
 export type TotSettingsDraftErrors = Partial<
@@ -37,6 +38,7 @@ export function totSettingsDraftFromTot(tot: Tot): TotSettingsDraft {
     instructions: tot.instructions,
     theme: { css: tot.theme?.css ?? "", effect: tot.theme?.effect ?? "" },
     watchReports: totWatchReportsOf(tot),
+    autoSettle: tot.autoSettle === true,
   };
 }
 
@@ -75,6 +77,7 @@ export function totSettingsDraftKey(draft: TotSettingsDraft): string {
     instructions: draft.instructions,
     theme: draft.theme,
     watchReports: draft.watchReports,
+    autoSettle: draft.autoSettle,
   });
 }
 
@@ -111,6 +114,7 @@ export function totSettingsDraftUpdate(draft: TotSettingsDraft): TotSettingsDraf
     instructions: draft.instructions,
     theme: { css: draft.theme.css, effect: draft.theme.effect },
     watchReports: draft.watchReports,
+    autoSettle: draft.autoSettle,
   };
 }
 
