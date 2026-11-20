@@ -5,6 +5,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import {
+  DEFAULT_HOME_TOT,
   DEFAULT_SERVER_SETTINGS,
   ChatImageAttachment,
   CommandId,
@@ -19,6 +20,7 @@ import {
   ScheduledTask,
   RuntimeRequestId,
   ThreadId,
+  TotId,
   TurnItemId,
   type OrchestrationV2ServerCommand,
   type OrchestrationV2ProjectedTurnItem,
@@ -1538,6 +1540,7 @@ it.effect("only the caller that prepared a pending upload can discard it", () =>
       McpHttpServer.layerAttachmentToolkit.pipe(
         Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
         Layer.provide(McpToolAccessTestkit.liveThreadsLayer),
+        Layer.provide(ServerSettings.layerTest()),
         Layer.provide(AssetSigner.layer.pipe(Layer.provideMerge(ServerSecretStore.layer))),
         Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-mcp-attachment-" })),
         Layer.provide(
@@ -1632,6 +1635,7 @@ it.effect.each([
             sendToThread: () => Effect.fail(refusal),
           }),
         ),
+        Layer.provide(ServerSettings.layerTest()),
         Layer.provide(AssetSigner.layer.pipe(Layer.provideMerge(ServerSecretStore.layer))),
         Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-mcp-attachment-" })),
         Layer.provide(
@@ -1644,6 +1648,87 @@ it.effect.each([
     ),
   );
 });
+
+it.effect(
+  "t3_thread_send_attachments sends to a Tot's current thread, not one a fresh start settled",
+  () => {
+    const former = ThreadId.make("tot:workbot:former");
+    const current = ThreadId.make("tot:workbot:current");
+    const stored = ChatImageAttachment.make({
+      type: "image",
+      id: "owned-image",
+      name: "original.png",
+      mimeType: "image/png",
+      sizeBytes: 12,
+    });
+    const workbot = { ...DEFAULT_HOME_TOT, id: TotId.make("workbot"), name: "WorkBot" };
+    const sendTo = (threadId: ThreadId, totThreadId: ThreadId | null) => {
+      const targets: Array<ThreadId> = [];
+      return Effect.gen(function* () {
+        const server = yield* McpServer.McpServer;
+        const result = yield* server
+          .callTool({
+            name: "t3_thread_send_attachments",
+            arguments: { threadId, message: "See the file.", attachments: [stored] },
+          })
+          .pipe(
+            Effect.provideService(McpInvocationContext.McpInvocationContext, scope),
+            Effect.provideService(McpSchema.McpServerClient, client),
+          );
+        return { result, targets };
+      }).pipe(
+        Effect.provide(
+          McpHttpServer.layerAttachmentToolkit.pipe(
+            Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
+            Layer.provide(
+              Layer.mock(ThreadManagement.ThreadManagementService)({
+                getThreadShell: (id) => Effect.succeed(McpToolAccessTestkit.liveThreadShell(id)),
+                getProjectThreadRecords: ({ threadId: id }) =>
+                  Effect.succeed({
+                    ...McpToolAccessTestkit.idleThreadProjection(
+                      McpToolAccessTestkit.liveThreadShell(id),
+                    ),
+                    messages: [{ attachments: [stored] }],
+                  } as never),
+                sendToThread: (input) => {
+                  targets.push(input.threadId);
+                  return Effect.succeed({
+                    run: { id: RunId.make("run:sent"), status: "running" },
+                    message: { attachments: [stored] },
+                    delivery: "started",
+                  } as never);
+                },
+              }),
+            ),
+            Layer.provide(
+              ServerSettings.layerTest({ tots: [{ ...workbot, threadId: totThreadId }] }),
+            ),
+            Layer.provide(AssetSigner.layer.pipe(Layer.provideMerge(ServerSecretStore.layer))),
+            Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-mcp-attachment-" })),
+            Layer.provide(
+              DocumentText.layer.pipe(
+                Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+              ),
+            ),
+            Layer.provide(NodeCrypto.layer),
+          ),
+        ),
+      );
+    };
+    return Effect.gen(function* () {
+      const redirected = yield* sendTo(former, current);
+      expect(redirected.result.isError).toBe(false);
+      expect(redirected.targets).toEqual([current]);
+      expect(redirected.result.structuredContent).toMatchObject({ threadId: current });
+      expect((yield* sendTo(current, current)).targets).toEqual([current]);
+
+      const off = yield* sendTo(former, null);
+      expect(off.targets).toEqual([]);
+      expect(declaredFailure(off.result)).toMatchObject({ code: "thread_not_sendable" });
+      expect(declaredFailure(off.result)?.message).toContain("WorkBot, which is off");
+    });
+  },
+);
 
 it.effect(
   "t3_thread_list settled:false with an empty statuses list lists the unsettled threads",
