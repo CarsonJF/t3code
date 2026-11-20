@@ -1,4 +1,4 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomValue } from "@effect/atom-react";
 import {
   isAtomCommandInterrupted,
   runAtomCommand,
@@ -29,9 +29,10 @@ import { environmentCatalog } from "../connection/catalog";
 import { projectMonogramColor } from "../lib/projectIcon";
 import { uuidv4 } from "../lib/uuid";
 import { appAtomRegistry } from "./atom-registry";
-import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "./preferences";
+import { mobilePreferencesAtom, saveMobilePreferences } from "./preferences";
 import { serverEnvironment } from "./server";
 import { environmentSession, sessionHasScope } from "./session";
+import { useAtomCommand } from "./use-atom-command";
 
 export interface ThreadGroupsView {
   readonly byEnvironment: ThreadGroupsByEnvironment;
@@ -68,12 +69,12 @@ const EMPTY_COLLAPSED: ReadonlyArray<string> = [];
 
 export function useCollapsedThreadGroups() {
   const preferences = useAtomValue(mobilePreferencesAtom);
-  const update = useAtomSet(updateMobilePreferencesAtom);
+  const update = useAtomCommand(saveMobilePreferences);
   const collapsed = AsyncResult.isSuccess(preferences)
     ? (preferences.value.collapsedThreadGroups ?? EMPTY_COLLAPSED)
     : EMPTY_COLLAPSED;
   const toggle = (groupId: string) =>
-    update({
+    void update({
       transform: (current) => {
         const ids = current.collapsedThreadGroups ?? [];
         return {
