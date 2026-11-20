@@ -3,6 +3,7 @@ import {
   type ChatAttachment,
   MessageId,
   OrchestratorMcpFailure,
+  parseTotThreadId,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -11,9 +12,18 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as Upload from "../../../assets/AttachmentUpload.ts";
 import * as Claims from "../../../orchestration-v2/AttachmentClaims.ts";
 import * as ThreadMessageIntake from "../../../orchestration-v2/ThreadMessageIntake.ts";
+import * as ServerSettings from "../../../serverSettings.ts";
+import { totSendTarget } from "../../../tots/totSendTarget.ts";
+import { assertSameLink } from "../../linkOrigin.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { isThreadManagementError, threadManagementFailure } from "../../OrchestratorMcpService.ts";
-import { dispatchFailure, newCommandId, readThread, unavailable } from "../../threadAccess.ts";
+import {
+  assertTargetWithinLimits,
+  dispatchFailure,
+  newCommandId,
+  readThread,
+  unavailable,
+} from "../../threadAccess.ts";
 import { AttachmentToolkit } from "./tools.ts";
 
 export function resolveAttachmentReferences(
@@ -47,6 +57,7 @@ export const layer = McpToolAccess.toLayer(
   AttachmentToolkit,
   Effect.gen(function* () {
     const assetSigner = yield* AssetSigner.AssetSigner;
+    const serverSettings = yield* ServerSettings.ServerSettingsService;
     const uploadOwners = new Map<string, { readonly owner: string; readonly issuedAt: number }>();
     return {
       // A pending upload belongs to its caller until a send claims it, so
@@ -89,7 +100,22 @@ export const layer = McpToolAccess.toLayer(
         (input) => [input.threadId],
         (input) =>
           Effect.gen(function* () {
-            const { caller, projection } = yield* readThread(input.threadId, ["messages"]);
+            // A Tot's former thread resolves to its current one, as t3_thread_send does.
+            const named = input.threadId;
+            const targetId =
+              named === undefined || parseTotThreadId(named) === null
+                ? named
+                : yield* serverSettings.getSettings.pipe(
+                    Effect.mapError(unavailable),
+                    Effect.flatMap((settings) => totSendTarget(named, settings.tots)),
+                  );
+            const context = yield* readThread(targetId, ["messages"]);
+            const { caller, projection } = context;
+            // The access check ran on the thread named; check the thread it resolved to.
+            if (targetId !== named) {
+              yield* assertTargetWithinLimits(context.limits, projection.thread);
+              yield* assertSameLink(context, projection.thread);
+            }
             if (projection.thread.archivedAt !== null)
               return yield* new OrchestratorMcpFailure({
                 code: "invalid_request",
