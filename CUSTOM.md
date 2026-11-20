@@ -74,6 +74,27 @@ Runner", arm64 runners are out of capacity: rerun with `-f mac_runner=macos-15-i
     git push --force-with-lease origin custom
     gh workflow run custom-nightly.yml -R CarsonJF/t3code
 
+### Migration ids
+
+Fork migrations keep the id they shipped with, forever. Installed databases record each
+migration as `<id>, <name>`, and the migrator runs only ids above the highest recorded one,
+so renumbering a migration that already shipped breaks every existing database. That is how
+the `.4941` custom build failed: it moved `ScheduledTaskCreatedByTot` from 99 to 101, and
+every database that had recorded 99 refused to start.
+
+- 99 is `ScheduledTaskCreatedByTot`. Upstream's migrations from its 99 on sit one id higher
+  here (upstream 099 is our 100, and so on). When a rebase brings a new upstream migration,
+  rename its file and manifest entry to upstream id + 1, append it after ours, and update any
+  test that names its id.
+- Every migration from 99 on must be idempotent (`IF NOT EXISTS`, a column check, or a
+  drop and rebuild). Startup and the update preflight rewind a history recorded in another
+  order (stock upstream, or the `.4941` custom build) and replay it in ours; see
+  `withoutReorderedMigrations` in `apps/server/src/persistence/Migrations.ts`.
+- A new fork migration takes the next id after the last one in the manifest, and upstream
+  migrations that land after it shift one id further. Update the offset above when that
+  happens, and keep the new migration idempotent.
+- `Migrations.test.ts` holds the regression cases for these histories; keep them passing.
+
 ## Installing
 
 ### Windows
