@@ -106,16 +106,16 @@ import Migration0095 from "./Migrations/095_TurnItemInlineWorkOutput.ts";
 import Migration0096 from "./Migrations/096_RepairStaleTitleRegeneration.ts";
 import Migration0097 from "./Migrations/097_IssueTrackerBindings.ts";
 import Migration0098 from "./Migrations/098_ActiveShellIndexIndexes.ts";
-import Migration0099 from "./Migrations/099_BackgroundRecoveryIndexes.ts";
-import Migration0100 from "./Migrations/100_TurnStartReadIndexes.ts";
-import Migration0101 from "./Migrations/101_DelegatedTaskReadIndexes.ts";
-import Migration0102 from "./Migrations/102_ThreadItemCounts.ts";
-import Migration0103 from "./Migrations/103_IssueTrackerAdditionalScopes.ts";
-import Migration0104 from "./Migrations/104_ProjectionProjectsTrackedFolders.ts";
-import Migration0105 from "./Migrations/105_TaskFolders.ts";
-import Migration0106 from "./Migrations/106_WorktreePathKeyIndex.ts";
-import Migration0107 from "./Migrations/107_DeferredSlashCommandIndex.ts";
-import Migration0103 from "./Migrations/103_ScheduledTaskCreatedByTot.ts";
+import Migration0099 from "./Migrations/099_ScheduledTaskCreatedByTot.ts";
+import Migration0100 from "./Migrations/100_BackgroundRecoveryIndexes.ts";
+import Migration0101 from "./Migrations/101_TurnStartReadIndexes.ts";
+import Migration0102 from "./Migrations/102_DelegatedTaskReadIndexes.ts";
+import Migration0103 from "./Migrations/103_ThreadItemCounts.ts";
+import Migration0104 from "./Migrations/104_IssueTrackerAdditionalScopes.ts";
+import Migration0105 from "./Migrations/105_ProjectionProjectsTrackedFolders.ts";
+import Migration0106 from "./Migrations/106_TaskFolders.ts";
+import Migration0107 from "./Migrations/107_WorktreePathKeyIndex.ts";
+import Migration0108 from "./Migrations/108_DeferredSlashCommandIndex.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -217,16 +217,18 @@ const migrationEntries = [
   [96, "RepairStaleTitleRegeneration", Migration0096],
   [97, "IssueTrackerBindings", Migration0097],
   [98, "ActiveShellIndexIndexes", Migration0098],
-  [99, "BackgroundRecoveryIndexes", Migration0099],
-  [100, "TurnStartReadIndexes", Migration0100],
-  [101, "DelegatedTaskReadIndexes", Migration0101],
-  [102, "ThreadItemCounts", Migration0102],
-  [103, "IssueTrackerAdditionalScopes", Migration0103],
-  [104, "ProjectionProjectsTrackedFolders", Migration0104],
-  [105, "TaskFolders", Migration0105],
-  [106, "WorktreePathKeyIndex", Migration0106],
-  [107, "DeferredSlashCommandIndex", Migration0107],
-  [103, "ScheduledTaskCreatedByTot", Migration0103],
+  // Fork: custom builds recorded the Tot migration at 99 before upstream took that id, so
+  // upstream's migrations from 99 on sit one id higher here. See CUSTOM.md, "Migration ids".
+  [99, "ScheduledTaskCreatedByTot", Migration0099],
+  [100, "BackgroundRecoveryIndexes", Migration0100],
+  [101, "TurnStartReadIndexes", Migration0101],
+  [102, "DelegatedTaskReadIndexes", Migration0102],
+  [103, "ThreadItemCounts", Migration0103],
+  [104, "IssueTrackerAdditionalScopes", Migration0104],
+  [105, "ProjectionProjectsTrackedFolders", Migration0105],
+  [106, "TaskFolders", Migration0106],
+  [107, "WorktreePathKeyIndex", Migration0107],
+  [108, "DeferredSlashCommandIndex", Migration0108],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);
@@ -241,6 +243,46 @@ const makeMigrationLoader = (throughId?: number) =>
   );
 
 const FIRST_V2_MIGRATION_ID = 55;
+
+// Fork: from this id on, custom and upstream builds order migrations differently. Every
+// migration from here is idempotent, so a history recorded in another build's order (stock
+// upstream, or the custom build that put upstream's first) is rewound and replayed in this order.
+const FIRST_REORDERED_MIGRATION_ID = 99;
+const reorderedMigrationNames = new Set<string>(
+  migrationEntries.filter(([id]) => id >= FIRST_REORDERED_MIGRATION_ID).map(([, name]) => name),
+);
+
+/** The history with its reordered rows dropped when startup will replay them, else unchanged. */
+export function withoutReorderedMigrations<
+  Row extends { readonly id: number; readonly name: string },
+>(recorded: ReadonlyArray<Row>): ReadonlyArray<Row> {
+  const manifestNames = new Map<number, string>(migrationManifest);
+  const reordered = recorded.filter((row) => row.id >= FIRST_REORDERED_MIGRATION_ID);
+  const diverges = reordered.some((row) => manifestNames.get(row.id) !== row.name);
+  const replayable = reordered.every((row) => reorderedMigrationNames.has(row.name));
+  return diverges && replayable
+    ? recorded.filter((row) => row.id < FIRST_REORDERED_MIGRATION_ID)
+    : recorded;
+}
+
+const replayReorderedMigrations = Effect.fn("replayReorderedMigrations")(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const tables = yield* sql`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'effect_sql_migrations'
+  `;
+  if (tables.length === 0) return;
+  const recorded = (yield* sql<{ readonly migration_id: number; readonly name: string }>`
+    SELECT migration_id, name FROM effect_sql_migrations
+    WHERE migration_id >= ${FIRST_REORDERED_MIGRATION_ID}
+  `).map((row) => ({ id: row.migration_id, name: row.name }));
+  if (withoutReorderedMigrations(recorded).length === recorded.length) return;
+  yield* Effect.logWarning("Replaying migrations recorded in another build's order").pipe(
+    Effect.annotateLogs({ recorded: recorded.map(({ id, name }) => `${id}_${name}`) }),
+  );
+  yield* sql`
+    DELETE FROM effect_sql_migrations WHERE migration_id >= ${FIRST_REORDERED_MIGRATION_ID}
+  `;
+});
 
 export function skippedV2Migrations(
   recorded: ReadonlyArray<{ readonly id: number; readonly name: string }>,
@@ -320,6 +362,12 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
     toMigrationInclusive === undefined || toMigrationInclusive >= FIRST_V2_MIGRATION_ID;
   // The reconcile takes the write lock; CLI startup must not contend with the server for a no-op.
   const previewMigrations = includesV2 && hasPending ? yield* reconcileV2PreviewMigration() : [];
+  if (
+    hasPending &&
+    (toMigrationInclusive === undefined || toMigrationInclusive >= FIRST_REORDERED_MIGRATION_ID)
+  ) {
+    yield* replayReorderedMigrations();
+  }
   if (includesV2) {
     yield* assertV2MigrationsCanRun(toMigrationInclusive);
   }
