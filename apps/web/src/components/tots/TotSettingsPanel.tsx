@@ -372,6 +372,25 @@ function TotSettingsEditor(props: {
 
           <Separator />
 
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-medium text-sm">Auto-settle its thread</p>
+              <p className="text-xs text-muted-foreground">
+                {draft.autoSettle
+                  ? "Its thread settles after inactivity, like other threads."
+                  : "Its thread stays open, whatever the auto-settle settings say."}
+              </p>
+            </div>
+            <Switch
+              checked={draft.autoSettle}
+              disabled={!canEdit}
+              aria-label={`Auto-settle ${tot.name}'s thread`}
+              onCheckedChange={(autoSettle) => setDraft({ ...draft, autoSettle })}
+            />
+          </div>
+
+          <Separator />
+
           <TotWatchesSection environmentId={environmentId} tot={tot} />
         </div>
       </div>
