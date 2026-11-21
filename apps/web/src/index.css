@@ -2653,3 +2653,286 @@ code {
 .messages-timeline-scroll:focus-visible {
   outline: none;
 }
+
+/* Model picker — ported from t3-nyx-theme (MIT © 2026 Deepusleepy). App-wide
+   chrome: the scope is the picker popover, every pigment comes from this fork's
+   semantic tokens, and no Tot/theme hooks or t3_theme_set call live here. */
+[data-slot="popover-popup"]:has([data-model-picker-content]) {
+  & div:has(> [data-model-picker-content]) {
+    flex-flow: column;
+    height: 22rem;
+
+    /* The docked phone layout stays content-sized. */
+    @media (width < 40rem) {
+      height: auto;
+    }
+  }
+
+  & [data-model-picker-content] {
+    flex: 1;
+    flex-flow: column;
+    max-width: 24rem;
+    height: auto;
+    min-height: 7rem;
+
+    & > .flex-1 {
+      display: contents;
+    }
+
+    & > .flex-1 > .shrink-0:has(input) {
+      order: -2;
+    }
+  }
+
+  & [data-model-picker-sidebar] {
+    order: -1;
+    width: auto;
+
+    & .flex-col {
+      flex-flow: row;
+      padding: 0.25rem 0.5rem 0.375rem;
+    }
+
+    & .flex-col > div {
+      width: 2rem;
+    }
+
+    & [data-model-picker-selected-indicator],
+    & .border-b {
+      display: none;
+    }
+  }
+
+  & [data-model-picker-effort] {
+    flex-shrink: 1;
+    width: auto;
+    height: auto;
+    border-width: 1px 0 0;
+    background: none;
+
+    & > .shrink-0 {
+      padding: 0.5rem 1rem 0;
+
+      & > div {
+        height: auto;
+        padding: 0;
+        border: 0;
+        font-size: 0.6875rem;
+      }
+
+      & span {
+        margin: 0;
+      }
+
+      & span:first-child {
+        display: none;
+      }
+    }
+
+    & > .flex-1 {
+      padding: 0.375rem 1rem 0.5rem;
+    }
+
+    & .mt-1 {
+      order: -1;
+      margin: 0 0 0.5rem;
+      padding: 0;
+      border: 0;
+    }
+
+    & > .flex-1 > :not([role]) > * {
+      padding: 0.25rem 0.5rem;
+      background: color-mix(in srgb, var(--foreground) 4%, transparent);
+
+      & .flex-col {
+        flex-flow: row;
+        justify-content: space-between;
+        align-items: baseline;
+      }
+    }
+
+    /* A model with no levels would only render a "No effort levels" note. */
+    &:not(:has(button)) {
+      display: none;
+    }
+  }
+
+  & .lucide-star.fill-current {
+    color: var(--primary);
+    filter: drop-shadow(0 0 4px color-mix(in oklab, var(--primary) 50%, transparent));
+  }
+
+  & [data-composer-permissions-trigger] {
+    height: 2rem;
+  }
+
+  & [data-model-picker-effort] [role="radiogroup"],
+  & [class*="bg-input/40"] {
+    /* Nyx's --nyx-shine/--nyx-art become this fork's action + surface tokens:
+       no new palette and no glowing backdrop. */
+    --picker-pill: linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--primary) 18%, var(--accent)),
+      color-mix(in oklab, var(--primary) 8%, var(--accent))
+    );
+    --picker-pill-shadow:
+      inset 0 0 0 1px color-mix(in oklab, var(--primary) 38%, transparent),
+      var(--inset-shadow-control-highlight);
+
+    position: relative;
+    flex-flow: row wrap;
+    gap: 0;
+    padding: 3px;
+    border-radius: 0.6875rem;
+    background: color-mix(in srgb, var(--foreground) 4%, transparent);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--border) 55%, transparent),
+      var(--inset-shadow-control-pressed);
+
+    &:has(> :nth-of-type(2):last-of-type) {
+      --n: 2;
+    }
+
+    &:has(> :nth-of-type(3):last-of-type) {
+      --n: 3;
+    }
+
+    &:has(> :nth-of-type(4):last-of-type) {
+      --n: 4;
+    }
+
+    &:has(> :nth-of-type(5):last-of-type) {
+      --n: 5;
+    }
+
+    &:has(> :nth-of-type(6):last-of-type) {
+      --n: 6;
+    }
+
+    &:has(> :nth-of-type(2)[aria-checked="true"]) {
+      --c: 1;
+    }
+
+    &:has(> :nth-of-type(3)[aria-checked="true"]) {
+      --c: 2;
+    }
+
+    &:has(> :nth-of-type(4)[aria-checked="true"]) {
+      --c: 3;
+    }
+
+    &:has(> :nth-of-type(5)[aria-checked="true"]) {
+      --c: 4;
+    }
+
+    &:has(> :nth-of-type(6)[aria-checked="true"]) {
+      --c: 5;
+    }
+
+    &:has(> :nth-of-type(n + 7)[aria-checked="true"]) {
+      --c: 6;
+    }
+
+    & > div {
+      flex-basis: 100%;
+    }
+
+    & > [aria-checked="true"] {
+      anchor-name: --t3-picker-pill;
+    }
+
+    & > button {
+      position: relative;
+      z-index: 1;
+      flex: 1 1 0;
+      min-width: 4.125rem;
+      height: 1.625rem;
+      padding: 0 0.25rem;
+      border-radius: 0.5rem;
+      text-align: center;
+      font-size: 0.6875rem;
+      color: var(--muted-foreground);
+      background: none;
+      transition: color 0.2s;
+
+      & > :not(:first-child) {
+        display: none;
+      }
+    }
+
+    /* Plain active state: also the fallback without anchor positioning, and
+       the treatment the single aria-pressed toggle keeps in every browser. */
+    & > button:is([aria-checked="true"], [aria-pressed="true"]) {
+      color: var(--foreground);
+      background: var(--picker-pill);
+      box-shadow: var(--picker-pill-shadow);
+    }
+
+    & > button:is(:hover, [aria-checked="true"], [aria-pressed="true"]) {
+      color: var(--foreground);
+    }
+
+    & > button:focus-visible {
+      outline: 1px solid var(--ring);
+    }
+
+    @supports (anchor-name: --t3-picker-pill) and (position-anchor: --t3-picker-pill) {
+      anchor-scope: --t3-picker-pill;
+
+      & > button[aria-checked="true"] {
+        background: transparent;
+        box-shadow: none;
+      }
+
+      /* ::after is the last child, so the checked button is a valid preceding
+         sibling anchor; ::before could not reliably anchor to a later one. */
+      &:has(> [aria-checked="true"])::after {
+        content: "";
+        position: absolute;
+        z-index: 0;
+        position-anchor: --t3-picker-pill;
+        inset: anchor(inside);
+        border-radius: 0.5rem;
+        background: var(--picker-pill);
+        box-shadow: var(--picker-pill-shadow);
+        pointer-events: none;
+
+        @media (prefers-reduced-motion: no-preference) {
+          transition:
+            inset 0.32s cubic-bezier(0.3, 0.8, 0.25, 1),
+            filter 0.32s;
+        }
+
+        /* Reduced motion keeps the pill on its target with no slide. */
+        @media (prefers-reduced-motion: reduce) {
+          transition: none;
+        }
+      }
+    }
+
+    &[role] {
+      &::after {
+        filter: brightness(calc(0.92 + var(--c, 1) / (var(--n, 7) - 1) * 0.16));
+      }
+
+      & > button {
+        min-width: 1px;
+        padding: 0;
+      }
+
+      @media (width < 40rem) {
+        &:has(> :nth-of-type(5)) > button {
+          flex: 0 0 33.3%;
+        }
+      }
+
+      &:has(> :nth-of-type(7)) > button {
+        flex: 0 0 25%;
+      }
+
+      & > [aria-checked="true"] {
+        font-weight: 600;
+      }
+    }
+  }
+}
