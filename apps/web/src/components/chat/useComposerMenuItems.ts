@@ -35,12 +35,8 @@ import {
   getProviderSlashCommandsForSlashMenu,
 } from "@t3tools/client-runtime/providerSkills";
 import { searchProviderSkills } from "../../providerSkillSearch";
-import { useServerConfigs, useVisibleThreadShells } from "~/state/entities";
-import {
-  useConnectedEnvironmentIds,
-  useEnvironmentIdentities,
-  useEnvironmentMachines,
-} from "~/state/environments";
+import { useVisibleThreadShells } from "~/state/entities";
+import { useEnvironmentIdentities, useEnvironmentMachines } from "~/state/environments";
 import { offersLinkedEnvironmentsAtom } from "~/state/peerLinks";
 import { useTots } from "~/state/tots";
 import {
@@ -143,8 +139,6 @@ export function useComposerMenuItems({
   // The user's machines feed `@` machine matches; the catalog summary is cheap and stable.
   const environmentIdentities = useEnvironmentIdentities();
   const environmentMachines = useEnvironmentMachines();
-  const connectedEnvironmentIds = useConnectedEnvironmentIds();
-  const serverConfigs = useServerConfigs();
   const tots = useTots();
   const offersMachines = useAtomValue(offersLinkedEnvironmentsAtom(environmentId));
   const isTotChat = activeThreadId !== null && parseTotThreadId(activeThreadId) !== null;
