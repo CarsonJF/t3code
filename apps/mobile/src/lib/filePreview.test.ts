@@ -1448,6 +1448,7 @@ describe("ThreadFeed previews", () => {
             threadId,
             detailRef: null,
             threadTitle: "preview",
+            tot: null,
             workspaceRoot: "/repo",
             feed: [
               {
