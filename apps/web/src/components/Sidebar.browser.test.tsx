@@ -29,6 +29,7 @@ import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";
 import { readLocalApi } from "../localApi";
+import { threadGroupActions, useThreadGroupsStore } from "../threadGroupsStore";
 import type { Project } from "../types";
 import Sidebar from "./Sidebar";
 import { THREAD_JUMP_HINT_SHOW_DELAY_MS } from "./Sidebar.logic";
@@ -47,6 +48,7 @@ vi.mock("./sidebar/SidebarThreadRow", { spy: true });
 vi.mock("../state/session", { spy: true });
 vi.mock("../state/use-orchestration-command", { spy: true });
 vi.mock("../localApi", { spy: true });
+vi.mock("../threadGroupsStore", { spy: true });
 vi.mock(import("../state/server"), async (original) => {
   const { Atom } = await import("effect/reactivity");
   const { compileResolvedKeybindingsConfig } = await import("@t3tools/shared/keybindings");
@@ -365,6 +367,69 @@ describe("sidebar thread menu", () => {
     await userEvent.click(row, { button: "right" });
     await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(2));
     expect(show.mock.lastCall?.[2]).toBe("mouse");
+  });
+});
+
+describe("sidebar thread groups", () => {
+  it("hides empty groups and moves visible groups past them", async () => {
+    const activeProject = project("active");
+    const threads = [1, 2, 3].map((index) => threadShell(activeProject.id, index));
+    const threadRef = { environmentId: activeProject.environmentId, threadId: threads[1]!.id };
+    const groups = [
+      { id: "open", name: "Open group" },
+      { id: "empty", name: "Empty group" },
+      { id: "collapsed", name: "Collapsed group" },
+    ];
+    const show = vi.fn().mockResolvedValue("move-up");
+    using move = vi.spyOn(threadGroupActions, "move").mockImplementation(() => {});
+    vi.mocked(useThreadGroupsStore).mockReturnValue({
+      groups,
+      collapsed: { collapsed: true },
+      byEnvironment: new Map([
+        [
+          activeProject.environmentId,
+          {
+            groups,
+            projectDefaults: {},
+            threadOverrides: {
+              [threads[0]!.id]: "open",
+              [threads[1]!.id]: "collapsed",
+              [threads[2]!.id]: "collapsed",
+            },
+          },
+        ],
+      ]),
+    });
+    vi.mocked(readLocalApi).mockReturnValue({ contextMenu: { show } } as unknown as LocalApi);
+    vi.mocked(useProjects).mockReturnValue([activeProject]);
+    vi.mocked(useQuietThreadShells).mockReturnValue(threads);
+    vi.mocked(useThreadRouteTarget).mockReturnValue({ kind: "server", threadRef });
+    vi.mocked(useHandleNewThread).mockReturnValue({
+      activeDraftThread: null,
+      activeThread: null,
+      defaultProjectRef: {
+        environmentId: activeProject.environmentId,
+        projectId: activeProject.id,
+      },
+      defaultProjectFallbackReady: true,
+      handleNewThread: vi.fn().mockResolvedValue(null),
+      routeDraftId: null,
+      routeThreadRef: threadRef,
+    });
+    await using screen = await render(
+      <SidebarProvider>
+        <Sidebar routeReveal={{ observedKey: null, pendingKey: null }} />
+      </SidebarProvider>,
+    );
+    const collapsedHeader = screen.getByText("Collapsed group");
+    await expect.element(collapsedHeader).toBeInTheDocument();
+    await expect.element(screen.getByText("Open group")).toBeInTheDocument();
+    await expect.element(screen.getByText("Empty group")).not.toBeInTheDocument();
+    await expect.element(screen.getByText("Thread 2").first()).toBeInTheDocument();
+    await expect.element(screen.getByText("Thread 3")).not.toBeInTheDocument();
+
+    await userEvent.click(collapsedHeader, { button: "right" });
+    await vi.waitFor(() => expect(move).toHaveBeenCalledWith("collapsed", "open", "before"));
   });
 });
 
