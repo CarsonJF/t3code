@@ -14,11 +14,7 @@ import {
 import { useState, type DragEvent, type MouseEvent } from "react";
 
 import { readLocalApi } from "../../localApi";
-import {
-  readThreadGroupsView,
-  threadGroupActions,
-  type ThreadGroup,
-} from "../../threadGroupsStore";
+import { threadGroupActions, type ThreadGroup } from "../../threadGroupsStore";
 import { cn } from "../../lib/utils";
 import { projectIconColorStyle } from "../../projectIconColors";
 import { useUiStateStore } from "../../uiStateStore";
@@ -64,13 +60,16 @@ const GROUP_STATUS: Record<
   done: { Icon: CircleCheckIcon, label: "done", className: "text-success-foreground" },
 };
 
-async function openThreadGroupMenu(group: ThreadGroup, position: { x: number; y: number }) {
+async function openThreadGroupMenu(
+  group: ThreadGroup,
+  visibleGroupIds: ReadonlyArray<string>,
+  position: { x: number; y: number },
+) {
   const api = readLocalApi();
   if (!api) return;
-  const groupIds = readThreadGroupsView().groups.map((candidate) => candidate.id);
-  const index = groupIds.indexOf(group.id);
-  const previousId = groupIds[index - 1];
-  const nextId = groupIds[index + 1];
+  const index = visibleGroupIds.indexOf(group.id);
+  const previousId = visibleGroupIds[index - 1];
+  const nextId = visibleGroupIds[index + 1];
   const clicked = await settlePromise(() =>
     api.contextMenu.show(
       [
@@ -121,6 +120,8 @@ async function openThreadGroupMenu(group: ThreadGroup, position: { x: number; y:
 
 export function SidebarThreadGroupHeader(props: {
   group: ThreadGroup;
+  /** Move up/down step over groups the sidebar is hiding. */
+  visibleGroupIds: ReadonlyArray<string>;
   count: number;
   expanded: boolean;
   /** The group's threads while it is collapsed, for the status icons; empty when open. */
@@ -180,7 +181,10 @@ export function SidebarThreadGroupHeader(props: {
       }}
       onContextMenu={(event: MouseEvent) => {
         event.preventDefault();
-        void openThreadGroupMenu(props.group, { x: event.clientX, y: event.clientY });
+        void openThreadGroupMenu(props.group, props.visibleGroupIds, {
+          x: event.clientX,
+          y: event.clientY,
+        });
       }}
     >
       {props.group.color ? (
