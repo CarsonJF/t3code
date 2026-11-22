@@ -524,7 +524,9 @@ function useSidebarThreads(input: {
     partition.activeThreads,
     threadGroupsState,
   );
-  const threadGroupSections = groups.map(({ group, threads: groupThreads }) => {
+  const threadGroupSections = groups
+    .filter(({ threads: groupThreads }) => groupThreads.length > 0)
+    .map(({ group, threads: groupThreads }) => {
     const expanded = threadGroupsState.collapsed[group.id] !== true;
     return {
       group,
@@ -3681,11 +3683,15 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                       let threadGroupsRendered = false;
                       const pushThreadGroups = () => {
                         threadGroupsRendered = true;
+                        const visibleGroupIds = threadGroupSections.map(
+                          (section) => section.group.id,
+                        );
                         for (const section of threadGroupSections) {
                           items.push(
                             <SidebarThreadGroupHeader
                               key={`thread-group:${section.group.id}`}
                               group={section.group}
+                              visibleGroupIds={visibleGroupIds}
                               count={section.count}
                               expanded={section.expanded}
                               statusThreads={section.statusThreads}
