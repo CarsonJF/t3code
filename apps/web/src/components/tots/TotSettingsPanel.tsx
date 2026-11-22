@@ -20,6 +20,7 @@ import {
   type TotWatch,
   type TotWatchReports,
 } from "@t3tools/contracts";
+import type { TimestampFormat } from "@t3tools/contracts/settings";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -639,6 +640,7 @@ function TotScheduledTaskRow(props: {
   readonly canOperate: boolean;
 }) {
   const { task } = props;
+  const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
   const [busy, setBusy] = useState(false);
   const toggleEnabled = useAtomCommand(serverEnvironment.setScheduledTaskEnabled, {
     reportFailure: false,
@@ -693,7 +695,7 @@ function TotScheduledTaskRow(props: {
                 {webhookFilterSummary(task.schedule.filters)}
               </>
             ) : (
-              scheduleLabelForPanel(task, props.timeZone)
+              scheduleLabelForPanel(task, timestampFormat, props.timeZone)
             )}
           </p>
           <p className="mt-0.5 text-muted-foreground text-xs">
@@ -772,9 +774,13 @@ function TotScheduledTaskRow(props: {
   );
 }
 
-function scheduleLabelForPanel(task: ScheduledTask, timeZone: string | undefined) {
+function scheduleLabelForPanel(
+  task: ScheduledTask,
+  timestampFormat: TimestampFormat,
+  timeZone: string | undefined,
+) {
   if (task.schedule.type === "webhook") return "Webhook";
-  return scheduleLabel(task.schedule, timeZone, task.nextRunAt);
+  return scheduleLabel(task.schedule, timestampFormat, timeZone, task.nextRunAt);
 }
 
 function TotWatchReportsSection(props: {
