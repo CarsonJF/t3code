@@ -515,6 +515,16 @@ export interface ThreadManagementServiceShape {
   readonly waitForThread: (
     input: ThreadManagementWaitInput,
   ) => Effect.Effect<ThreadManagementWaitResult, ThreadManagementError>;
+  /** Whether a restart may still continue this stopped run as a new one. */
+  readonly restartContinuationPending: (input: {
+    readonly threadId: ThreadId;
+    readonly runId: RunId;
+  }) => Effect.Effect<boolean>;
+  /** Ends once that decision is made, including a continuation that was declined. */
+  readonly awaitRestartContinuation: (input: {
+    readonly threadId: ThreadId;
+    readonly runId: RunId;
+  }) => Effect.Effect<void>;
   /** Waits for the agent's run and automatic follow-ups before settling.
    * A new user turn or an unsuccessful ending leaves the thread active. */
   readonly settleAfterRun: (input: {
@@ -1287,6 +1297,24 @@ const make = Effect.gen(function* () {
     return settledResult(yield* evaluate((yield* getProjectThreadRecords(input, ["runs"])).runs));
   });
 
+  const recordedRun = (input: { readonly threadId: ThreadId; readonly runId: RunId }) =>
+    orchestrator.getThreadRecords(input.threadId, ["runs"]).pipe(
+      Effect.map(({ runs }) => runs.find((run) => run.id === input.runId)),
+      Effect.orElseSucceed(() => undefined),
+    );
+
+  const restartContinuationPending: ThreadManagementServiceShape["restartContinuationPending"] =
+    Effect.fn("ThreadManagementService.restartContinuationPending")(function* (input) {
+      const run = yield* recordedRun(input);
+      return run !== undefined && (yield* orchestrator.restartContinuationPending(run));
+    });
+
+  const awaitRestartContinuation: ThreadManagementServiceShape["awaitRestartContinuation"] =
+    Effect.fn("ThreadManagementService.awaitRestartContinuation")(function* (input) {
+      const run = yield* recordedRun(input);
+      if (run !== undefined) yield* orchestrator.awaitRestartContinuation(run);
+    });
+
   const settleAfterRun: ThreadManagementServiceShape["settleAfterRun"] = Effect.fn(
     "orchestrationV2.threadManagement.settleAfterRun",
   )(function* (input) {
@@ -1951,6 +1979,8 @@ const make = Effect.gen(function* () {
     isProviderInstanceEnabledForProject,
     hasReceipt,
     waitForThread,
+    restartContinuationPending,
+    awaitRestartContinuation,
     settleAfterRun,
     settleThread,
     interruptThread,

@@ -379,3 +379,20 @@ it.effect("refuses a theme over the cap or one that loads remote files", () => {
     expect((yield* tots.list)[0]?.theme).toBeUndefined();
   }).pipe(Effect.provide(layer));
 });
+
+it.effect("unattended Tot exchanges report back up to the limit until someone steps in", () => {
+  const { layer } = makeTots();
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    const environmentId = EnvironmentId.make("environment:peer");
+    const peer = ThreadId.make("tot:yui:current");
+    const allow = (unattended: boolean) =>
+      tots.allowPeerReport(HOME_TOT_ID, environmentId, peer, unattended);
+    for (let hop = 0; hop < TotService.MAX_UNATTENDED_PEER_REPORTS; hop += 1) {
+      expect(yield* allow(true)).toBe(true);
+    }
+    expect(yield* allow(true)).toBe(false);
+    expect(yield* allow(false)).toBe(true);
+    expect(yield* allow(true)).toBe(true);
+  }).pipe(Effect.provide(layer));
+});
