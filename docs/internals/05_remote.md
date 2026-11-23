@@ -36,6 +36,9 @@ side lists and revokes it in Sharing & access like any other session, and owns i
   (in a project that declares a layout, a worktree launch or handoff for such a thread fails;
   restoring a missing folder brings back plain checkouts). Full-access links are not fenced because
   their agents already run as the receiving OS user.
+- **A full-access link's sender thread can mark a Tot.** The receiving side treats a call as a
+  [Tot](./tots.md)'s when its `T3-Sender-Thread` id starts with `tot:` and the link is full access; a
+  narrower link's sender is never trusted that way.
 - **Namespace idempotency keys.** All callers on the linking side share one session on the receiving
   side, so idempotency keys must be hashed with the caller's namespace before forwarding.
 - **Clients read linked threads as standard thread streams.**
