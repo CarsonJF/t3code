@@ -25,7 +25,9 @@ Tots always run in full access, and they can approve requests in your other thre
 - Home can hand work to another Tot and hears back when that work ends.
 - Tots never delete threads or projects. They archive or settle them.
 
-**Watch reports**, in a Tot's panel on its own thread, chooses what it hears about: **Launched threads only** (the default) reports only threads the Tot started, **Every watch** also reports threads it asked to watch and runs it sent into another Tot's thread, and **Off** stops reports without deleting the watches, so turning them back on resumes them.
+**Watch reports**, in a Tot's panel on its own thread, chooses what it hears about: **Launched threads only** (the default) reports threads the Tot started and the answer to anything it sends with a message, **Every watch** also reports threads it asked to watch, and **Off** stops reports without deleting the watches, so turning them back on resumes them.
+
+A report says whether the thread **Finished**, **Failed**, was **Stopped**, needs an answer, or is **Still working**, and quotes the end of its last message. A thread that ends its turn with background work running reports when that work ends. If the work is still running after 30 minutes, for example a dev server, the Tot gets one Still working report.
 
 ## Other machines
 
