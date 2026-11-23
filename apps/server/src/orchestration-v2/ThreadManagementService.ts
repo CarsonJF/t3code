@@ -526,7 +526,7 @@ export interface ThreadManagementServiceShape {
     readonly runId: RunId;
   }) => Effect.Effect<void>;
   /** The next run, only when its own prompt shows this run's background work woke it. */
-  readonly backgroundWakeAfter: (input: {
+  readonly runContinuedBy: (input: {
     readonly threadId: ThreadId;
     readonly runId: RunId;
   }) => Effect.Effect<RunId | undefined>;
@@ -600,6 +600,10 @@ export function isActiveRun(run: OrchestrationV2Run): boolean {
   return (ACTIVE_RUN_STATUSES as ReadonlyArray<OrchestrationV2Run["status"]>).includes(run.status);
 }
 
+/** Cancelled while queued: neither an outcome of its own nor a candidate for a wake. */
+export const runNeverStarted = (run: Pick<OrchestrationV2Run, "status" | "startedAt">): boolean =>
+  run.status === "cancelled" && run.startedAt === null;
+
 /**
  * Whether a run's own prompt is a notification from earlier work. A run with no prompt, such as
  * one whose message Send now moved into the active run, is not evidence of a wake.
@@ -610,9 +614,44 @@ export const isBackgroundWakeRun = (
     Pick<OrchestrationV2ConversationMessage, "id" | "createdBy" | "notification">
   >,
 ): boolean =>
-  !(run.status === "cancelled" && run.startedAt === null) &&
+  !runNeverStarted(run) &&
   messages.find((message) => message.id === run.userMessageId)?.notification !== undefined &&
   !messages.some((message) => message.createdBy === "user");
+
+type ContinuationRun = Pick<
+  OrchestrationV2Run,
+  "id" | "ordinal" | "userMessageId" | "status" | "startedAt"
+>;
+type ContinuationMessage = Pick<
+  OrchestrationV2ConversationMessage,
+  "id" | "runId" | "createdBy" | "notification"
+>;
+
+/** The run that carries this run's work on, shown by that run's own records. */
+export const resolveRunContinuation = Effect.fnUntraced(function* (
+  runs: ReadonlyArray<ContinuationRun>,
+  runId: RunId,
+  readMessages: (filter: {
+    readonly messageRoles: ReadonlyArray<"user">;
+    readonly messageIds?: ReadonlyArray<MessageId>;
+    readonly messageRunIds?: ReadonlyArray<RunId>;
+  }) => Effect.Effect<ReadonlyArray<ContinuationMessage>>,
+) {
+  const run = runs.find((candidate) => candidate.id === runId);
+  if (run === undefined) return undefined;
+  if (runNeverStarted(run)) {
+    // Send now cancels the queued run and moves its message into the run that took it.
+    const moved = yield* readMessages({ messageRoles: ["user"], messageIds: [run.userMessageId] });
+    const absorbedBy = moved.find((message) => message.id === run.userMessageId)?.runId;
+    return absorbedBy === null || absorbedBy === run.id ? undefined : absorbedBy;
+  }
+  const after = runs
+    .filter((candidate) => candidate.ordinal > run.ordinal && !runNeverStarted(candidate))
+    .toSorted((left, right) => left.ordinal - right.ordinal)[0];
+  if (after === undefined) return undefined;
+  const messages = yield* readMessages({ messageRoles: ["user"], messageRunIds: [after.id] });
+  return isBackgroundWakeRun(after, messages) ? after.id : undefined;
+});
 
 export function isTerminalRunStatus(
   status: OrchestrationV2Run["status"],
@@ -1334,25 +1373,18 @@ const make = Effect.gen(function* () {
       if (run !== undefined) yield* orchestrator.awaitRestartContinuation(run);
     });
 
-  const backgroundWakeAfter: ThreadManagementServiceShape["backgroundWakeAfter"] = Effect.fn(
-    "ThreadManagementService.backgroundWakeAfter",
+  const runContinuedBy: ThreadManagementServiceShape["runContinuedBy"] = Effect.fn(
+    "ThreadManagementService.runContinuedBy",
   )(function* (input) {
     const { runs } = yield* orchestrator
       .getThreadRecords(input.threadId, ["runs"])
       .pipe(Effect.orElseSucceed(() => ({ runs: [] })));
-    const ordinal = runs.find((run) => run.id === input.runId)?.ordinal;
-    if (ordinal === undefined) return undefined;
-    const after = runs
-      .filter((run) => run.ordinal > ordinal)
-      .toSorted((left, right) => left.ordinal - right.ordinal)[0];
-    if (after === undefined) return undefined;
-    const { messages } = yield* orchestrator
-      .getThreadRecords(input.threadId, ["messages"], {
-        messageRoles: ["user"],
-        messageRunIds: [after.id],
-      })
-      .pipe(Effect.orElseSucceed(() => ({ messages: [] })));
-    return isBackgroundWakeRun(after, messages) ? after.id : undefined;
+    return yield* resolveRunContinuation(runs, input.runId, (filter) =>
+      orchestrator.getThreadRecords(input.threadId, ["messages"], filter).pipe(
+        Effect.map(({ messages }) => messages),
+        Effect.orElseSucceed(() => []),
+      ),
+    );
   });
 
   const settleAfterRun: ThreadManagementServiceShape["settleAfterRun"] = Effect.fn(
@@ -2021,7 +2053,7 @@ const make = Effect.gen(function* () {
     waitForThread,
     restartContinuationPending,
     awaitRestartContinuation,
-    backgroundWakeAfter,
+    runContinuedBy,
     settleAfterRun,
     settleThread,
     interruptThread,

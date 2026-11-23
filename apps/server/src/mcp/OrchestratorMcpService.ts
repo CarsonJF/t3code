@@ -3765,11 +3765,11 @@ const make = Effect.gen(function* () {
                 .pipe(Effect.orElseSucceed(() => null)))?.pendingBackgroundTasks,
             )
           : status;
-      const wokenRunId =
+      const continuedByRunId =
         input.runId !== undefined &&
         input.until === "attention" &&
-        result.run?.status === "completed"
-          ? yield* threadManagement.backgroundWakeAfter({
+        (result.run?.status === "completed" || result.run?.status === "cancelled")
+          ? yield* threadManagement.runContinuedBy({
               threadId: input.threadId,
               runId: result.run.id,
             })
@@ -3810,7 +3810,7 @@ const make = Effect.gen(function* () {
         status,
         ...(shownStatus === status ? {} : { threadStatus: shownStatus }),
         timedOut: result.timedOut,
-        ...(wokenRunId === undefined ? {} : { wokenRunId }),
+        ...(continuedByRunId === undefined ? {} : { continuedByRunId }),
         ...(wakesCaller ? { next: ORCHESTRATOR_MCP_RUNNING_TASK_NEXT } : {}),
         ...(result.resultRun === undefined
           ? {}

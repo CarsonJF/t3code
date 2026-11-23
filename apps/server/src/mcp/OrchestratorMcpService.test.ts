@@ -629,6 +629,7 @@ describe("OrchestratorMcpService", () => {
       let finished = false;
       let firstRun = false;
       let pendingRequest: "live" | "message" | null = null;
+      let childStatus: "cancelled" | undefined;
       const parentProjection = () =>
         ({
           thread: { id: parentThreadId },
@@ -651,7 +652,7 @@ describe("OrchestratorMcpService", () => {
       const childRun = () => ({
         id: RunId.make("run:mcp-next-child"),
         ordinal: 1,
-        status: finished && !firstRun ? ("completed" as const) : ("running" as const),
+        status: childStatus ?? (finished && !firstRun ? "completed" : "running"),
         // A task's first run is untagged; the child's fork node names the task.
         ...(firstRun ? {} : { delegatedTaskId: taskId }),
       });
@@ -695,7 +696,7 @@ describe("OrchestratorMcpService", () => {
               pendingBackgroundTasks: childBackgroundTasks,
             }),
           getProjectThreadRecords: () => Effect.succeed(childProjection()),
-          backgroundWakeAfter: () => Effect.succeed(RunId.make("run:mcp-next-wake")),
+          runContinuedBy: () => Effect.succeed(RunId.make("run:mcp-next-wake")),
           waitForThread: () =>
             Effect.succeed({
               threadId: childThreadId,
@@ -779,13 +780,20 @@ describe("OrchestratorMcpService", () => {
         assert.notProperty(unmarked, "threadStatus");
 
         // Only a follower naming its run asks; other callers' results stay as they were.
-        assert.notProperty(unmarked, "wokenRunId");
+        assert.notProperty(unmarked, "continuedByRunId");
         const named = yield* service.waitForThread(scope, {
           threadId: childThreadId,
           runId: unmarked.runId!,
           until: "attention",
         });
-        assert.equal(named.wokenRunId, "run:mcp-next-wake");
+        assert.equal(named.continuedByRunId, "run:mcp-next-wake");
+        childStatus = "cancelled";
+        const absorbed = yield* service.waitForThread(scope, {
+          threadId: childThreadId,
+          runId: unmarked.runId!,
+          until: "attention",
+        });
+        assert.equal(absorbed.continuedByRunId, "run:mcp-next-wake");
       }).pipe(Effect.provide(layerOrchestratorService.pipe(Layer.provide(layerDependencies))));
     }),
   );

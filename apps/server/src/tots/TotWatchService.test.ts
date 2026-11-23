@@ -73,7 +73,28 @@ interface RunRecord {
   readonly restartContinuationOfRunId?: RunId;
   /** The notification outcome of a run that background work woke. */
   readonly wake?: "updated" | "completed";
+  /** Cancelled while queued, so it never started. */
+  readonly neverStarted?: boolean;
+  /** The active run that Send now moved this run's message into. */
+  readonly absorbedBy?: RunId;
 }
+
+const asRun = (run: RunRecord) => ({
+  ...run,
+  userMessageId: `message-${String(run.id)}`,
+  startedAt: run.neverStarted === true ? null : DateTime.makeUnsafe(0),
+});
+
+const asPrompt = (run: RunRecord) => ({
+  id: `message-${String(run.id)}`,
+  runId: run.absorbedBy ?? run.id,
+  role: "user",
+  createdBy: run.wake === undefined ? "user" : "system",
+  text: "",
+  ...(run.wake === undefined
+    ? {}
+    : { notification: { outcome: run.wake, source: { kind: "command" } } }),
+});
 
 /** The domain events the watcher streams, and the threads it looked up, in order. */
 class EventFeed extends Context.Service<
@@ -249,20 +270,8 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
                 const text = runId === undefined ? undefined : finalMessages.get(runId);
                 const stop = itemRunId === undefined ? undefined : stopMessages.get(itemRunId);
                 const prompts = runs
-                  .filter((run) => runId === undefined || run.id === runId)
-                  .map((run) => ({
-                    id: `message-${String(run.id)}`,
-                    runId: run.id,
-                    role: "user",
-                    createdBy: "user",
-                    text: "",
-                    ...(run.wake === undefined
-                      ? {}
-                      : {
-                          createdBy: "system",
-                          notification: { outcome: run.wake, source: { kind: "command" } },
-                        }),
-                  }));
+                  .map(asPrompt)
+                  .filter((prompt) => runId === undefined || prompt.runId === runId);
                 return Effect.succeed({
                   messages: filter?.messageRoles?.includes("assistant")
                     ? text === undefined
@@ -271,20 +280,28 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
                     : prompts,
                   turnItems:
                     stop === undefined ? [] : [{ type: "run_interrupt_request", message: stop }],
-                  runs: runs.map((run) => ({
-                    ...run,
-                    userMessageId: `message-${String(run.id)}`,
-                  })),
+                  runs: runs.map(asRun),
                 });
               }) as never,
-              backgroundWakeAfter: ({ threadId, runId }) =>
-                Effect.sync(() => {
+              // The real rule, over this harness's runs and prompts.
+              runContinuedBy: ({ threadId, runId }) =>
+                Effect.suspend(() => {
                   noteShellRun(threadId);
-                  const runs = (runRecords.get(threadId) ?? []).toSorted(
-                    (left, right) => left.ordinal - right.ordinal,
+                  const runs = runRecords.get(threadId) ?? [];
+                  return ThreadManagement.resolveRunContinuation(
+                    runs.map(asRun) as never,
+                    runId,
+                    (filter) =>
+                      Effect.succeed(
+                        runs
+                          .map(asPrompt)
+                          .filter(
+                            (prompt) =>
+                              filter.messageRunIds?.some((id) => id === prompt.runId) === true ||
+                              filter.messageIds?.some((id) => id === prompt.id) === true,
+                          ) as never,
+                      ),
                   );
-                  const after = runs[runs.findIndex((run) => run.id === runId) + 1];
-                  return after?.wake === undefined ? undefined : after.id;
                 }),
               restartContinuationPending: ({ runId }) =>
                 Effect.sync(() => pendingContinuations.has(runId)),
@@ -1413,7 +1430,7 @@ it.effect("a remote sent watch moves only when the peer names the wake run", () 
           Effect.sync(() => {
             asked.push(input.runId);
             return input.runId === "run-1"
-              ? { ...remoteCompleted, wokenRunId: RunId.make("run-2") }
+              ? { ...remoteCompleted, continuedByRunId: RunId.make("run-2") }
               : { ...remoteCompleted, runId: RunId.make("run-2") };
           }),
         readThread: () =>
@@ -1503,6 +1520,153 @@ it.effect("a watch moved onto a run that already has one reports that run once",
     expect(state.tots[0]!.watches).toEqual([]);
   }).pipe(Effect.provide(layer));
 });
+
+// regression (final check 1): Send now cancels the queued run and moves its message.
+it.effect("a sent run absorbed by Send now reports the absorbing run's end", () => {
+  const { state, reports, layer, step, flush, setRun, finalMessages } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r2")] }),
+    yui,
+  ]);
+  finalMessages.set("r1", "Handled both messages.");
+  return Effect.gen(function* () {
+    setRun(yuiThread, "r1", {});
+    setRun(yuiThread, "r2", { status: "queued" });
+    yield* step(shell(yuiThread, "running", "r1"));
+    setRun(yuiThread, "r2", {
+      status: "cancelled",
+      neverStarted: true,
+      absorbedBy: RunId.make("r1"),
+    });
+    yield* step(shell(yuiThread, "running", "r1"));
+    yield* flush;
+    expect(reports).toHaveLength(0);
+    expect(state.tots[0]!.watches[0]!.runId).toBe("r1");
+    yield* step(shell(yuiThread, "completed", "r1"));
+    yield* flush;
+    const lines = reports.flatMap((report) => report.lines);
+    expect(lines).toEqual([expect.stringContaining("- Finished: ")]);
+    expect(lines[0]).toContain("`Handled both messages.`");
+    expect(state.tots[0]!.watches).toEqual([]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a queued sent run cancelled with no absorbing run reports it ended unseen", () => {
+  const { state, reports, layer, step, flush, setRun } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r2")] }),
+    yui,
+  ]);
+  return Effect.gen(function* () {
+    setRun(yuiThread, "r1", {});
+    setRun(yuiThread, "r2", { status: "cancelled", neverStarted: true });
+    yield* step(shell(yuiThread, "running", "r1"));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Ended unseen: "),
+    ]);
+    expect(state.tots[0]!.watches).toEqual([]);
+  }).pipe(Effect.provide(layer));
+});
+
+// regression (final check 2): a cancelled queued run sat between the run and its wake.
+it.effect("a wake after a run cancelled before it started is still followed", () => {
+  const { state, reports, layer, step, flush, setRun, finalMessages } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r1")] }),
+    yui,
+  ]);
+  finalMessages.set("r3", "Checks passed.");
+  return Effect.gen(function* () {
+    yield* step(shell(yuiThread, "running", "r1"));
+    yield* step(shell(yuiThread, "completed", "r1", liveCommand));
+    setRun(yuiThread, "r2", { status: "cancelled", neverStarted: true });
+    setRun(yuiThread, "r3", { status: "running", wake: "completed" });
+    yield* step(shell(yuiThread, "running", "r3"));
+    yield* flush;
+    expect(reports).toHaveLength(0);
+    expect(state.tots[0]!.watches[0]!.runId).toBe("r3");
+    yield* step(shell(yuiThread, "completed", "r3"));
+    yield* TestClock.adjust("10 seconds");
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("`Checks passed.`"),
+    ]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a remote sent run absorbed by Send now follows the run the peer names", () =>
+  Effect.gen(function* () {
+    const removals = yield* Queue.unbounded<void>();
+    const { reports, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [remoteWatch("sent", "r2")] })],
+      {
+        waitForThread: (_scope, _environment, input) =>
+          Effect.succeed(
+            input.runId === "r2"
+              ? {
+                  ...remoteCompleted,
+                  runId: RunId.make("r2"),
+                  status: "cancelled" as const,
+                  continuedByRunId: RunId.make("r1"),
+                }
+              : { ...remoteCompleted, runId: RunId.make("r1") },
+          ),
+        readThread: () =>
+          Effect.succeed({
+            thread: { activeRunId: null, pendingBackgroundTasks: [] },
+            recentRuns: [],
+            items: [{ type: "assistant_message", runId: RunId.make("r1"), text: "Both done." }],
+            nextPosition: null,
+            hasMore: false,
+          } as never),
+        onRemove: Queue.offer(removals, undefined).pipe(Effect.asVoid),
+        pause: Effect.void,
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      yield* Queue.take(removals);
+      yield* flush;
+      expect(reports.flatMap((report) => report.lines)).toEqual([
+        expect.stringContaining("`Both done.`"),
+      ]);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect.each([
+  { name: "never started", startedAt: null, line: "- Ended unseen: " },
+  { name: "had started", startedAt: "2026-11-23T00:00:00.000Z", line: "- Stopped" },
+])("an older peer's cancelled sent run that $name reports honestly", ({ startedAt, line }) =>
+  Effect.gen(function* () {
+    const removals = yield* Queue.unbounded<void>();
+    const { state, reports, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [remoteWatch("sent", "r2")] })],
+      {
+        waitForThread: () =>
+          Effect.succeed({
+            ...remoteCompleted,
+            runId: RunId.make("r2"),
+            status: "cancelled" as const,
+          }),
+        readThread: () =>
+          Effect.succeed({
+            thread: { activeRunId: null, pendingBackgroundTasks: [] },
+            recentRuns: [{ runId: RunId.make("r2"), status: "cancelled", startedAt }],
+            items: [],
+            nextPosition: null,
+            hasMore: false,
+          } as never),
+        onRemove: Queue.offer(removals, undefined).pipe(Effect.asVoid),
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      yield* Queue.take(removals);
+      yield* flush;
+      expect(reports.flatMap((report) => report.lines)).toEqual([expect.stringContaining(line)]);
+      expect(state.tots[0]!.watches).toEqual([]);
+    }).pipe(Effect.provide(layer));
+  }),
+);
 
 // regression (review #4): the link dropped while r1 and then r2 finished.
 it.effect("a remote sent run that ended out of sight still reports its own outcome", () =>

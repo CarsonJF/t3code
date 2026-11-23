@@ -618,7 +618,7 @@ export const OrchestratorMcpThreadWaitResult = Schema.Struct({
   threadStatus: Schema.optional(OrchestratorMcpThreadStatus),
   timedOut: Schema.Boolean,
   /** With `runId` and until 'attention': the run this run's background work woke. */
-  wokenRunId: Schema.optional(RunId),
+  continuedByRunId: Schema.optional(RunId),
   next: Schema.optional(OrchestratorMcpRunningTaskNext),
   /** With untilDelegatedWorkSettled, once settled: the run whose reply is the thread's result. */
   resultRun: Schema.optional(Schema.Struct({ runId: RunId, status: OrchestrationV2RunStatus })),

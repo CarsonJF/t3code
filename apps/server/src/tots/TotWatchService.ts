@@ -387,7 +387,7 @@ const make = Effect.gen(function* () {
       (heldRun !== undefined &&
         shellState.runId !== null &&
         heldRun !== shellState.runId &&
-        (yield* threads.backgroundWakeAfter({ threadId, runId: RunId.make(heldRun) })) ===
+        (yield* threads.runContinuedBy({ threadId, runId: RunId.make(heldRun) })) ===
           shellState.runId);
     const now = yield* Clock.currentTimeMillis;
     const previous = seen.get(threadId);
@@ -590,10 +590,12 @@ const make = Effect.gen(function* () {
         current = continuation;
         continue;
       }
-      if (status !== "completed") return current;
-      const woken = yield* threads.backgroundWakeAfter({ threadId, runId: id });
-      if (woken === undefined) return current;
-      current = ordered.find((run) => run.id === woken);
+      const neverStarted = ThreadManagementService.runNeverStarted(current);
+      if (status !== "completed" && !neverStarted) return current;
+      const continuedBy = yield* threads.runContinuedBy({ threadId, runId: id });
+      // A run that never started has no outcome: undefined reports it as ended unseen.
+      if (continuedBy === undefined) return neverStarted ? undefined : current;
+      current = ordered.find((run) => run.id === continuedBy);
     }
     return undefined;
   });
@@ -673,13 +675,13 @@ const make = Effect.gen(function* () {
     let wakeGraceUsed = false;
     const link = formatThreadLink({ environmentId: watch.environmentId, threadId: watch.threadId });
     const source = { environmentId: watch.environmentId, threadId: watch.threadId };
-    const remoteRead = (limit: number, maxCharsPerItem: number) =>
+    const remoteRead = (limit: number, maxCharsPerItem: number, runLimit = 1) =>
       forwarding
         .readThread(scope, watch.environmentId, {
           threadId: watch.threadId,
           view: "messages",
           limit,
-          runLimit: 1,
+          runLimit,
           maxCharsPerItem,
           beforePosition: Number.MAX_SAFE_INTEGER,
         })
@@ -725,21 +727,22 @@ const make = Effect.gen(function* () {
         return;
       }
       const mode = totWatchReportsOf(tot);
+      const endedUnseen = Effect.fnUntraced(function* (runId: RunId) {
+        yield* tots
+          .removeWatchEntry(totId, { ...source, reason: "sent", runId })
+          .pipe(Effect.ignore);
+        if (deliversWatchReport({ mode, reasons: ["sent"], viaAll: false })) {
+          outbox.push({
+            totId,
+            expectedThreadId: tot.threadId,
+            line: formatWatchLine("ended_unseen", link, label),
+            source,
+          });
+        }
+      });
       if (waited.lost === "run" || waited.result === undefined) {
         // The peer no longer has this run, so its outcome cannot be known from here.
-        if (asked !== undefined) {
-          yield* tots
-            .removeWatchEntry(totId, { ...source, reason: "sent", runId: asked })
-            .pipe(Effect.ignore);
-          if (deliversWatchReport({ mode, reasons: ["sent"], viaAll: false })) {
-            outbox.push({
-              totId,
-              expectedThreadId: tot.threadId,
-              line: formatWatchLine("ended_unseen", link, label),
-              source,
-            });
-          }
-        }
+        if (asked !== undefined) yield* endedUnseen(asked);
         continue;
       }
       const result = waited.result;
@@ -763,9 +766,19 @@ const make = Effect.gen(function* () {
         target = result.runId;
       }
       // Only the peer's own word moves a watch; without it this run's outcome stands.
-      if (target !== undefined && result.wokenRunId !== undefined) {
-        yield* moveTo(result.wokenRunId);
+      if (target !== undefined && result.continuedByRunId !== undefined) {
+        yield* moveTo(result.continuedByRunId);
         continue;
+      }
+      // An older peer names no absorbing run, so a run that never started has no known outcome.
+      if (target !== undefined && result.status === "cancelled" && !result.timedOut) {
+        const ownRun = Option.getOrUndefined(yield* remoteRead(1, 1, 50))?.recentRuns.find(
+          (run) => run.runId === target,
+        );
+        if (ownRun === undefined || ownRun.startedAt === null) {
+          yield* endedUnseen(target);
+          continue;
+        }
       }
       const now = yield* Clock.currentTimeMillis;
       const heldNow = next.status === "waiting" && next.backgroundTasks > 0;
