@@ -30,6 +30,7 @@ import {
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   type OrchestrationV2ThreadProjection,
   OrchestrationV2DomainEvent,
+  TOT_WORKER_NOTE,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
@@ -2572,6 +2573,29 @@ effectIt.effect.each(
       yield* harness.start;
       expect(harness.startTurn.mock.calls[0]?.[0].message.text).toBe("/goal all tests pass");
     }),
+);
+
+effectIt.effect.each([
+  { name: "a Tot's brief", id: "tot-launched:yui:job", text: "Do the job", told: true },
+  { name: "a thread no Tot launched", id: "thread:plain", text: "Do the job", told: false },
+])("tells a Tot's worker a Tot is waiting only on $name", ({ id, text, told }) =>
+  Effect.gen(function* () {
+    const harness = makeLocalCommandHarness({
+      text,
+      createdBy: "agent",
+      sideChat: { contextRun: "failed", switchedProvider: true, unsentResume: false },
+    });
+    const projection = harness.projection();
+    harness.setProjection({
+      ...projection,
+      thread: { ...projection.thread, id: ThreadId.make(id) },
+    });
+    harness.tryHandlePromptCommand.mockReturnValue(Effect.succeed(false));
+    yield* harness.start;
+    const sent = harness.startTurn.mock.calls[0]?.[0].message.text ?? "";
+    expect(sent.includes(TOT_WORKER_NOTE)).toBe(told);
+    expect(sent).toContain(text);
+  }),
 );
 
 effectIt.effect.each(["before-start", "during-fork"] as const)(
