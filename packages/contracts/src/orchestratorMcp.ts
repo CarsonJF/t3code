@@ -579,6 +579,8 @@ export const OrchestratorMcpThreadSendResult = Schema.Struct({
   taskId: Schema.optional(NodeId),
   status: OrchestrationV2RunStatus,
   delivery: Schema.Literals(["started", "queued", "steered", "restarted"]),
+  /** False when this Tot-to-Tot exchange hit its limit, so no report will follow. */
+  reportsBack: Schema.optional(Schema.Literal(false)),
 });
 export type OrchestratorMcpThreadSendResult = typeof OrchestratorMcpThreadSendResult.Type;
 
@@ -610,7 +612,10 @@ export type OrchestratorMcpThreadWaitInput = typeof OrchestratorMcpThreadWaitInp
 export const OrchestratorMcpThreadWaitResult = Schema.Struct({
   threadId: ThreadId,
   runId: Schema.NullOr(RunId),
+  /** The run's own outcome. */
   status: OrchestratorMcpThreadStatus,
+  /** Only when it differs from `status`: `waiting` while awaited background work is live. */
+  threadStatus: Schema.optional(OrchestratorMcpThreadStatus),
   timedOut: Schema.Boolean,
   next: Schema.optional(OrchestratorMcpRunningTaskNext),
   /** With untilDelegatedWorkSettled, once settled: the run whose reply is the thread's result. */
