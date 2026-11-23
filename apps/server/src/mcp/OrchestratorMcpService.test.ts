@@ -695,6 +695,7 @@ describe("OrchestratorMcpService", () => {
               pendingBackgroundTasks: childBackgroundTasks,
             }),
           getProjectThreadRecords: () => Effect.succeed(childProjection()),
+          backgroundWakeAfter: () => Effect.succeed(RunId.make("run:mcp-next-wake")),
           waitForThread: () =>
             Effect.succeed({
               threadId: childThreadId,
@@ -776,6 +777,15 @@ describe("OrchestratorMcpService", () => {
         childBackgroundTasks = [{ taskId: "dev-server", kind: "command" }];
         const unmarked = yield* service.waitForThread(scope, { threadId: childThreadId });
         assert.notProperty(unmarked, "threadStatus");
+
+        // Only a follower naming its run asks; other callers' results stay as they were.
+        assert.notProperty(unmarked, "wokenRunId");
+        const named = yield* service.waitForThread(scope, {
+          threadId: childThreadId,
+          runId: unmarked.runId!,
+          until: "attention",
+        });
+        assert.equal(named.wokenRunId, "run:mcp-next-wake");
       }).pipe(Effect.provide(layerOrchestratorService.pipe(Layer.provide(layerDependencies))));
     }),
   );

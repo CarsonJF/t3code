@@ -3765,6 +3765,15 @@ const make = Effect.gen(function* () {
                 .pipe(Effect.orElseSucceed(() => null)))?.pendingBackgroundTasks,
             )
           : status;
+      const wokenRunId =
+        input.runId !== undefined &&
+        input.until === "attention" &&
+        result.run?.status === "completed"
+          ? yield* threadManagement.backgroundWakeAfter({
+              threadId: input.threadId,
+              runId: result.run.id,
+            })
+          : undefined;
       // A task's first run carries no task id; the child's untagged runs continue that task
       // until it has a result.
       const taskId =
@@ -3801,6 +3810,7 @@ const make = Effect.gen(function* () {
         status,
         ...(shownStatus === status ? {} : { threadStatus: shownStatus }),
         timedOut: result.timedOut,
+        ...(wokenRunId === undefined ? {} : { wokenRunId }),
         ...(wakesCaller ? { next: ORCHESTRATOR_MCP_RUNNING_TASK_NEXT } : {}),
         ...(result.resultRun === undefined
           ? {}

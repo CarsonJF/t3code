@@ -200,13 +200,24 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
                   ? tot
                   : {
                       ...tot,
-                      watches: tot.watches.map((each) =>
-                        each.environmentId === env &&
-                        each.threadId === threadId &&
-                        each.runId === fromRunId
-                          ? { ...each, runId: toRunId }
-                          : each,
-                      ),
+                      watches: tot.watches
+                        .map((each) =>
+                          each.environmentId === env &&
+                          each.threadId === threadId &&
+                          each.runId === fromRunId
+                            ? { ...each, runId: toRunId }
+                            : each,
+                        )
+                        .filter(
+                          (each, index, all) =>
+                            each.reason !== "sent" ||
+                            all.findIndex(
+                              (other) =>
+                                other.reason === "sent" &&
+                                other.threadId === each.threadId &&
+                                other.runId === each.runId,
+                            ) === index,
+                        ),
                     },
               );
             }),
@@ -266,6 +277,15 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
                   })),
                 });
               }) as never,
+              backgroundWakeAfter: ({ threadId, runId }) =>
+                Effect.sync(() => {
+                  noteShellRun(threadId);
+                  const runs = (runRecords.get(threadId) ?? []).toSorted(
+                    (left, right) => left.ordinal - right.ordinal,
+                  );
+                  const after = runs[runs.findIndex((run) => run.id === runId) + 1];
+                  return after?.wake === undefined ? undefined : after.id;
+                }),
               restartContinuationPending: ({ runId }) =>
                 Effect.sync(() => pendingContinuations.has(runId)),
               awaitRestartContinuation: ({ runId }) => continuationGates.get(runId) ?? Effect.void,
@@ -321,6 +341,9 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
   const syncFollowers = TotWatchService.TotWatchService.pipe(
     Effect.flatMap((service) => service.syncFollowers),
   );
+  const recoverSentWatches = TotWatchService.TotWatchService.pipe(
+    Effect.flatMap((service) => service.recoverSentWatches),
+  );
   shells.set(homeThread, shell(homeThread, "running"));
   shells.set(ThreadId.make("tot:home:fresh"), shell(ThreadId.make("tot:home:fresh"), "running"));
   return {
@@ -333,6 +356,7 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
     emit,
     flush,
     syncFollowers,
+    recoverSentWatches,
     ownStops,
     finalMessages,
     stopMessages,
@@ -956,7 +980,7 @@ const remoteRead = (
       ...(pendingBackgroundTasks === undefined ? {} : { pendingBackgroundTasks }),
     },
     recentRuns: [],
-    items: [{ type: "assistant_message", text }],
+    items: [{ type: "assistant_message", runId: RunId.make("run-1"), text }],
     nextPosition: null,
     hasMore: false,
   }) as never;
@@ -1112,7 +1136,9 @@ it.effect("a remote send into another Tot reports its answer back", () =>
           Effect.succeed({
             thread: { activeRunId: null, pendingBackgroundTasks: [] },
             recentRuns: [],
-            items: [{ type: "assistant_message", text: "Yes. Which branch?" }],
+            items: [
+              { type: "assistant_message", runId: RunId.make("run-1"), text: "Yes. Which branch?" },
+            ],
             nextPosition: null,
             hasMore: false,
           } as never),
@@ -1341,6 +1367,142 @@ it.effect("a queued remote run with no message yet is not mistaken for a wake", 
     }).pipe(Effect.provide(layer));
   }),
 );
+
+// regression (re-review B1, S1): a later run with no visible prompt is not evidence of a wake.
+it.effect.each([
+  { name: "a run cancelled by send-now", status: "cancelled" },
+  { name: "a person's run whose prompt left the page", status: "completed" },
+])("a remote sent run keeps its own result past $name", ({ status }) =>
+  Effect.gen(function* () {
+    const removals = yield* Queue.unbounded<void>();
+    const { state, reports, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [remoteWatch("sent", "run-1")] })],
+      {
+        waitForThread: () => Effect.succeed(remoteCompleted),
+        readThread: () =>
+          Effect.succeed({
+            thread: { activeRunId: null, pendingBackgroundTasks: [] },
+            recentRuns: [{ runId: RunId.make("run-2"), status }],
+            items: [{ type: "assistant_message", runId: RunId.make("run-1"), text: "Mine." }],
+            nextPosition: null,
+            hasMore: false,
+          } as never),
+        onRemove: Queue.offer(removals, undefined).pipe(Effect.asVoid),
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      yield* Queue.take(removals);
+      yield* flush;
+      const lines = reports.flatMap((report) => report.lines);
+      expect(lines).toEqual([expect.stringContaining("- Finished: ")]);
+      expect(lines[0]).toContain("`Mine.`");
+      expect(state.tots[0]!.watches).toEqual([]);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect("a remote sent watch moves only when the peer names the wake run", () =>
+  Effect.gen(function* () {
+    const removals = yield* Queue.unbounded<void>();
+    const asked: Array<string | undefined> = [];
+    const { reports, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [remoteWatch("sent", "run-1")] })],
+      {
+        waitForThread: (_scope, _environment, input) =>
+          Effect.sync(() => {
+            asked.push(input.runId);
+            return input.runId === "run-1"
+              ? { ...remoteCompleted, wokenRunId: RunId.make("run-2") }
+              : { ...remoteCompleted, runId: RunId.make("run-2") };
+          }),
+        readThread: () =>
+          Effect.succeed({
+            thread: { activeRunId: null, pendingBackgroundTasks: [] },
+            recentRuns: [],
+            items: [{ type: "assistant_message", runId: RunId.make("run-2"), text: "Woken end." }],
+            nextPosition: null,
+            hasMore: false,
+          } as never),
+        onRemove: Queue.offer(removals, undefined).pipe(Effect.asVoid),
+        pause: Effect.void,
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      yield* Queue.take(removals);
+      yield* flush;
+      expect(asked.slice(0, 2)).toEqual(["run-1", "run-2"]);
+      expect(reports.flatMap((report) => report.lines)).toEqual([
+        expect.stringContaining("`Woken end.`"),
+      ]);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+// regression (re-review S2): the event stream starts at the latest sequence.
+it.effect("the startup pass reports a sent run that ended while the server was down, once", () => {
+  const launched = ThreadId.make("tot-launched:home:old");
+  const { state, reports, shells, layer, flush, recoverSentWatches } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r1"), watch(launched, "launched")] }),
+    yui,
+  ]);
+  shells.set(yuiThread, shell(yuiThread, "interrupted", "r1"));
+  shells.set(launched, shell(launched, "completed", "old"));
+  return Effect.gen(function* () {
+    yield* recoverSentWatches;
+    yield* recoverSentWatches;
+    yield* flush;
+    expect(reports).toHaveLength(1);
+    expect(reports[0]!.lines).toEqual([expect.stringContaining("- Stopped")]);
+    expect(state.tots[0]!.watches).toEqual([watch(launched, "launched")]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("the startup pass batches several Tot reports into one wake", () => {
+  const second = ThreadId.make("tot:other:current");
+  const { reports, shells, layer, flush, recoverSentWatches } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r1"), watch(second, "sent", "r2")] }),
+    yui,
+  ]);
+  shells.set(yuiThread, shell(yuiThread, "completed", "r1"));
+  shells.set(second, shell(second, "failed", "r2"));
+  return Effect.gen(function* () {
+    yield* recoverSentWatches;
+    yield* flush;
+    expect(reports).toHaveLength(1);
+    expect(reports[0]!.lines).toHaveLength(2);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("the startup pass leaves a run a restart may still continue", () => {
+  const { state, reports, shells, layer, flush, recoverSentWatches, pendingContinuations } =
+    makeHarness([home({ watches: [watch(yuiThread, "sent", "r1")] }), yui]);
+  shells.set(yuiThread, shell(yuiThread, "cancelled", "r1"));
+  pendingContinuations.add("r1");
+  return Effect.gen(function* () {
+    yield* recoverSentWatches;
+    yield* flush;
+    expect(reports).toHaveLength(0);
+    expect(state.tots[0]!.watches).toHaveLength(1);
+  }).pipe(Effect.provide(layer));
+});
+
+// regression (re-review N1)
+it.effect("a watch moved onto a run that already has one reports that run once", () => {
+  const { state, reports, layer, step, flush, setRun } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r1"), watch(yuiThread, "sent", "r2")] }),
+    yui,
+  ]);
+  return Effect.gen(function* () {
+    setRun(yuiThread, "r1", { status: "completed" });
+    setRun(yuiThread, "r2", { status: "completed", wake: "completed" });
+    yield* step(shell(yuiThread, "completed", "r2"));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toHaveLength(1);
+    expect(state.tots[0]!.watches).toEqual([]);
+  }).pipe(Effect.provide(layer));
+});
 
 // regression (review #4): the link dropped while r1 and then r2 finished.
 it.effect("a remote sent run that ended out of sight still reports its own outcome", () =>

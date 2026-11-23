@@ -5,6 +5,7 @@ import {
   HOME_TOT_ID,
   ProjectId,
   ProviderInstanceId,
+  RunId,
   ScheduledTaskId,
   ThreadId,
   TotError,
@@ -434,5 +435,31 @@ it.effect("a report remembers which threads woke the Tot", () => {
     expect(
       yield* tots.reportCameFrom(messageId, environmentId, ThreadId.make("tot:other:current")),
     ).toBe(false);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("moving a sent watch onto a run that already has one keeps a single entry", () => {
+  const { layer } = makeTots();
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    yield* tots.enable(HOME_TOT_ID, modelSelection);
+    const environmentId = EnvironmentId.make("environment:peer");
+    const threadId = ThreadId.make("tot:yui:current");
+    const sent = (runId: string) => ({
+      environmentId,
+      threadId,
+      reason: "sent" as const,
+      runId: RunId.make(runId),
+    });
+    yield* tots.addWatch(HOME_TOT_ID, sent("r1"));
+    yield* tots.addWatch(HOME_TOT_ID, sent("r2"));
+    yield* tots.moveSentWatch(
+      HOME_TOT_ID,
+      environmentId,
+      threadId,
+      RunId.make("r1"),
+      RunId.make("r2"),
+    );
+    expect((yield* tots.list)[0]!.watches).toEqual([sent("r2")]);
   }).pipe(Effect.provide(layer));
 });

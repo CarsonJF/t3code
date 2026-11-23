@@ -28,6 +28,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -97,6 +98,8 @@ export class TotWatchService extends Context.Service<
     readonly flush: Effect.Effect<void>;
     /** Starts a follower for each watched thread on a linked environment, and stops the rest. */
     readonly syncFollowers: Effect.Effect<void>;
+    /** Once after recovery: looks at stored sent watches whose runs ended while the server was down. */
+    readonly recoverSentWatches: Effect.Effect<void>;
   }
 >()("t3/tots/TotWatchService") {}
 
@@ -346,213 +349,231 @@ const make = Effect.gen(function* () {
   });
 
   // Untraced: runs for every thread event, under the stream's own span.
-  const look: (threadId: ThreadId, checkIn?: boolean) => Effect.Effect<void> = Effect.fnUntraced(
-    function* (threadId: ThreadId, checkIn = false) {
-      // A Tot never wakes for itself or another Tot's own thread.
-      if (parseTotThreadId(threadId) !== null && !(yield* anySentWatch(threadId))) return;
-      const shell = yield* threads.getThreadShell(threadId).pipe(Effect.orElseSucceed(() => null));
-      const shellState = watchedStateFromShell(shell);
-      // A compaction run neither reports nor moves the baseline the next real run compares with.
-      if (
-        !shellState.ended &&
-        shellState.runId !== null &&
-        compactionRuns.get(threadId) === shellState.runId
-      ) {
-        return;
-      }
-      const stoppedRun =
-        shellState.status === "stopped" && shellState.runId !== null
-          ? RunId.make(shellState.runId)
-          : null;
-      const restartPending =
-        stoppedRun !== null &&
-        (yield* threads.restartContinuationPending({ threadId, runId: stoppedRun }));
-      const allTots = yield* tots.list;
-      const watched = allTots.some(
-        (tot) =>
-          tot.watchAll ||
-          tot.watches.some(
-            (watch) => watch.environmentId === environmentId && watch.threadId === threadId,
-          ),
-      );
-      const heldRun = holds.get(threadId)?.runId;
-      const wokenByWork =
-        shell?.latestRunBackgroundWake === true ||
-        (heldRun !== undefined &&
-          shellState.runId !== null &&
-          heldRun !== shellState.runId &&
-          (yield* runWasWoken(threadId, RunId.make(shellState.runId))));
-      const now = yield* Clock.currentTimeMillis;
-      const previous = seen.get(threadId);
-      if (!watched) holds.delete(threadId);
-      const current = { ...shellState, restartPending };
-      const next = watched
-        ? throughHold(threadId, current, shell, previous === undefined, now, wokenByWork)
-        : current;
-      seen.set(threadId, next);
-      if (restartPending && stoppedRun !== null) {
-        yield* lookAfterContinuation(threadId, stoppedRun);
-      }
-      const isCheckIn =
-        checkIn && next.status === "waiting" && next.backgroundTasks > 0 && next.pending === null;
-      const owner = parseTotLaunchedThreadId(threadId);
-      const link = formatThreadLink({ environmentId, threadId }, shell?.title);
-      const source = { environmentId, threadId };
-      const anySent = allTots.some((tot) =>
+  const lookNow = Effect.fnUntraced(function* (
+    threadId: ThreadId,
+    checkIn: boolean,
+    sentOnly: boolean,
+  ) {
+    // A Tot never wakes for itself or another Tot's own thread.
+    if (parseTotThreadId(threadId) !== null && !(yield* anySentWatch(threadId))) return;
+    const shell = yield* threads.getThreadShell(threadId).pipe(Effect.orElseSucceed(() => null));
+    const shellState = watchedStateFromShell(shell);
+    // A compaction run neither reports nor moves the baseline the next real run compares with.
+    if (
+      !shellState.ended &&
+      shellState.runId !== null &&
+      compactionRuns.get(threadId) === shellState.runId
+    ) {
+      return;
+    }
+    const stoppedRun =
+      shellState.status === "stopped" && shellState.runId !== null
+        ? RunId.make(shellState.runId)
+        : null;
+    const restartPending =
+      stoppedRun !== null &&
+      (yield* threads.restartContinuationPending({ threadId, runId: stoppedRun }));
+    const allTots = yield* tots.list;
+    const watched = allTots.some(
+      (tot) =>
+        tot.watchAll ||
         tot.watches.some(
-          (watch) =>
-            watch.reason === "sent" &&
-            watch.environmentId === environmentId &&
-            watch.threadId === threadId,
-        ),
-      );
-      // A failed read leaves sent watches for the next look rather than calling their runs gone.
-      const sentRuns =
-        anySent && !next.ended
-          ? Option.getOrUndefined(
-              yield* threads.getThreadRecords(threadId, ["runs"]).pipe(Effect.option),
-            )?.runs
-          : undefined;
-      for (const tot of allTots) {
-        if (tot.threadId === null || tot.threadId === threadId) continue;
-        const mode = totWatchReportsOf(tot);
-        // Off keeps its watches: switching reports back on resumes them.
-        if (mode === "off") continue;
-        const explicit = tot.watches.filter(
           (watch) => watch.environmentId === environmentId && watch.threadId === threadId,
-        );
-        const viaAll =
-          tot.watchAll &&
-          parseTotThreadId(threadId) === null &&
-          // `launched` counts a watch-everything match only where this Tot launched the thread.
-          (mode === "explicit" ? owner === null || owner === tot.id : owner === tot.id) &&
-          shell !== null &&
-          inScope(tot, environmentId, shell);
-        if (explicit.length === 0 && !viaAll) continue;
-        if (next.ended) {
-          // A first look is only a baseline unless the Tot started this work itself.
-          const counts = previous !== undefined || explicit.some((w) => w.reason !== "requested");
-          if (counts && explicit.length > 0 && watchTransition(previous, next) === "ended") {
-            yield* tots.removeWatch(tot.id, environmentId, threadId).pipe(Effect.ignore);
-            for (const key of sentSeen.keys()) {
-              if (key.startsWith(`${tot.id}\u0000${threadId}\u0000`)) sentSeen.delete(key);
-            }
+        ),
+    );
+    const heldRun = holds.get(threadId)?.runId;
+    const wokenByWork =
+      shell?.latestRunBackgroundWake === true ||
+      (heldRun !== undefined &&
+        shellState.runId !== null &&
+        heldRun !== shellState.runId &&
+        (yield* threads.backgroundWakeAfter({ threadId, runId: RunId.make(heldRun) })) ===
+          shellState.runId);
+    const now = yield* Clock.currentTimeMillis;
+    const previous = seen.get(threadId);
+    if (!watched) holds.delete(threadId);
+    const current = { ...shellState, restartPending };
+    const next = watched
+      ? throughHold(threadId, current, shell, previous === undefined, now, wokenByWork)
+      : current;
+    // The startup pass must not become the baseline a launched watch's next look compares with.
+    if (!sentOnly) seen.set(threadId, next);
+    if (restartPending && stoppedRun !== null) {
+      yield* lookAfterContinuation(threadId, stoppedRun);
+    }
+    const isCheckIn =
+      checkIn && next.status === "waiting" && next.backgroundTasks > 0 && next.pending === null;
+    const owner = parseTotLaunchedThreadId(threadId);
+    const link = formatThreadLink({ environmentId, threadId }, shell?.title);
+    const source = { environmentId, threadId };
+    const anySent = allTots.some((tot) =>
+      tot.watches.some(
+        (watch) =>
+          watch.reason === "sent" &&
+          watch.environmentId === environmentId &&
+          watch.threadId === threadId,
+      ),
+    );
+    // A failed read leaves sent watches for the next look rather than calling their runs gone.
+    const sentRuns =
+      anySent && !next.ended
+        ? Option.getOrUndefined(
+            yield* threads.getThreadRecords(threadId, ["runs"]).pipe(Effect.option),
+          )?.runs
+        : undefined;
+    for (const tot of allTots) {
+      if (tot.threadId === null || tot.threadId === threadId) continue;
+      const mode = totWatchReportsOf(tot);
+      // Off keeps its watches: switching reports back on resumes them.
+      if (mode === "off") continue;
+      const explicit = tot.watches.filter(
+        (watch) => watch.environmentId === environmentId && watch.threadId === threadId,
+      );
+      const viaAll =
+        tot.watchAll &&
+        parseTotThreadId(threadId) === null &&
+        // `launched` counts a watch-everything match only where this Tot launched the thread.
+        (mode === "explicit" ? owner === null || owner === tot.id : owner === tot.id) &&
+        shell !== null &&
+        inScope(tot, environmentId, shell);
+      if (explicit.length === 0 && !viaAll) continue;
+      if (next.ended) {
+        // A first look is only a baseline unless the Tot started this work itself.
+        const counts = previous !== undefined || explicit.some((w) => w.reason !== "requested");
+        if (counts && explicit.length > 0 && watchTransition(previous, next) === "ended") {
+          yield* tots.removeWatch(tot.id, environmentId, threadId).pipe(Effect.ignore);
+          for (const key of sentSeen.keys()) {
+            if (key.startsWith(`${tot.id}\u0000${threadId}\u0000`)) sentSeen.delete(key);
           }
+        }
+        continue;
+      }
+      // Each sent watch follows its own run, whichever run the thread presents now.
+      const sentRunsHere = new Set<string>();
+      for (const entry of explicit) {
+        if (entry.reason !== "sent" || entry.runId === undefined || sentRuns === undefined) {
           continue;
         }
-        // Each sent watch follows its own run, whichever run the thread presents now.
-        const sentRunsHere = new Set<string>();
-        for (const entry of explicit) {
-          if (entry.reason !== "sent" || entry.runId === undefined || sentRuns === undefined) {
-            continue;
-          }
-          const run = yield* followSentRun(threadId, sentRuns, entry.runId);
-          if (run === undefined) {
-            yield* tots.removeWatchEntry(tot.id, entry).pipe(Effect.ignore);
-            sentSeen.delete(sentKey(tot.id, threadId, entry.runId));
-            if (deliversWatchReport({ mode, reasons: ["sent"], viaAll: false })) {
-              outbox.push({
-                totId: tot.id,
-                expectedThreadId: tot.threadId,
-                line: formatWatchLine("ended_unseen", link, environmentLabel),
-                source,
-              });
-            }
-            continue;
-          }
+        const run = yield* followSentRun(threadId, sentRuns, entry.runId);
+        if (run !== undefined && sentRunsHere.has(run.id)) {
           if (run.id !== entry.runId) {
             yield* tots
               .moveSentWatch(tot.id, environmentId, threadId, entry.runId, run.id)
               .pipe(Effect.ignore);
-            const moved = sentSeen.get(sentKey(tot.id, threadId, entry.runId));
-            sentSeen.delete(sentKey(tot.id, threadId, entry.runId));
-            if (moved !== undefined) sentSeen.set(sentKey(tot.id, threadId, run.id), moved);
           }
-          sentRunsHere.add(run.id);
-          const key = sentKey(tot.id, threadId, run.id);
-          const prior = sentSeen.get(key) ?? sentRunBaseline(run.id);
-          const own = run.id === next.runId ? next : yield* passedRunState(threadId, run, next);
-          // A later run took over from a turn whose background work was still live.
-          const overtaken =
-            own.status === "completed" && run.id !== next.runId && prior.backgroundTasks > 0;
-          const event: TotWatchEvent | null =
-            overtaken || (isCheckIn && run.id === next.runId)
-              ? "still_working"
-              : watchTransition(prior.runId === run.id ? prior : sentRunBaseline(run.id), own);
-          sentSeen.set(key, own);
-          if (runIsOver(own)) {
-            yield* tots.removeWatchEntry(tot.id, { ...entry, runId: run.id }).pipe(Effect.ignore);
-            sentSeen.delete(key);
-          }
-          if (
-            event !== null &&
-            event !== "ended" &&
-            deliversWatchReport({ mode, reasons: ["sent"], viaAll: false })
-          ) {
+          continue;
+        }
+        if (run === undefined) {
+          yield* tots.removeWatchEntry(tot.id, entry).pipe(Effect.ignore);
+          sentSeen.delete(sentKey(tot.id, threadId, entry.runId));
+          if (deliversWatchReport({ mode, reasons: ["sent"], viaAll: false })) {
             outbox.push({
               totId: tot.id,
               expectedThreadId: tot.threadId,
-              line: formatWatchLine(
-                event,
-                link,
-                environmentLabel,
-                yield* localDetail(
-                  threadId,
-                  event,
-                  overtaken ? { ...own, backgroundTasks: prior.backgroundTasks } : own,
-                ),
-              ),
+              line: formatWatchLine("ended_unseen", link, environmentLabel),
               source,
-              ...(event === "stopped" ? { stopped: source } : {}),
             });
           }
-        }
-        const broad = explicit.filter((watch) => watch.reason !== "sent");
-        if (broad.length === 0 && !viaAll) continue;
-        // A first look is only a baseline unless the Tot started this work itself.
-        if (previous === undefined && !broad.some((watch) => watch.reason === "launched")) continue;
-        const event = isCheckIn ? "still_working" : watchTransition(previous, next);
-        if (event === null || event === "ended") continue;
-        if (next.runId !== null && sentRunsHere.has(next.runId)) continue;
-        if (!deliversWatchReport({ mode, reasons: broad.map((watch) => watch.reason), viaAll })) {
           continue;
         }
-        outbox.push({
-          totId: tot.id,
-          expectedThreadId: tot.threadId,
-          line: formatWatchLine(
-            event,
-            link,
-            environmentLabel,
-            yield* localDetail(threadId, event, next),
-          ),
-          source,
-          ...(event === "stopped" ? { stopped: source } : {}),
-        });
+        if (run.id !== entry.runId) {
+          yield* tots
+            .moveSentWatch(tot.id, environmentId, threadId, entry.runId, run.id)
+            .pipe(Effect.ignore);
+          const moved = sentSeen.get(sentKey(tot.id, threadId, entry.runId));
+          sentSeen.delete(sentKey(tot.id, threadId, entry.runId));
+          if (moved !== undefined) sentSeen.set(sentKey(tot.id, threadId, run.id), moved);
+        }
+        sentRunsHere.add(run.id);
+        const key = sentKey(tot.id, threadId, run.id);
+        const prior = sentSeen.get(key) ?? sentRunBaseline(run.id);
+        const own = run.id === next.runId ? next : yield* passedRunState(threadId, run, next);
+        // A later run took over from a turn whose background work was still live.
+        const overtaken =
+          own.status === "completed" && run.id !== next.runId && prior.backgroundTasks > 0;
+        const event: TotWatchEvent | null =
+          overtaken || (isCheckIn && run.id === next.runId)
+            ? "still_working"
+            : watchTransition(prior.runId === run.id ? prior : sentRunBaseline(run.id), own);
+        sentSeen.set(key, own);
+        if (runIsOver(own)) {
+          yield* tots.removeWatchEntry(tot.id, { ...entry, runId: run.id }).pipe(Effect.ignore);
+          sentSeen.delete(key);
+        }
+        if (
+          event !== null &&
+          event !== "ended" &&
+          deliversWatchReport({ mode, reasons: ["sent"], viaAll: false })
+        ) {
+          outbox.push({
+            totId: tot.id,
+            expectedThreadId: tot.threadId,
+            line: formatWatchLine(
+              event,
+              link,
+              environmentLabel,
+              yield* localDetail(
+                threadId,
+                event,
+                overtaken ? { ...own, backgroundTasks: prior.backgroundTasks } : own,
+              ),
+            ),
+            source,
+            ...(event === "stopped" ? { stopped: source } : {}),
+          });
+        }
       }
-    },
-  );
+      if (sentOnly) continue;
+      const broad = explicit.filter((watch) => watch.reason !== "sent");
+      if (broad.length === 0 && !viaAll) continue;
+      // A first look is only a baseline unless the Tot started this work itself.
+      if (previous === undefined && !broad.some((watch) => watch.reason === "launched")) continue;
+      const event = isCheckIn ? "still_working" : watchTransition(previous, next);
+      if (event === null || event === "ended") continue;
+      if (next.runId !== null && sentRunsHere.has(next.runId)) continue;
+      if (!deliversWatchReport({ mode, reasons: broad.map((watch) => watch.reason), viaAll })) {
+        continue;
+      }
+      outbox.push({
+        totId: tot.id,
+        expectedThreadId: tot.threadId,
+        line: formatWatchLine(
+          event,
+          link,
+          environmentLabel,
+          yield* localDetail(threadId, event, next),
+        ),
+        source,
+        ...(event === "stopped" ? { stopped: source } : {}),
+      });
+    }
+  });
+
+  // One look at a time, so two looks cannot both report the same run before its watch is gone.
+  const lookLock = yield* Semaphore.make(1);
+  const look = (threadId: ThreadId, checkIn = false, sentOnly = false): Effect.Effect<void> =>
+    lookLock.withPermits(1)(lookNow(threadId, checkIn, sentOnly));
 
   const observe = (threadId: ThreadId) => look(threadId);
 
+  const recoverSentWatches = Effect.gen(function* () {
+    const threadIds = new Set(
+      (yield* tots.list).flatMap((tot) =>
+        tot.threadId === null
+          ? []
+          : tot.watches.flatMap((watch) =>
+              watch.reason === "sent" && watch.environmentId === environmentId
+                ? [watch.threadId]
+                : [],
+            ),
+      ),
+    );
+    // Reports go through the outbox, so each Tot gets one batched wake.
+    for (const threadId of threadIds) yield* look(threadId, false, true);
+  });
+
   const sentKey = (totId: TotId, threadId: ThreadId, runId: string) =>
     `${totId}\u0000${threadId}\u0000${runId}`;
-
-  /** A run whose prompt is a notification from earlier work, unless a person steered into it. */
-  const runWasWoken = Effect.fnUntraced(function* (threadId: ThreadId, runId: RunId) {
-    const records = yield* threads
-      .getThreadRecords(threadId, ["runs", "messages"], {
-        messageRoles: ["user"],
-        messageRunIds: [runId],
-      })
-      .pipe(Effect.orElseSucceed(() => ({ runs: [], messages: [] })));
-    const promptId = records.runs.find((run) => run.id === runId)?.userMessageId;
-    const prompt = records.messages.find((message) => message.id === promptId);
-    return (
-      prompt?.notification !== undefined &&
-      !records.messages.some((message) => message.createdBy === "user")
-    );
-  });
 
   /** The run that carries a sent run's work now, through restarts and background wakes. */
   const followSentRun = Effect.fnUntraced(function* (
@@ -563,16 +584,16 @@ const make = Effect.gen(function* () {
     const ordered = runs.toSorted((left, right) => left.ordinal - right.ordinal);
     let current = ordered.find((run) => run.id === runId);
     while (current !== undefined) {
-      const { id, ordinal, status } = current;
+      const { id, status } = current;
       const continuation = ordered.findLast((run) => run.restartContinuationOfRunId === id);
       if (continuation !== undefined) {
         current = continuation;
         continue;
       }
       if (status !== "completed") return current;
-      const after = ordered.find((run) => run.ordinal > ordinal);
-      if (after === undefined || !(yield* runWasWoken(threadId, after.id))) return current;
-      current = after;
+      const woken = yield* threads.backgroundWakeAfter({ threadId, runId: id });
+      if (woken === undefined) return current;
+      current = ordered.find((run) => run.id === woken);
     }
     return undefined;
   });
@@ -741,17 +762,9 @@ const make = Effect.gen(function* () {
         yield* moveTo(result.runId);
         target = result.runId;
       }
-      // Background work wakes a run with a notification, never a message someone sent.
-      const newestRun = read?.recentRuns[0];
-      const newest = newestRun?.status === "queued" ? undefined : newestRun?.runId;
-      if (
-        target !== undefined &&
-        newest !== undefined &&
-        newest !== target &&
-        read !== undefined &&
-        !read.items.some((item) => item.type === "user_message" && item.runId === newest)
-      ) {
-        yield* moveTo(newest);
+      // Only the peer's own word moves a watch; without it this run's outcome stands.
+      if (target !== undefined && result.wokenRunId !== undefined) {
+        yield* moveTo(result.wokenRunId);
         continue;
       }
       const now = yield* Clock.currentTimeMillis;
@@ -805,9 +818,7 @@ const make = Effect.gen(function* () {
         const excerpt = formatWatchExcerpt(
           lastItems?.findLast(
             (item) =>
-              item.type === "assistant_message" &&
-              item.text !== null &&
-              (item.runId == null || item.runId === next.runId),
+              item.type === "assistant_message" && item.text !== null && item.runId === next.runId,
           )?.text,
         );
         outbox.push({
@@ -975,7 +986,7 @@ const make = Effect.gen(function* () {
     );
   });
 
-  return TotWatchService.of({ start, observe, flush, syncFollowers });
+  return TotWatchService.of({ start, observe, flush, syncFollowers, recoverSentWatches });
 });
 
 export const layer = Layer.effect(TotWatchService, make);

@@ -212,6 +212,7 @@ const makeTestRelay = Effect.fnUntraced(function* (
     getThreadShell: unused,
     restartContinuationPending: unused,
     awaitRestartContinuation: unused,
+    backgroundWakeAfter: unused,
     getShellSnapshot: unused,
     getAgentAwarenessSnapshot: (threadId) =>
       threadId === undefined

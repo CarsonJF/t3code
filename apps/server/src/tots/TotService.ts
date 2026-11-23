@@ -568,17 +568,18 @@ const make = Effect.gen(function* () {
     toRunId: RunId,
   ) {
     const tot = yield* requireTot(id);
-    const moved = tot.watches.map((watch) =>
+    const isSent = (watch: TotWatch, runId: RunId) =>
       watch.reason === "sent" &&
       watch.environmentId === environmentId &&
       watch.threadId === threadId &&
-      watch.runId === fromRunId
-        ? { ...watch, runId: toRunId }
-        : watch,
-    );
-    if (moved.some((watch, index) => watch !== tot.watches[index])) {
-      yield* replace({ ...tot, watches: moved });
-    }
+      watch.runId === runId;
+    if (!tot.watches.some((watch) => isSent(watch, fromRunId))) return;
+    const watches = tot.watches.some((watch) => isSent(watch, toRunId))
+      ? tot.watches.filter((watch) => !isSent(watch, fromRunId))
+      : tot.watches.map((watch) =>
+          isSent(watch, fromRunId) ? { ...watch, runId: toRunId } : watch,
+        );
+    yield* replace({ ...tot, watches });
   }, locked);
 
   const setWatchAll = Effect.fn("TotService.setWatchAll")(function* (id: TotId, on: boolean) {
