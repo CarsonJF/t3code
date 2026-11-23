@@ -66,6 +66,15 @@ interface RemoteOptions {
 
 const sentinelThread = ThreadId.make("sentinel");
 
+interface RunRecord {
+  readonly id: RunId;
+  readonly ordinal: number;
+  readonly status: string;
+  readonly restartContinuationOfRunId?: RunId;
+  /** The notification outcome of a run that background work woke. */
+  readonly wake?: "updated" | "completed";
+}
+
 /** The domain events the watcher streams, and the threads it looked up, in order. */
 class EventFeed extends Context.Service<
   EventFeed,
@@ -86,12 +95,56 @@ const layerEventFeed = Layer.effect(
 const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
   const state = { tots: [...initial] };
   const shells = new Map<ThreadId, OrchestrationV2ThreadShell>();
-  const reports: Array<{ totId: string; lines: ReadonlyArray<string> }> = [];
+  const reports: Array<{
+    totId: string;
+    lines: ReadonlyArray<string>;
+    sources?: ReadonlyArray<{ readonly environmentId: string; readonly threadId: string }>;
+  }> = [];
   const removed: Array<string> = [];
   const ownStops = new Set<string>();
   const finalMessages = new Map<string, string>();
   const stopMessages = new Map<string, string>();
-  const runRecords = new Map<ThreadId, ReadonlyArray<Record<string, unknown>>>();
+  const runRecords = new Map<ThreadId, ReadonlyArray<RunRecord>>();
+  /** Records the run a shell presents, as the projection would hold it. */
+  const noteShellRun = (threadId: ThreadId) => {
+    const current = shells.get(threadId);
+    if (current?.latestRunId == null) return;
+    const runs = runRecords.get(threadId) ?? [];
+    const known = runs.find((run) => run.id === current.latestRunId);
+    const wake = current.latestRunBackgroundWake === true ? ("updated" as const) : known?.wake;
+    const noted: RunRecord = {
+      ...known,
+      id: current.latestRunId,
+      ordinal: known?.ordinal ?? runs.length + 1,
+      status: current.status,
+      ...(wake === undefined ? {} : { wake }),
+    };
+    runRecords.set(
+      threadId,
+      known === undefined
+        ? [...runs, noted]
+        : runs.map((run) => (run.id === noted.id ? noted : run)),
+    );
+  };
+  /** Changes a run the shell no longer presents, such as one a queued run has passed. */
+  const setRun = (threadId: ThreadId, runId: string, patch: Partial<RunRecord>) => {
+    noteShellRun(threadId);
+    const runs = runRecords.get(threadId) ?? [];
+    runRecords.set(
+      threadId,
+      runs.some((run) => run.id === runId)
+        ? runs.map((run) => (run.id === runId ? { ...run, ...patch } : run))
+        : [
+            ...runs,
+            {
+              id: RunId.make(runId),
+              ordinal: runs.length + 1,
+              status: "running",
+              ...patch,
+            },
+          ],
+    );
+  };
   const pendingContinuations = new Set<string>();
   const continuationGates = new Map<string, Effect.Effect<void>>();
   const layer = TotWatchService.layer.pipe(
@@ -99,10 +152,12 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
       Layer.mergeAll(
         Layer.mock(TotService.TotService)({
           list: Effect.sync(() => state.tots),
-          report: (id, expectedThreadId, lines) =>
+          report: (id, expectedThreadId, lines, sources) =>
             Effect.sync(() => {
               const tot = state.tots.find((candidate) => candidate.id === id);
-              if (tot?.threadId === expectedThreadId) reports.push({ totId: id, lines });
+              if (tot?.threadId === expectedThreadId) {
+                reports.push({ totId: id, lines, ...(sources === undefined ? {} : { sources }) });
+              }
             }),
           removeWatch: (id, env, threadId) =>
             Effect.sync(() => {
@@ -167,18 +222,48 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
               getThreadShell: (threadId) =>
                 Queue.offer(feed.lookups, threadId).pipe(Effect.as(shells.get(threadId) ?? null)),
               streamDomainEvents: Stream.fromQueue(feed.events),
-              getThreadRecords: ((threadId: ThreadId, _fields: unknown, filter?: never) => {
-                const runId = (filter as { messageRunIds?: ReadonlyArray<string> } | undefined)
-                  ?.messageRunIds?.[0];
-                const itemRunId = (filter as { turnItemRunIds?: ReadonlyArray<string> } | undefined)
-                  ?.turnItemRunIds?.[0];
+              getThreadRecords: ((
+                threadId: ThreadId,
+                _fields: unknown,
+                filter?: {
+                  readonly messageRoles?: ReadonlyArray<string>;
+                  readonly messageRunIds?: ReadonlyArray<string>;
+                  readonly turnItemRunIds?: ReadonlyArray<string>;
+                },
+              ) => {
+                noteShellRun(threadId);
+                const runs = runRecords.get(threadId) ?? [];
+                const runId = filter?.messageRunIds?.[0];
+                const itemRunId = filter?.turnItemRunIds?.[0];
                 const text = runId === undefined ? undefined : finalMessages.get(runId);
                 const stop = itemRunId === undefined ? undefined : stopMessages.get(itemRunId);
+                const prompts = runs
+                  .filter((run) => runId === undefined || run.id === runId)
+                  .map((run) => ({
+                    id: `message-${String(run.id)}`,
+                    runId: run.id,
+                    role: "user",
+                    createdBy: "user",
+                    text: "",
+                    ...(run.wake === undefined
+                      ? {}
+                      : {
+                          createdBy: "system",
+                          notification: { outcome: run.wake, source: { kind: "command" } },
+                        }),
+                  }));
                 return Effect.succeed({
-                  messages: text === undefined ? [] : [{ text }],
+                  messages: filter?.messageRoles?.includes("assistant")
+                    ? text === undefined
+                      ? []
+                      : [{ text }]
+                    : prompts,
                   turnItems:
                     stop === undefined ? [] : [{ type: "run_interrupt_request", message: stop }],
-                  runs: runRecords.get(threadId) ?? [],
+                  runs: runs.map((run) => ({
+                    ...run,
+                    userMessageId: `message-${String(run.id)}`,
+                  })),
                 });
               }) as never,
               restartContinuationPending: ({ runId }) =>
@@ -251,7 +336,7 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
     ownStops,
     finalMessages,
     stopMessages,
-    runRecords,
+    setRun,
     pendingContinuations,
     continuationGates,
   };
@@ -337,6 +422,10 @@ it.effect("a run that waited on background work reports Completed once it settle
     expect(reports).toHaveLength(1);
   }).pipe(Effect.provide(layer));
 });
+
+const liveCommand: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]> = [
+  { taskId: "shell-1", kind: "command" },
+];
 
 const domainEvent = (
   type: OrchestrationV2DomainEvent["type"],
@@ -482,10 +571,6 @@ it.effect("a sent run another message replaces reports still working and ends it
     expect(removed).toEqual([yuiThread]);
   }).pipe(Effect.provide(layer));
 });
-
-const liveCommand: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]> = [
-  { taskId: "shell-1", kind: "command" },
-];
 
 it.effect("background work not marked awaited holds the report until it really ends", () => {
   const launched = ThreadId.make("tot-launched:home:unmarked");
@@ -640,15 +725,11 @@ it.effect("a Tot's own stop does not wake it, while another Tot watching still h
 });
 
 it.effect("a sent watch survives a stop until its restart continuation resolves", () => {
-  const { reports, removed, state, layer, step, flush, runRecords, pendingContinuations } =
-    makeHarness([
-      home({ watchReports: "explicit", watches: [watch(yuiThread, "sent", "run-1")] }),
-      yui,
-    ]);
-  runRecords.set(yuiThread, [
-    { id: "run-1" },
-    { id: "run-2", restartContinuationOfRunId: RunId.make("run-1") },
-  ]);
+  const { reports, removed, state, layer, step, flush, setRun, pendingContinuations } = makeHarness(
+    [home({ watchReports: "explicit", watches: [watch(yuiThread, "sent", "run-1")] }), yui],
+  );
+  setRun(yuiThread, "run-1", {});
+  setRun(yuiThread, "run-2", { restartContinuationOfRunId: RunId.make("run-1") });
   pendingContinuations.add("run-1");
   return Effect.gen(function* () {
     yield* step(shell(yuiThread, "running", "run-1"));
@@ -887,6 +968,13 @@ const remoteCompleted: OrchestratorMcpThreadWaitResult = {
   timedOut: false,
 };
 
+const remoteWatch = (reason: TotWatch["reason"], runId?: string): TotWatch => ({
+  environmentId: promini,
+  threadId: remoteThread,
+  reason,
+  ...(runId === undefined ? {} : { runId: RunId.make(runId) }),
+});
+
 // regression: Yui's question to Work bot was answered in 16s and Yui was never woken.
 it.effect("by default a Tot hears the answer to its own send into another Tot", () => {
   const { reports, removed, layer, step, flush, finalMessages } = makeHarness([
@@ -963,11 +1051,13 @@ it.effect("a sent watch ending leaves the launched watch on the same thread", ()
 });
 
 it.effect("a second send's watch survives the first run ending", () => {
-  const { state, reports, layer, step, flush } = makeHarness([
+  const { state, reports, layer, step, flush, setRun } = makeHarness([
     home({ watches: [watch(yuiThread, "sent", "run-1"), watch(yuiThread, "sent", "run-2")] }),
     yui,
   ]);
   return Effect.gen(function* () {
+    setRun(yuiThread, "run-1", {});
+    setRun(yuiThread, "run-2", { status: "queued" });
     yield* step(shell(yuiThread, "running", "run-1"));
     yield* step(shell(yuiThread, "completed", "run-1"));
     expect(state.tots[0]!.watches).toEqual([watch(yuiThread, "sent", "run-2")]);
@@ -1042,28 +1132,268 @@ it.effect("a remote send into another Tot reports its answer back", () =>
   }),
 );
 
-it.effect("a remote launched watch outlives a sent run inside it", () =>
+it.effect("a remote launched and sent watch on one run report it once", () =>
   Effect.gen(function* () {
-    const ended = yield* Queue.unbounded<void>();
-    const launchedWatch: TotWatch = {
-      environmentId: promini,
-      threadId: remoteThread,
-      reason: "launched",
-    };
-    const sentWatch: TotWatch = { ...launchedWatch, reason: "sent", runId: RunId.make("run-9") };
-    const { state, layer, flush, syncFollowers } = makeHarness(
-      [home({ watches: [launchedWatch, sentWatch] })],
+    const removals = yield* Queue.unbounded<void>();
+    const { state, reports, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [remoteWatch("launched"), remoteWatch("sent", "run-1")] })],
       {
         waitForThread: () => Effect.succeed({ ...remoteCompleted }),
-        onRemove: Queue.offer(ended, undefined).pipe(Effect.asVoid),
+        onRemove: Queue.offer(removals, undefined).pipe(Effect.asVoid),
         pause: Effect.never,
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      yield* Queue.take(removals);
+      yield* Queue.take(removals);
+      yield* flush;
+      expect(reports.flatMap((report) => report.lines)).toEqual([
+        expect.stringContaining("- Finished: "),
+      ]);
+      expect(state.tots[0]!.watches).toEqual([]);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect("events interleaved with a queued run still report the sent run's real end", () => {
+  const target = ThreadId.make("tot:yui:interleaved");
+  const { reports, state, removed, shells, layer, emit, flush, setRun, finalMessages } =
+    makeHarness([
+      home({ watches: [watch(target, "sent", "r1")] }),
+      { ...yui, threadId: ThreadId.make("tot:yui:other") },
+    ]);
+  finalMessages.set("r1", "Answer to Home.");
+  finalMessages.set("r2", "Answer to someone else.");
+  return Effect.gen(function* () {
+    yield* (yield* TotWatchService.TotWatchService).start;
+    shells.set(target, shell(target, "running", "r1"));
+    yield* emit(runUpdated(target, "r1", "running"));
+    // Someone queues r2 while r1 is still working, so the shell now presents r2.
+    shells.set(target, shell(target, "queued", "r2"));
+    setRun(target, "r2", { status: "queued" });
+    yield* emit(runUpdated(target, "r2", "queued"));
+    yield* flush;
+    expect(reports).toHaveLength(0);
+    expect(removed).toEqual([]);
+    // r1 ends and r2 starts in the same burst of events.
+    setRun(target, "r1", { status: "completed" });
+    shells.set(target, shell(target, "running", "r2"));
+    yield* emit(runUpdated(target, "r1", "completed"), runUpdated(target, "r2", "running"));
+    yield* flush;
+    const lines = reports.flatMap((report) => report.lines);
+    expect(lines).toEqual([expect.stringContaining("- Finished: ")]);
+    expect(lines[0]).toContain("`Answer to Home.`");
+    expect(state.tots[0]!.watches).toEqual([]);
+    shells.set(target, shell(target, "completed", "r2"));
+    yield* emit(runUpdated(target, "r2", "completed"));
+    yield* flush;
+    expect(reports).toHaveLength(1);
+  }).pipe(Effect.provide(layer), Effect.scoped);
+});
+
+it.effect("two queued sends each report their own run once", () => {
+  const { reports, state, layer, step, flush, setRun, finalMessages } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r1"), watch(yuiThread, "sent", "r2")] }),
+    yui,
+  ]);
+  finalMessages.set("r1", "First answer.");
+  finalMessages.set("r2", "Second answer.");
+  return Effect.gen(function* () {
+    setRun(yuiThread, "r1", {});
+    setRun(yuiThread, "r2", { status: "queued" });
+    yield* step(shell(yuiThread, "running", "r1"));
+    yield* step(shell(yuiThread, "queued", "r2"));
+    expect(state.tots[0]!.watches).toHaveLength(2);
+    setRun(yuiThread, "r1", { status: "completed" });
+    yield* step(shell(yuiThread, "running", "r2"));
+    yield* step(shell(yuiThread, "completed", "r2"));
+    yield* flush;
+    const lines = reports.flatMap((report) => report.lines);
+    expect(lines).toEqual([
+      expect.stringContaining("`First answer.`"),
+      expect.stringContaining("`Second answer.`"),
+    ]);
+    expect(state.tots[0]!.watches).toEqual([]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a wake saying the command finished keeps following the sent run", () => {
+  const { reports, state, layer, step, flush, setRun, finalMessages } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r1")] }),
+    yui,
+  ]);
+  finalMessages.set("r2", "Build passed.");
+  return Effect.gen(function* () {
+    yield* step(shell(yuiThread, "running", "r1"));
+    yield* step(shell(yuiThread, "completed", "r1", liveCommand));
+    setRun(yuiThread, "r2", { status: "running", wake: "completed" });
+    yield* step(shell(yuiThread, "running", "r2"));
+    yield* flush;
+    expect(reports).toHaveLength(0);
+    expect(state.tots[0]!.watches[0]!.runId).toBe("r2");
+    yield* step(shell(yuiThread, "completed", "r2"));
+    yield* TestClock.adjust("10 seconds");
+    yield* flush;
+    const lines = reports.flatMap((report) => report.lines);
+    expect(lines).toEqual([expect.stringContaining("`Build passed.`")]);
+  }).pipe(Effect.provide(layer));
+});
+
+// regression (review #3): a restart loses the previous state, not the unreported watch.
+it.effect("a sent run first seen stopped after a restart reports Stopped", () => {
+  const { reports, state, layer, step, flush } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r1")] }),
+    yui,
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(yuiThread, "interrupted", "r1"));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Stopped"),
+    ]);
+    expect(state.tots[0]!.watches).toEqual([]);
+  }).pipe(Effect.provide(layer));
+});
+
+// regression (review #6)
+it.effect("a later run during the wake grace reports Finished, not Still working", () => {
+  const { reports, layer, step, flush } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r1")] }),
+    yui,
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(yuiThread, "running", "r1"));
+    yield* step(shell(yuiThread, "completed", "r1", liveCommand));
+    yield* step(shell(yuiThread, "completed", "r1"));
+    yield* step(shell(yuiThread, "running", "r2"));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Finished: "),
+    ]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a report names the threads it came from", () => {
+  const { reports, layer, step, flush } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r1")] }),
+    yui,
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(yuiThread, "running", "r1"));
+    yield* step(shell(yuiThread, "completed", "r1"));
+    yield* flush;
+    expect(reports[0]!.sources).toEqual([{ environmentId, threadId: yuiThread }]);
+  }).pipe(Effect.provide(layer));
+});
+
+// regression (review #2): a requested watch took the thread's one follower.
+it.effect("a remote thread already watched still reports the Tot's own send", () =>
+  Effect.gen(function* () {
+    const ended = yield* Queue.unbounded<void>();
+    const { state, reports, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [remoteWatch("requested"), remoteWatch("sent", "run-1")] })],
+      {
+        waitForThread: () => Effect.succeed(remoteCompleted),
+        readThread: () => Effect.succeed(remoteRead([], "The reply.")),
+        onRemove: Queue.offer(ended, undefined).pipe(Effect.asVoid),
+        pause: Queue.offer(ended, undefined).pipe(Effect.andThen(Effect.never)),
       },
     );
     yield* Effect.gen(function* () {
       yield* syncFollowers;
       yield* Queue.take(ended);
       yield* flush;
-      expect(state.tots[0]!.watches).toEqual([sentWatch]);
+      expect(reports.flatMap((report) => report.lines)).toEqual([
+        expect.stringContaining("`The reply.`"),
+      ]);
+      expect(state.tots[0]!.watches).toEqual([remoteWatch("requested")]);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect("a queued remote run with no message yet is not mistaken for a wake", () =>
+  Effect.gen(function* () {
+    const removals = yield* Queue.unbounded<void>();
+    const { state, reports, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [remoteWatch("sent", "run-1")] })],
+      {
+        waitForThread: () => Effect.succeed(remoteCompleted),
+        readThread: () =>
+          Effect.succeed({
+            thread: { activeRunId: null, pendingBackgroundTasks: [] },
+            recentRuns: [{ runId: RunId.make("run-2"), status: "queued" }],
+            items: [{ type: "assistant_message", runId: RunId.make("run-1"), text: "Mine." }],
+            nextPosition: null,
+            hasMore: false,
+          } as never),
+        onRemove: Queue.offer(removals, undefined).pipe(Effect.asVoid),
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      yield* Queue.take(removals);
+      yield* flush;
+      expect(reports.flatMap((report) => report.lines)).toEqual([
+        expect.stringContaining("`Mine.`"),
+      ]);
+      expect(state.tots[0]!.watches).toEqual([]);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+// regression (review #4): the link dropped while r1 and then r2 finished.
+it.effect("a remote sent run that ended out of sight still reports its own outcome", () =>
+  Effect.gen(function* () {
+    const settled = yield* Queue.unbounded<void>();
+    const { state, reports, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [remoteWatch("sent", "r1")] })],
+      {
+        waitForThread: (_scope, _environment, input) =>
+          Effect.succeed({
+            ...remoteCompleted,
+            runId: RunId.make(input.runId ?? "r2"),
+            status: input.runId === undefined ? "completed" : "failed",
+          }),
+        readThread: () => Effect.succeed(remoteRead([])),
+        onRemove: Queue.offer(settled, undefined).pipe(Effect.asVoid),
+        pause: Queue.offer(settled, undefined).pipe(Effect.andThen(Effect.never)),
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      yield* Queue.take(settled);
+      yield* flush;
+      expect(reports.flatMap((report) => report.lines)).toEqual([
+        expect.stringContaining("- Failed: "),
+      ]);
+      expect(state.tots[0]!.watches).toEqual([]);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect("a remote sent run the peer no longer knows reports that it ended unseen", () =>
+  Effect.gen(function* () {
+    const settled = yield* Queue.unbounded<void>();
+    const { state, reports, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [remoteWatch("sent", "r1")] })],
+      {
+        waitForThread: (_scope, _environment, input) =>
+          input.runId === undefined
+            ? Effect.succeed({ ...remoteCompleted, runId: RunId.make("r2") })
+            : Effect.fail(new OrchestratorMcpFailure({ code: "run_not_found", message: "Gone." })),
+        onRemove: Queue.offer(settled, undefined).pipe(Effect.asVoid),
+        pause: Queue.offer(settled, undefined).pipe(Effect.andThen(Effect.never)),
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      yield* Queue.take(settled);
+      yield* flush;
+      const lines = reports.flatMap((report) => report.lines);
+      expect(lines).toEqual([expect.stringContaining("- Ended unseen: ")]);
+      expect(lines[0]).toContain("t3-thread://");
+      expect(state.tots[0]!.watches).toEqual([]);
     }).pipe(Effect.provide(layer));
   }),
 );

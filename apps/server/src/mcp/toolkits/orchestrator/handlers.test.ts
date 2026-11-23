@@ -161,12 +161,17 @@ it.effect("a stop by an ordinary thread notes nothing", () =>
 
 const peerThread = ThreadId.make("tot:yui:current");
 
-const sendHarness = (startedBy: {
+type StartedBy = {
   readonly id: string;
   readonly createdBy: "user" | "agent" | "system";
-}) => {
+  readonly scheduledTaskId?: string;
+  /** The threads the report that started this run came from. */
+  readonly reportFrom?: ReadonlyArray<ThreadId>;
+};
+
+const sendHarness = (startedBy: StartedBy) => {
   const added: Array<TotWatch> = [];
-  const unattendedCalls: Array<boolean> = [];
+  const steps: Array<string> = [];
   let allowed = true;
   const home = { ...DEFAULT_HOME_TOT, threadId: homeThread };
   const runId = RunId.make("caller-run");
@@ -195,19 +200,29 @@ const sendHarness = (startedBy: {
       totForThread: (threadId) =>
         Effect.succeed(threadId === homeThread ? Option.some(home) : Option.none()),
       addWatch: (_id, watch) => Effect.sync(() => void added.push(watch)),
-      allowPeerReport: (_id, _env, _thread, unattended) =>
+      allowPeerReport: (_id, _env, _thread, step) =>
         Effect.sync(() => {
-          unattendedCalls.push(unattended);
+          steps.push(String(step));
           return allowed;
         }),
+      reportCameFrom: (_messageId, _env, threadId) =>
+        Effect.succeed(startedBy.reportFrom?.includes(threadId) === true),
     }),
     Layer.mock(ThreadManagement.ThreadManagementService)({
       getThreadShell: (threadId) =>
-        Effect.succeed({ ...liveThreadShell(threadId), latestRunId: runId }),
+        Effect.succeed({ ...liveThreadShell(threadId), activeRunId: runId, latestRunId: runId }),
       getThreadRecords: (() =>
         Effect.succeed({
           runs: [{ id: runId, userMessageId: startedBy.id }],
-          messages: [{ id: startedBy.id, createdBy: startedBy.createdBy }],
+          messages: [
+            {
+              id: startedBy.id,
+              createdBy: startedBy.createdBy,
+              ...(startedBy.scheduledTaskId === undefined
+                ? {}
+                : { scheduledTaskId: startedBy.scheduledTaskId }),
+            },
+          ],
         })) as never,
     }),
     Layer.mock(OrchestratorMcpService.OrchestratorMcpService)({
@@ -233,33 +248,50 @@ const sendHarness = (startedBy: {
         .pipe(Stream.unwrap, Stream.runCollect, Effect.provide(dependencies));
       return result.at(-1)?.result as { readonly reportsBack?: false };
     });
-  return { added, unattendedCalls, send, refuse: () => void (allowed = false) };
+  return { added, steps, send, refuse: () => void (allowed = false) };
 };
 
-it.effect("a person's message resets the Tot exchange, and the send is watched", () =>
-  Effect.gen(function* () {
-    const { added, unattendedCalls, send } = sendHarness({ id: "m1", createdBy: "user" });
-    const result = yield* send();
-    expect(unattendedCalls).toEqual([false]);
-    expect(added).toMatchObject([{ reason: "sent", threadId: peerThread }]);
-    expect(result).not.toHaveProperty("reportsBack");
-  }),
-);
-
 it.effect.each([
-  { name: "a watch report", id: "tot-report:r1", createdBy: "system" as const },
-  { name: "another agent", id: "m2", createdBy: "agent" as const },
-])("a run started by $name counts toward the Tot exchange limit", ({ id, createdBy }) =>
-  Effect.gen(function* () {
-    const { unattendedCalls, send } = sendHarness({ id, createdBy });
-    yield* send();
-    expect(unattendedCalls).toEqual([true]);
-  }),
+  { name: "a person", started: { id: "m1", createdBy: "user" }, step: "reset" },
+  {
+    name: "a Tot's own schedule",
+    started: { id: "m2", createdBy: "agent", scheduledTaskId: "task-1" },
+    step: "reset",
+  },
+  {
+    name: "this target's report",
+    started: { id: "tot-report:r1", createdBy: "system", reportFrom: [peerThread] },
+    step: "hop",
+  },
+  {
+    name: "an unrelated worker's report",
+    started: {
+      id: "tot-report:r2",
+      createdBy: "system",
+      reportFrom: [ThreadId.make("tot-launched:home:worker")],
+    },
+    step: "unrelated",
+  },
+  { name: "another agent's message", started: { id: "m3", createdBy: "agent" }, step: "unrelated" },
+] satisfies ReadonlyArray<{ name: string; started: StartedBy; step: string }>)(
+  "a run started by $name is a $step for the Tot exchange",
+  ({ started, step }) =>
+    Effect.gen(function* () {
+      const { added, steps, send } = sendHarness(started);
+      const result = yield* send();
+      expect(steps).toEqual([step]);
+      expect(added).toMatchObject([{ reason: "sent", threadId: peerThread }]);
+      expect(result).not.toHaveProperty("reportsBack");
+    }),
 );
 
 it.effect("past the limit a send is not watched and says no report will follow", () =>
   Effect.gen(function* () {
-    const { added, send, refuse } = sendHarness({ id: "tot-report:r1", createdBy: "system" });
+    const { added, send, refuse } = sendHarness({
+      id: "tot-report:r1",
+      createdBy: "system",
+      reportFrom: [peerThread],
+    });
     refuse();
     const result = yield* send();
     expect(added).toEqual([]);
@@ -269,12 +301,9 @@ it.effect("past the limit a send is not watched and says no report will follow",
 
 it.effect("a send to an ordinary thread is always watched", () =>
   Effect.gen(function* () {
-    const { added, unattendedCalls, send } = sendHarness({
-      id: "tot-report:r1",
-      createdBy: "system",
-    });
+    const { added, steps, send } = sendHarness({ id: "tot-report:r1", createdBy: "system" });
     yield* send(ThreadId.make("tot-launched:home:worker"));
-    expect(unattendedCalls).toEqual([]);
+    expect(steps).toEqual([]);
     expect(added).toHaveLength(1);
   }),
 );

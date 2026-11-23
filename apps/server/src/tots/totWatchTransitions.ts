@@ -22,6 +22,7 @@ export type TotWatchEvent =
   | "still_working"
   | "stopped"
   | "failed"
+  | "ended_unseen"
   | "question"
   | "approval"
   | "ended";
@@ -53,6 +54,16 @@ const EMPTY: WatchedThreadState = {
   backgroundTasks: 0,
   restartPending: false,
 };
+
+/**
+ * What a `sent` watch compares with when it has no earlier look. The watch exists because its
+ * run has not been reported, so any ending it finds, even first after a restart, is news.
+ */
+export const sentRunBaseline = (runId: string): WatchedThreadState => ({
+  ...EMPTY,
+  status: "running",
+  runId,
+});
 
 /**
  * Live work after a turn, awaited or not. A pull request watch not marked awaited is waiting on
@@ -131,6 +142,8 @@ const label = (event: TotWatchEvent, detail: TotWatchLineDetail): string => {
       return detail.stoppedBy ? `Stopped by ${detail.stoppedBy}` : "Stopped";
     case "failed":
       return "Failed";
+    case "ended_unseen":
+      return "Ended unseen";
     case "question":
       return "Asks a question";
     case "approval":

@@ -18,6 +18,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../config.ts";
 import * as ThreadLaunch from "../orchestration-v2/ThreadLaunchService.ts";
@@ -380,19 +381,58 @@ it.effect("refuses a theme over the cap or one that loads remote files", () => {
   }).pipe(Effect.provide(layer));
 });
 
-it.effect("unattended Tot exchanges report back up to the limit until someone steps in", () => {
+it.effect("a consecutive exchange with one Tot reports back up to the limit", () => {
   const { layer } = makeTots();
   return Effect.gen(function* () {
     const tots = yield* TotService.TotService;
     const environmentId = EnvironmentId.make("environment:peer");
     const peer = ThreadId.make("tot:yui:current");
-    const allow = (unattended: boolean) =>
-      tots.allowPeerReport(HOME_TOT_ID, environmentId, peer, unattended);
+    const allow = (step: "hop" | "reset" | "unrelated") =>
+      tots.allowPeerReport(HOME_TOT_ID, environmentId, peer, step);
     for (let hop = 0; hop < TotService.MAX_UNATTENDED_PEER_REPORTS; hop += 1) {
-      expect(yield* allow(true)).toBe(true);
+      expect(yield* allow("hop")).toBe(true);
     }
-    expect(yield* allow(true)).toBe(false);
-    expect(yield* allow(false)).toBe(true);
-    expect(yield* allow(true)).toBe(true);
+    expect(yield* allow("hop")).toBe(false);
+    // Work that has nothing to do with this exchange neither counts nor clears it.
+    expect(yield* allow("unrelated")).toBe(true);
+    expect(yield* allow("hop")).toBe(false);
+    expect(yield* allow("reset")).toBe(true);
+    expect(yield* allow("hop")).toBe(true);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a quiet period ends a Tot exchange, and refused sends do not extend it", () => {
+  const { layer } = makeTots();
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    const environmentId = EnvironmentId.make("environment:peer");
+    const peer = ThreadId.make("tot:yui:current");
+    const hop = tots.allowPeerReport(HOME_TOT_ID, environmentId, peer, "hop");
+    for (let count = 0; count < TotService.MAX_UNATTENDED_PEER_REPORTS; count += 1) yield* hop;
+    yield* TestClock.adjust("14 minutes");
+    expect(yield* hop).toBe(false);
+    yield* TestClock.adjust("1 minute");
+    expect(yield* hop).toBe(true);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a report remembers which threads woke the Tot", () => {
+  const { layer, sent } = makeTots();
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    const enabled = yield* tots.enable(HOME_TOT_ID, modelSelection);
+    const environmentId = EnvironmentId.make("environment:peer");
+    const peer = ThreadId.make("tot:yui:current");
+    yield* tots.report(
+      HOME_TOT_ID,
+      enabled.threadId,
+      ["- Finished: x"],
+      [{ environmentId, threadId: peer }],
+    );
+    const messageId = sent[0]!.messageId;
+    expect(yield* tots.reportCameFrom(messageId, environmentId, peer)).toBe(true);
+    expect(
+      yield* tots.reportCameFrom(messageId, environmentId, ThreadId.make("tot:other:current")),
+    ).toBe(false);
   }).pipe(Effect.provide(layer));
 });

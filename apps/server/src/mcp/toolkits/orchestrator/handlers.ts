@@ -295,24 +295,40 @@ const forgetOwnStop = Effect.fn("mcp.forgetOwnStop")(function* (
   yield* (yield* TotService.TotService).takeOwnStop(tot.value.totId, environmentId, threadId);
 });
 
-/** A run no person or schedule started, so a Tot-to-Tot exchange could be feeding itself. */
-const callerRunIsUnattended = Effect.fn("mcp.callerRunIsUnattended")(function* () {
+/**
+ * What the calling Tot's run means for its exchange with a target Tot: a person or schedule
+ * starts over, and only a wake from that target's own report continues the exchange.
+ */
+const peerExchangeStep = Effect.fn("mcp.peerExchangeStep")(function* (
+  environmentId: EnvironmentId,
+  target: ThreadId,
+) {
   const { scope, threads } = yield* readCaller();
-  if (scope.thread === undefined) return false;
+  if (scope.thread === undefined) return "unrelated" as const;
   const threadId = scope.thread.threadId;
   const shell = yield* threads.getThreadShell(threadId).pipe(Effect.orElseSucceed(() => null));
-  if (shell?.latestRunId == null) return false;
+  // The latest run can be a queued one; the caller is the run that is active.
+  const runId = shell?.activeRunId ?? shell?.latestRunId;
+  if (runId == null) return "unrelated" as const;
   const { runs, messages } = yield* threads
     .getThreadRecords(threadId, ["runs", "messages"], {
       messageRoles: ["user"],
-      messageRunIds: [shell.latestRunId],
+      messageRunIds: [runId],
     })
     .pipe(Effect.orElseSucceed(() => ({ runs: [], messages: [] })));
-  const startedBy = runs.find((run) => run.id === shell.latestRunId)?.userMessageId;
+  const startedBy = runs.find((run) => run.id === runId)?.userMessageId;
+  if (startedBy === undefined) return "unrelated" as const;
   const message = messages.find((candidate) => candidate.id === startedBy);
-  return (
-    startedBy?.startsWith(TOT_REPORT_MESSAGE_ID_PREFIX) === true || message?.createdBy === "agent"
+  if (message?.createdBy === "user" || message?.scheduledTaskId !== undefined) {
+    return "reset" as const;
+  }
+  if (!startedBy.startsWith(TOT_REPORT_MESSAGE_ID_PREFIX)) return "unrelated" as const;
+  const fromTarget = yield* (yield* TotService.TotService).reportCameFrom(
+    startedBy,
+    environmentId,
+    target,
   );
+  return fromTarget ? ("hop" as const) : ("unrelated" as const);
 });
 
 /**
@@ -328,13 +344,8 @@ const watchSentRun = Effect.fn("mcp.watchSentRun")(function* (
   if (Option.isNone(tot) || tot.value.via !== "local") return {};
   const tots = yield* TotService.TotService;
   if (parseTotThreadId(threadId) !== null) {
-    const unattended = yield* callerRunIsUnattended();
-    const allowed = yield* tots.allowPeerReport(
-      tot.value.totId,
-      environmentId,
-      threadId,
-      unattended,
-    );
+    const step = yield* peerExchangeStep(environmentId, threadId);
+    const allowed = yield* tots.allowPeerReport(tot.value.totId, environmentId, threadId, step);
     if (!allowed) return { reportsBack: false as const };
   }
   yield* tots
