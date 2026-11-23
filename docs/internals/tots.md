@@ -5,7 +5,7 @@ Tots are agent threads that act with the user's reach across projects and linked
 ## Where they live and who may act
 
 - Tots live in `ServerSettings.tots` on one host server. Clients cannot patch the field: it is not in `ServerSettingsPatch`, and only `TotService` writes it, through `ServerSettingsService.updateTots`.
-- Nothing depends on the desktop app. A Tot reaches other environments through [peer links](./remote.md#peer-links), not through a renderer, so it keeps working with every window closed.
+- Nothing depends on the desktop app. A Tot reaches other environments through [peer links](./05_remote.md#peer-links), not through a renderer, so it keeps working with every window closed.
 - The grant is "this thread is a Tot's current `threadId`", read on every MCP call ([`totCaller.ts`](../../apps/server/src/mcp/totCaller.ts)). Turning a Tot off or starting fresh moves the grant first, then holds the old thread's queue (`queue.hold`, under the orchestrator's thread lock) and interrupts its run.
 - **On a linked environment**, a call is a Tot's when the session is a full-access peer link and its `T3-Sender-Thread` id starts with `tot:`. A full-access link is not fenced anyway, so its sender is taken at its word; a narrower link's is not. That one rule gives the receiving side launched-thread ids, "Sent by" labels, approvals and quiet notifications, with no extra header.
 - Scope is focus, not a fence: it is written into the Tot's `AGENTS.md` and bounds `watch_all`, but tools do not refuse out-of-scope calls. Separation comes from separate threads and folders.
