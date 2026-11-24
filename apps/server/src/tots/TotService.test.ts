@@ -255,6 +255,22 @@ it.effect("saves a Tot's watch reports through the update path", () => {
   }).pipe(Effect.provide(layer));
 });
 
+it.effect("sets, keeps and clears a Tot's own usage-limit fallback list", () => {
+  const { layer } = makeTots();
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    const set = yield* tots.update({
+      id: HOME_TOT_ID,
+      usageLimitFallbackModels: [modelSelection],
+    });
+    expect(set.usageLimitFallbackModels).toEqual([modelSelection]);
+    const renamed = yield* tots.update({ id: HOME_TOT_ID, watchReports: "off" });
+    expect(renamed.usageLimitFallbackModels).toEqual([modelSelection]);
+    const cleared = yield* tots.update({ id: HOME_TOT_ID, usageLimitFallbackModels: null });
+    expect("usageLimitFallbackModels" in cleared).toBe(false);
+  }).pipe(Effect.provide(layer));
+});
+
 it.effect("a report for a Tot thread that was replaced wakes no one", () => {
   const { layer, sent } = makeTots();
   return Effect.gen(function* () {
