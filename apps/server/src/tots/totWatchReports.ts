@@ -11,5 +11,5 @@ export const deliversWatchReport = (options: {
 }): boolean => {
   if (options.mode === "explicit") return true;
   if (options.mode === "off") return false;
-  return options.viaAll || options.reasons.includes("launched");
+  return options.viaAll || options.reasons.includes("launched") || options.reasons.includes("sent");
 };
