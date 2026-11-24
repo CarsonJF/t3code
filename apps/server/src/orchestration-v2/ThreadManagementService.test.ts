@@ -1,4 +1,4 @@
-import { expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import {
   CommandId,
   EnvironmentId,
@@ -1427,3 +1427,45 @@ it.effect("waitForThread until attention wakes for an approval a running run ope
     });
   }),
 );
+
+describe("isBackgroundWakeRun", () => {
+  const wakeId = MessageId.make("message:wake");
+  const run = {
+    userMessageId: wakeId,
+    status: "completed",
+    startedAt: DateTime.makeUnsafe(0),
+  } as const;
+  const wake = {
+    id: wakeId,
+    createdBy: "system",
+    notification: { outcome: "completed", source: { kind: "command" }, summary: "Done" },
+  } as never;
+
+  it("is a run whose own prompt is a notification", () => {
+    expect(ThreadManagementService.isBackgroundWakeRun(run, [wake])).toBe(true);
+  });
+
+  it("needs that evidence: a run with no prompt or a person's prompt is not a wake", () => {
+    expect(ThreadManagementService.isBackgroundWakeRun(run, [])).toBe(false);
+    expect(
+      ThreadManagementService.isBackgroundWakeRun(run, [
+        { id: wakeId, createdBy: "user" } as never,
+      ]),
+    ).toBe(false);
+  });
+
+  it("is not a run a person steered into or one cancelled before it started", () => {
+    expect(
+      ThreadManagementService.isBackgroundWakeRun(run, [
+        wake,
+        { id: MessageId.make("message:steer"), createdBy: "user" } as never,
+      ]),
+    ).toBe(false);
+    expect(
+      ThreadManagementService.isBackgroundWakeRun(
+        { ...run, status: "cancelled", startedAt: null },
+        [wake],
+      ),
+    ).toBe(false);
+  });
+});

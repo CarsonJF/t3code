@@ -7,6 +7,7 @@ import { ServerSettings, ServerSettingsPatch, ClientSettingsSchema } from "./set
 import {
   DEFAULT_HOME_TOT,
   isQuietTotThread,
+  isTotWorkerMessage,
   parseTotLaunchedThreadId,
   parseTotThreadId,
   TOT_FACE_ACTION,
@@ -188,5 +189,41 @@ describe("isQuietTotThread", () => {
     expect(isQuietTotThread("tot-launched:yui:c", [DEFAULT_HOME_TOT])).toBe(true);
     expect(isQuietTotThread("tot-launched:home:c", [DEFAULT_HOME_TOT])).toBe(true);
     expect(isQuietTotThread("thread:x", null)).toBe(false);
+  });
+});
+
+describe("isTotWorkerMessage", () => {
+  const worker = totLaunchedThreadId(yui, "command-1");
+  const yuiThread = totThreadId(yui, "current");
+  const fromAgent = { createdBy: "agent", creationSource: "mcp" };
+
+  it("is true for the launching Tot's message, here or over a link", () => {
+    expect(isTotWorkerMessage(worker, { ...fromAgent, senderThreadId: yuiThread })).toBe(true);
+    expect(
+      isTotWorkerMessage(worker, { ...fromAgent, linkedSender: { threadId: yuiThread } }),
+    ).toBe(true);
+    expect(isTotWorkerMessage(worker, fromAgent)).toBe(true);
+  });
+
+  it("is false for people, the server, other Tots, and threads no Tot launched", () => {
+    expect(
+      isTotWorkerMessage(worker, {
+        createdBy: "user",
+        creationSource: "web",
+        senderThreadId: yuiThread,
+      }),
+    ).toBe(false);
+    expect(isTotWorkerMessage(worker, { createdBy: "agent", creationSource: "server" })).toBe(
+      false,
+    );
+    expect(
+      isTotWorkerMessage(worker, {
+        ...fromAgent,
+        senderThreadId: totThreadId(TotId.make("home"), "current"),
+      }),
+    ).toBe(false);
+    expect(isTotWorkerMessage("thread:plain", { ...fromAgent, senderThreadId: yuiThread })).toBe(
+      false,
+    );
   });
 });
