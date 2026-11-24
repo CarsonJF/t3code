@@ -1372,6 +1372,81 @@ it.effect("reading a project shows the default model and actions saved in Settin
   }),
 );
 
+it.effect(
+  "a project update saves its default model where new threads read it, and reports it",
+  () =>
+    Effect.gen(function* () {
+      const overrideModel = {
+        instanceId: ProviderInstanceId.make("claudeAgent"),
+        model: "claude-sonnet",
+      };
+      const overrideScripts = [
+        {
+          id: "test",
+          name: "Test",
+          command: "pnpm test",
+          icon: "test",
+          runOnWorktreeCreate: false,
+        },
+      ] satisfies ProjectScript[];
+      const chosen = { instanceId: ProviderInstanceId.make("opencode"), model: "glm-5.3-flash" };
+      const harness = clientLaunchHarness({
+        runtimeModeCeiling: "full-access",
+        overrideModel,
+        overrideScripts,
+        launched: [],
+      });
+      const record = (projectId: ProjectId, defaultModelSelection: ModelSelection | null) => ({
+        id: projectId,
+        title: "Client target",
+        workspaceRoot: "/projects/client-target",
+        defaultModelSelection,
+        scripts: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        deletedAt: null,
+      });
+      const dependencies = Layer.merge(
+        harness.dependencies,
+        Layer.mock(Project.ProjectService)({
+          // The row keeps its legacy copy, which Settings no longer reads once folded.
+          update: (input) =>
+            Effect.succeed(record(input.projectId, input.defaultModelSelection ?? null)),
+          getById: (projectId) => Effect.succeedSome(record(projectId, null)),
+        }),
+      );
+      yield* Effect.gen(function* () {
+        const toolkit = yield* ProjectToolkit.pipe(
+          Effect.provide(McpToolAccess.HandlersLayer.layer(ProjectHandlers.layer)),
+        );
+        const updated = yield* toolkit
+          .handle("t3_project_update", {
+            projectId: harness.projectId,
+            defaultModelSelection: chosen,
+          })
+          .pipe(Stream.unwrap, Stream.runCollect);
+        expect(updated.at(-1)?.result).toMatchObject({
+          defaultModelSelection: chosen,
+          scripts: overrideScripts,
+        });
+        const read = yield* toolkit
+          .handle("t3_project_read", { projectId: harness.projectId })
+          .pipe(Stream.unwrap, Stream.runCollect);
+        expect(read.at(-1)?.result).toMatchObject({ defaultModelSelection: chosen });
+        const cleared = yield* toolkit
+          .handle("t3_project_update", {
+            projectId: harness.projectId,
+            defaultModelSelection: null,
+          })
+          .pipe(Stream.unwrap, Stream.runCollect);
+        expect(cleared.at(-1)?.result).toMatchObject({
+          defaultModelSelection: null,
+          scripts: overrideScripts,
+        });
+      }).pipe(Effect.provide(dependencies));
+    }),
+);
+
 it.effect("a project update or create that is refused tells the agent why", () =>
   Effect.gen(function* () {
     const harness = clientLaunchHarness({ runtimeModeCeiling: "full-access", launched: [] });
