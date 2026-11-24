@@ -138,7 +138,7 @@ export function TotFaceEditor(props: {
         <button
           type="button"
           aria-pressed={openBot === null}
-          className="rounded-md border border-border px-2 py-1 text-xs aria-pressed:bg-muted aria-pressed:text-foreground"
+          className="rounded-md border border-border px-2 py-1 text-muted-foreground text-xs aria-pressed:border-ring aria-pressed:bg-muted aria-pressed:text-foreground"
           onClick={() => props.onChange(boopFace())}
         >
           BoopFace
@@ -146,7 +146,7 @@ export function TotFaceEditor(props: {
         <button
           type="button"
           aria-pressed={openBot !== null}
-          className="rounded-md border border-border px-2 py-1 text-xs aria-pressed:bg-muted aria-pressed:text-foreground"
+          className="rounded-md border border-border px-2 py-1 text-muted-foreground text-xs aria-pressed:border-ring aria-pressed:bg-muted aria-pressed:text-foreground"
           onClick={() => props.onChange(openBotFace(openBot ?? value.openBot ?? DEFAULT_OPEN_BOT))}
         >
           Open Bot
@@ -347,7 +347,7 @@ export function TotFaceEditor(props: {
             <input
               type="range"
               aria-label="Depth"
-              className="w-48"
+              className="w-48 accent-primary"
               min={0}
               max={TOT_OPEN_BOT_MAX_DEPTH}
               step={1}
