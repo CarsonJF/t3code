@@ -3850,6 +3850,26 @@ const make = Effect.gen(function* () {
         })
         .pipe(Effect.mapError(threadManagementFailure));
       const status = result.run === null ? "idle" : runOutcome(result.run);
+      // `status` stays the run's outcome for the CLI, workflows and older peers.
+      const shownStatus =
+        status === "completed"
+          ? threadStatus(
+              null,
+              status,
+              (yield* threadManagement
+                .getThreadShell(input.threadId)
+                .pipe(Effect.orElseSucceed(() => null)))?.pendingBackgroundTasks,
+            )
+          : status;
+      const continuedByRunId =
+        input.runId !== undefined &&
+        input.until === "attention" &&
+        (result.run?.status === "completed" || result.run?.status === "cancelled")
+          ? yield* threadManagement.runContinuedBy({
+              threadId: input.threadId,
+              runId: result.run.id,
+            })
+          : undefined;
       // A task's first run carries no task id; the child's untagged runs continue that task
       // until it has a result.
       const taskId =
@@ -3884,7 +3904,9 @@ const make = Effect.gen(function* () {
         threadId: input.threadId,
         runId: result.run?.id ?? null,
         status,
+        ...(shownStatus === status ? {} : { threadStatus: shownStatus }),
         timedOut: result.timedOut,
+        ...(continuedByRunId === undefined ? {} : { continuedByRunId }),
         ...(wakesCaller ? { next: ORCHESTRATOR_MCP_RUNNING_TASK_NEXT } : {}),
         ...(result.resultRun === undefined
           ? {}
