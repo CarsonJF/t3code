@@ -1,0 +1,23 @@
+{
+  "name": "open-bot-avatar",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Vendored build of open-bot-avatar 0.4.0 (MIT, Dominik Scholz) for Tot avatars.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./dom": {
+      "types": "./dist/dom/index.d.ts",
+      "default": "./dist/dom/index.js"
+    },
+    "./gallery": {
+      "types": "./gallery.d.ts",
+      "default": "./gallery.js"
+    }
+  }
+}

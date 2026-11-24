@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { render } from "../../../test/render";
+import { loadOpenBot } from "./OpenBotFace";
 import { TotAvatar } from "./TotAvatar";
 
 const avatar = { color: "#0A7EA4" };
@@ -133,5 +134,59 @@ describe("TotAvatar", () => {
     const face = screen.container.querySelector("boop-face");
     await expect.element(face).toHaveAttribute("motion", "auto");
     await expect.element(face).toHaveAttribute("data-tot-state", "needs-you");
+  });
+});
+
+describe("TotAvatar styles", () => {
+  const openBot = (container: HTMLElement) =>
+    container.querySelector<HTMLElement>("[data-open-bot-figure]");
+
+  it("draws the open-bot figure when that style is chosen", async () => {
+    await loadOpenBot();
+    await using screen = await render(
+      <TotAvatar
+        avatar={{ ...avatar, style: "open-bot", openBot: { figure: "mug" } }}
+        state="idle"
+        animation="still"
+        size={64}
+      />,
+      { router: false /* a lone avatar, no routes */ },
+    );
+
+    await vi.waitFor(() => expect(openBot(screen.container)).not.toBeNull());
+    expect(openBot(screen.container)!.getAttribute("data-open-bot-figure")).toBe("mug");
+    await vi.waitFor(() => expect(openBot(screen.container)!.querySelector("svg")).not.toBeNull());
+    expect(screen.container.querySelector("boop-face")).toBeNull();
+  });
+
+  it("falls back to BoopFace for a figure this build does not know", async () => {
+    await loadOpenBot();
+    await using screen = await render(
+      <TotAvatar
+        avatar={{ ...avatar, style: "open-bot", openBot: { figure: "never-shipped" } }}
+        state="idle"
+        animation="still"
+        size={64}
+      />,
+      { router: false /* a lone avatar, no routes */ },
+    );
+
+    await vi.waitFor(() => expect(screen.container.querySelector("boop-face")).not.toBeNull());
+    expect(openBot(screen.container)).toBeNull();
+  });
+
+  it("stays BoopFace when the open-bot look is only stored", async () => {
+    await using screen = await render(
+      <TotAvatar
+        avatar={{ ...avatar, openBot: { figure: "mug" } }}
+        state="idle"
+        animation="still"
+        size={64}
+      />,
+      { router: false /* a lone avatar, no routes */ },
+    );
+
+    expect(screen.container.querySelector("boop-face")).not.toBeNull();
+    expect(openBot(screen.container)).toBeNull();
   });
 });

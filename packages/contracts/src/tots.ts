@@ -57,8 +57,40 @@ export type TotAccessory = typeof TotAccessory.Type;
 
 const TOT_MAX_ACCESSORIES = 3;
 
+/** How a face is drawn. Absent means `boopface`, so older Tots decode unchanged. */
+const TOT_AVATAR_STYLES = ["boopface", "open-bot"] as const;
+export const TotAvatarStyle = Schema.Literals(TOT_AVATAR_STYLES);
+export type TotAvatarStyle = typeof TotAvatarStyle.Type;
+
+const TOT_OPEN_BOT_MATERIALS = ["flat", "fluffy"] as const;
+export const TOT_OPEN_BOT_MAX_DEPTH = 14;
+
+/**
+ * The open-bot-avatar look: an object figure with eyes, in the avatar's color.
+ * A figure id this build does not know falls back to BoopFace, like an unknown accessory.
+ */
+export const TotOpenBotAvatar = Schema.Struct({
+  figure: TotAccessoryId.annotate({
+    description: "An open-bot-avatar figure id, such as mug, cat, rocket or lightbulb.",
+  }),
+  material: Schema.optional(Schema.Literals(TOT_OPEN_BOT_MATERIALS)).annotate({
+    description: "flat (default) or fluffy, a coat of fur.",
+  }),
+  depth: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: TOT_OPEN_BOT_MAX_DEPTH })),
+  ).annotate({ description: "Volume, 0 (flat) to 14. Default 6." }),
+  eyeColor: Schema.optional(Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/))),
+});
+export type TotOpenBotAvatar = typeof TotOpenBotAvatar.Type;
+
 export const TotAvatar = Schema.Struct({
   color: Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
+  /** Absent means `boopface`; skin, shape, antenna and accessories are BoopFace's. */
+  style: Schema.optional(TotAvatarStyle).annotate({
+    description: "boopface (default) or open-bot, which draws `openBot` instead.",
+  }),
+  /** Kept when the style switches back, so the open-bot look is not lost. */
+  openBot: Schema.optional(TotOpenBotAvatar),
   /** A BoopFace skin number; the flat color when absent. */
   skin: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9999 }))),
   /** The head outline; BoopFace's own rounded head when absent. */
@@ -71,6 +103,10 @@ export const TotAvatar = Schema.Struct({
   ),
 });
 export type TotAvatar = typeof TotAvatar.Type;
+
+/** The style a surface should draw: BoopFace unless open-bot is chosen and has its figure. */
+export const totAvatarStyleOf = (avatar: TotAvatar): TotAvatarStyle =>
+  avatar.style === "open-bot" && avatar.openBot !== undefined ? "open-bot" : "boopface";
 
 export const TotScopeProject = Schema.Struct({
   environmentId: EnvironmentId,

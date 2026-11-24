@@ -165,6 +165,8 @@ A Tot's own thread is never auto-settled for inactivity or a merged pull request
 
 Pick a face's color, shape and skin when you create or edit a Tot. The antenna is off unless you turn it on for that Tot. The face catalog's accessories — today a top hat, glasses and a halo — are one click each; they can be worn together, each in its own color, and clicking one again takes it off. They show wherever the Tot's face is drawn, including its Discord avatar. When you edit a Tot that is on, type a few words under the face controls and press **Ask**: the Tot designs its own face, which becomes its face and joins a row of saved designs you can pick from later. Skins come in series, such as Jelly, Metal or Wood; pick a series to see its skins. On mobile you can change the color and shape; a skin or accessory set on desktop shows there too.
 
+A face has two styles. **BoopFace** is the default described above. **Open Bot** draws the Tot as an object with eyes, such as a mug, a rocket or a cat, in the Tot's color, flat or fluffy, with more or less depth. Switching style keeps the other style's choices, so you can switch back. Open Bot faces show on web and desktop; the mobile app and the Discord avatar still show the Tot's BoopFace.
+
 Faces move in a Tot's own thread, in the Tots tab, and when you hover them in the sidebar. To keep them still, turn off **Animate Tot avatars** in Appearance settings, on each device.
 
 ## Themes
