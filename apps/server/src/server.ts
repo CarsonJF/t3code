@@ -930,7 +930,19 @@ const layerMakeRoutes = Layer.mergeAll(
     RemoteDelegation.RemoteDelegation.pipe(Effect.flatMap((remote) => remote.start())),
   ),
   // Wakes each Tot when the threads it watches finish or need it.
-  Layer.effectDiscard(TotWatchService.TotWatchService.pipe(Effect.flatMap((watch) => watch.start))),
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const watch = yield* TotWatchService.TotWatchService;
+      yield* watch.start;
+      // After recovery, so a run a restart will continue is not reported as stopped.
+      const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
+      yield* startup.awaitCommandReady.pipe(
+        Effect.andThen(watch.recoverSentWatches),
+        Effect.ignore,
+        Effect.forkScoped,
+      );
+    }),
+  ),
   // Wakes the right Tots when a message reaches a group chat.
   Layer.effectDiscard(
     GroupChatService.GroupChatService.pipe(Effect.flatMap((rooms) => rooms.start)),
