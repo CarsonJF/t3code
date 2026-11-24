@@ -125,11 +125,11 @@ export const WATCH_REPORTS: Record<
 > = {
   launched: {
     label: "Launched threads only",
-    help: "Reports only threads this Tot starts.",
+    help: "Reports threads this Tot starts and replies to messages it sends.",
   },
   explicit: {
     label: "Every watch",
-    help: "Also reports threads it chose to watch and runs it sent to other threads.",
+    help: "Also reports threads it chose to watch.",
   },
   off: {
     label: "Off",
