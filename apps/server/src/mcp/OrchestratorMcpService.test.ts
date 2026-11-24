@@ -632,6 +632,7 @@ describe("OrchestratorMcpService", () => {
       let finished = false;
       let firstRun = false;
       let pendingRequest: "live" | "message" | null = null;
+      let childStatus: "cancelled" | undefined;
       const parentProjection = () =>
         ({
           thread: { id: parentThreadId },
@@ -654,7 +655,7 @@ describe("OrchestratorMcpService", () => {
       const childRun = () => ({
         id: RunId.make("run:mcp-next-child"),
         ordinal: 1,
-        status: finished && !firstRun ? ("completed" as const) : ("running" as const),
+        status: childStatus ?? (finished && !firstRun ? "completed" : "running"),
         // A task's first run is untagged; the child's fork node names the task.
         ...(firstRun ? {} : { delegatedTaskId: taskId }),
       });
@@ -684,14 +685,21 @@ describe("OrchestratorMcpService", () => {
           nodes: [],
           turnItems: [],
         }) as unknown as OrchestrationV2ThreadProjection;
+      let childBackgroundTasks: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]> =
+        [];
       const layerDependencies = Layer.mergeAll(
         NodeServices.layer,
         NodeCrypto.layer,
         Layer.mock(ThreadManagementService.ThreadManagementService)({
           getThreadRecords: (threadId) =>
             Effect.succeed(threadId === parentThreadId ? parentProjection() : childProjection()),
-          getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
+          getThreadShell: (threadId) =>
+            Effect.succeed({
+              ...liveThreadShell(threadId),
+              pendingBackgroundTasks: childBackgroundTasks,
+            }),
           getProjectThreadRecords: () => Effect.succeed(childProjection()),
+          runContinuedBy: () => Effect.succeed(RunId.make("run:mcp-next-wake")),
           waitForThread: () =>
             Effect.succeed({
               threadId: childThreadId,
@@ -761,6 +769,34 @@ describe("OrchestratorMcpService", () => {
         const waited = yield* service.waitForThread(scope, { threadId: childThreadId });
         assert.equal(waited.status, "completed");
         assert.notProperty(waited, "next");
+        assert.notProperty(waited, "threadStatus");
+
+        // The run's outcome stays for existing callers; the thread's status matches a read.
+        childBackgroundTasks = [{ taskId: "shell-1", kind: "command", awaited: true }];
+        const held = yield* service.waitForThread(scope, { threadId: childThreadId });
+        assert.equal(held.status, "completed");
+        assert.equal(held.threadStatus, "waiting");
+        assert.isFalse(held.timedOut);
+
+        childBackgroundTasks = [{ taskId: "dev-server", kind: "command" }];
+        const unmarked = yield* service.waitForThread(scope, { threadId: childThreadId });
+        assert.notProperty(unmarked, "threadStatus");
+
+        // Only a follower naming its run asks; other callers' results stay as they were.
+        assert.notProperty(unmarked, "continuedByRunId");
+        const named = yield* service.waitForThread(scope, {
+          threadId: childThreadId,
+          runId: unmarked.runId!,
+          until: "attention",
+        });
+        assert.equal(named.continuedByRunId, "run:mcp-next-wake");
+        childStatus = "cancelled";
+        const absorbed = yield* service.waitForThread(scope, {
+          threadId: childThreadId,
+          runId: unmarked.runId!,
+          until: "attention",
+        });
+        assert.equal(absorbed.continuedByRunId, "run:mcp-next-wake");
       }).pipe(Effect.provide(layerOrchestratorService.pipe(Layer.provide(layerDependencies))));
     }),
   );
