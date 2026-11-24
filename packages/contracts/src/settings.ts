@@ -38,7 +38,7 @@ import { ModelSelection } from "./modelSelection.ts";
 import { ProjectScript, type ProjectMutation } from "./project.ts";
 import { ThreadGroupOp, ThreadGroupsState } from "./threadGroups.ts";
 import { GroupChatsSetting } from "./groupChats.ts";
-import { TotsSetting } from "./tots.ts";
+import { parseTotThreadId, TotsSetting } from "./tots.ts";
 import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
 import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
 import {
@@ -821,6 +821,9 @@ export type IdleCompactionMode = typeof IdleCompactionMode.Type;
 // Keep the mode in `idleCompaction`, but accept strings from older servers.
 const LegacyCompactIdleThreads = Schema.Union([Schema.Boolean, IdleCompactionMode]);
 
+export const DEFAULT_TOT_REPORT_BATCH_SECONDS = 180;
+const TotReportBatchSeconds = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3600 }));
+
 const INSTANCE_IDLE_COMPACTION_MODES = [
   { value: "default", label: "Use default" },
   ...IDLE_COMPACTION_MODES,
@@ -1520,6 +1523,12 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(false)),
   ),
   idleCompaction: Schema.optionalKey(IdleCompactionMode),
+  /** Tot threads compact just before their prompt cache expires, whatever `idleCompaction` says. Each Tot can override it. */
+  totIdleCompaction: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /** How long a Tot's routine "Finished" reports wait to share one wake; urgent reports end the wait. */
+  totReportBatchSeconds: TotReportBatchSeconds.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOT_REPORT_BATCH_SECONDS)),
+  ),
   snoozeLimitedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   autoResumeLimitedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /**
@@ -1806,6 +1815,28 @@ export const resolveIdleCompaction = (
   return override === "default" ? globalIdleCompaction(settings) : override;
 };
 
+/**
+ * The idle compaction mode for one thread. A Tot's own thread compacts before its cache expires
+ * while the Tot, or else the environment's Tot setting, asks for it; every other thread follows
+ * `resolveIdleCompaction`.
+ */
+export const resolveThreadIdleCompaction = (
+  settings: Pick<
+    ServerSettings,
+    "providerInstances" | "compactIdleThreads" | "idleCompaction" | "totIdleCompaction" | "tots"
+  >,
+  threadId: string,
+  instanceId: ProviderInstanceId,
+): IdleCompactionMode => {
+  const owner = parseTotThreadId(threadId);
+  const tot =
+    owner === null ? undefined : settings.tots.find((candidate) => candidate.id === owner);
+  if (tot !== undefined && (tot.idleCompaction ?? settings.totIdleCompaction)) {
+    return "beforeCacheExpires";
+  }
+  return resolveIdleCompaction(settings, instanceId);
+};
+
 export const ServerSettingsOperation = Schema.Literals([
   "normalize",
   "check-exists",
@@ -1986,6 +2017,8 @@ export const ServerSettingsPatch = Schema.Struct({
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   compactIdleThreads: Schema.optionalKey(LegacyCompactIdleThreads),
   idleCompaction: Schema.optionalKey(IdleCompactionMode),
+  totIdleCompaction: Schema.optionalKey(Schema.Boolean),
+  totReportBatchSeconds: Schema.optionalKey(TotReportBatchSeconds),
   sidebarAutoSettleKeepPullRequests: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   autoResumeLimitedThreads: Schema.optionalKey(Schema.Boolean),
