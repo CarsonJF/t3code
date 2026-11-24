@@ -1131,9 +1131,7 @@ describe("media step controls", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Fullscreen image" }));
     await expect.element(page.getByRole("dialog")).toBeVisible();
-    await expect
-      .element(page.getByRole("button", { name: "Back, close image preview" }))
-      .toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Close image preview" })).toBeVisible();
 
     await userEvent.keyboard("{Escape}");
     await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
