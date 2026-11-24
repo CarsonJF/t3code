@@ -518,6 +518,21 @@ export interface ThreadManagementServiceShape {
   readonly waitForThread: (
     input: ThreadManagementWaitInput,
   ) => Effect.Effect<ThreadManagementWaitResult, ThreadManagementError>;
+  /** Whether a restart may still continue this stopped run as a new one. */
+  readonly restartContinuationPending: (input: {
+    readonly threadId: ThreadId;
+    readonly runId: RunId;
+  }) => Effect.Effect<boolean>;
+  /** Ends once that decision is made, including a continuation that was declined. */
+  readonly awaitRestartContinuation: (input: {
+    readonly threadId: ThreadId;
+    readonly runId: RunId;
+  }) => Effect.Effect<void>;
+  /** The next run, only when its own prompt shows this run's background work woke it. */
+  readonly runContinuedBy: (input: {
+    readonly threadId: ThreadId;
+    readonly runId: RunId;
+  }) => Effect.Effect<RunId | undefined>;
   /** Waits for the agent's run and automatic follow-ups before settling.
    * A new user turn or an unsuccessful ending leaves the thread active. */
   readonly settleAfterRun: (input: {
@@ -587,6 +602,59 @@ export const ACTIVE_RUN_STATUSES = [
 export function isActiveRun(run: OrchestrationV2Run): boolean {
   return (ACTIVE_RUN_STATUSES as ReadonlyArray<OrchestrationV2Run["status"]>).includes(run.status);
 }
+
+/** Cancelled while queued: neither an outcome of its own nor a candidate for a wake. */
+export const runNeverStarted = (run: Pick<OrchestrationV2Run, "status" | "startedAt">): boolean =>
+  run.status === "cancelled" && run.startedAt === null;
+
+/**
+ * Whether a run's own prompt is a notification from earlier work. A run with no prompt, such as
+ * one whose message Send now moved into the active run, is not evidence of a wake.
+ */
+export const isBackgroundWakeRun = (
+  run: Pick<OrchestrationV2Run, "userMessageId" | "status" | "startedAt">,
+  messages: ReadonlyArray<
+    Pick<OrchestrationV2ConversationMessage, "id" | "createdBy" | "notification">
+  >,
+): boolean =>
+  !runNeverStarted(run) &&
+  messages.find((message) => message.id === run.userMessageId)?.notification !== undefined &&
+  !messages.some((message) => message.createdBy === "user");
+
+type ContinuationRun = Pick<
+  OrchestrationV2Run,
+  "id" | "ordinal" | "userMessageId" | "status" | "startedAt"
+>;
+type ContinuationMessage = Pick<
+  OrchestrationV2ConversationMessage,
+  "id" | "runId" | "createdBy" | "notification"
+>;
+
+/** The run that carries this run's work on, shown by that run's own records. */
+export const resolveRunContinuation = Effect.fnUntraced(function* (
+  runs: ReadonlyArray<ContinuationRun>,
+  runId: RunId,
+  readMessages: (filter: {
+    readonly messageRoles: ReadonlyArray<"user">;
+    readonly messageIds?: ReadonlyArray<MessageId>;
+    readonly messageRunIds?: ReadonlyArray<RunId>;
+  }) => Effect.Effect<ReadonlyArray<ContinuationMessage>>,
+) {
+  const run = runs.find((candidate) => candidate.id === runId);
+  if (run === undefined) return undefined;
+  if (runNeverStarted(run)) {
+    // Send now cancels the queued run and moves its message into the run that took it.
+    const moved = yield* readMessages({ messageRoles: ["user"], messageIds: [run.userMessageId] });
+    const absorbedBy = moved.find((message) => message.id === run.userMessageId)?.runId;
+    return absorbedBy === null || absorbedBy === run.id ? undefined : absorbedBy;
+  }
+  const after = runs
+    .filter((candidate) => candidate.ordinal > run.ordinal && !runNeverStarted(candidate))
+    .toSorted((left, right) => left.ordinal - right.ordinal)[0];
+  if (after === undefined) return undefined;
+  const messages = yield* readMessages({ messageRoles: ["user"], messageRunIds: [after.id] });
+  return isBackgroundWakeRun(after, messages) ? after.id : undefined;
+});
 
 export function isTerminalRunStatus(
   status: OrchestrationV2Run["status"],
@@ -1290,6 +1358,38 @@ const make = Effect.gen(function* () {
     // winning the race; the final projection read decides what actually
     // happened, so only a still-active run counts as timed out.
     return settledResult(yield* evaluate((yield* getProjectThreadRecords(input, ["runs"])).runs));
+  });
+
+  const recordedRun = (input: { readonly threadId: ThreadId; readonly runId: RunId }) =>
+    orchestrator.getThreadRecords(input.threadId, ["runs"]).pipe(
+      Effect.map(({ runs }) => runs.find((run) => run.id === input.runId)),
+      Effect.orElseSucceed(() => undefined),
+    );
+
+  const restartContinuationPending: ThreadManagementServiceShape["restartContinuationPending"] =
+    Effect.fn("ThreadManagementService.restartContinuationPending")(function* (input) {
+      const run = yield* recordedRun(input);
+      return run !== undefined && (yield* orchestrator.restartContinuationPending(run));
+    });
+
+  const awaitRestartContinuation: ThreadManagementServiceShape["awaitRestartContinuation"] =
+    Effect.fn("ThreadManagementService.awaitRestartContinuation")(function* (input) {
+      const run = yield* recordedRun(input);
+      if (run !== undefined) yield* orchestrator.awaitRestartContinuation(run);
+    });
+
+  const runContinuedBy: ThreadManagementServiceShape["runContinuedBy"] = Effect.fn(
+    "ThreadManagementService.runContinuedBy",
+  )(function* (input) {
+    const { runs } = yield* orchestrator
+      .getThreadRecords(input.threadId, ["runs"])
+      .pipe(Effect.orElseSucceed(() => ({ runs: [] })));
+    return yield* resolveRunContinuation(runs, input.runId, (filter) =>
+      orchestrator.getThreadRecords(input.threadId, ["messages"], filter).pipe(
+        Effect.map(({ messages }) => messages),
+        Effect.orElseSucceed(() => []),
+      ),
+    );
   });
 
   const settleAfterRun: ThreadManagementServiceShape["settleAfterRun"] = Effect.fn(
@@ -2052,6 +2152,9 @@ const make = Effect.gen(function* () {
     isProviderInstanceEnabledForProject,
     hasReceipt,
     waitForThread,
+    restartContinuationPending,
+    awaitRestartContinuation,
+    runContinuedBy,
     settleAfterRun,
     settleThread,
     interruptThread,
