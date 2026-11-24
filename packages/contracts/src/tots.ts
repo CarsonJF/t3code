@@ -214,6 +214,27 @@ export const parseTotThreadId = (threadId: string): TotId | null =>
 export const totLaunchedThreadId = (totId: TotId, commandId: string): ThreadId =>
   ThreadId.make(`${TOT_LAUNCHED_THREAD_ID_PREFIX}${totId}:${commandId}`);
 
+/** Told to a thread a Tot launched, on each turn that Tot's message starts. */
+export const TOT_WORKER_NOTE =
+  "[T3 Code: a Tot is waiting on this thread's result. Do not end your turn while a check you own is still running, unless you mark it with a background-wait tool if you have one. End with a plain statement: done, blocked, or the decision you need.]";
+
+/** A launch over a peer link records no sender, so an MCP message with none counts as the Tot's. */
+export const isTotWorkerMessage = (
+  threadId: string,
+  message: {
+    readonly createdBy: string;
+    readonly creationSource: string;
+    readonly senderThreadId?: string | undefined;
+    readonly linkedSender?: { readonly threadId: string } | undefined;
+  },
+): boolean => {
+  if (message.createdBy !== "agent" || message.creationSource !== "mcp") return false;
+  const owner = parseTotLaunchedThreadId(threadId);
+  if (owner === null) return false;
+  const sender = message.linkedSender?.threadId ?? message.senderThreadId;
+  return sender === undefined || parseTotThreadId(sender) === owner;
+};
+
 export const parseTotLaunchedThreadId = (threadId: string): TotId | null =>
   parsePrefixed(TOT_LAUNCHED_THREAD_ID_PREFIX, threadId);
 

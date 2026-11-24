@@ -406,6 +406,18 @@ it.effect.each(deliveries)(
           );
           assert.ok(steer?.type === "user_message");
           assert.equal(steer.inputIntent, "promoted_queued_to_steer");
+          // A Tot's sent watch on the cancelled run follows this move to the run that took it.
+          assert.equal(
+            yield* ThreadManagementService.resolveRunContinuation(
+              promoted.runs,
+              queuedRun.id,
+              ({ messageIds }) =>
+                Effect.succeed(
+                  promoted.messages.filter((message) => messageIds?.includes(message.id) === true),
+                ),
+            ),
+            parent.id,
+          );
         }
         yield* worker.drain();
         const queuesBehindActiveTurn = delivery === "scheduled message";

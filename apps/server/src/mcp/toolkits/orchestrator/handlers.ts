@@ -1,8 +1,10 @@
 import {
   type EnvironmentId,
   OrchestratorMcpFailure,
+  parseTotThreadId,
   type RunId,
   type ThreadId,
+  TOT_REPORT_MESSAGE_ID_PREFIX,
 } from "@t3tools/contracts";
 import { readTotCaller, refuseTots } from "../../totCaller.ts";
 import * as TotService from "../../../tots/TotService.ts";
@@ -198,8 +200,8 @@ const handlers = {
           const service = yield* OrchestratorMcpService.OrchestratorMcpService;
           const sent = yield* service.sendToThread(scope, input);
           // A Tot hears when the run its message started ends.
-          yield* watchSentRun(scope.environmentId, sent.threadId, sent.runId);
-          return sent;
+          const watched = yield* watchSentRun(scope.environmentId, sent.threadId, sent.runId);
+          return { ...sent, ...watched };
         }),
     ),
     // There the thread's parent is here, so only this side can make a follow-up a task.
@@ -208,8 +210,8 @@ const handlers = {
         const scope = yield* McpInvocationContext.McpInvocationContext;
         const remote = yield* RemoteDelegation.RemoteDelegation;
         const followed = yield* remote.followUp(scope, environmentId, input, sent);
-        yield* watchSentRun(environmentId, input.threadId, followed.runId);
-        return followed;
+        const watched = yield* watchSentRun(environmentId, input.threadId, followed.runId);
+        return { ...followed, ...watched };
       }),
   ),
   t3_thread_wait: McpToolAccess.reads((input) =>
@@ -249,28 +251,107 @@ const handlers = {
       return { environmentId, ...result };
     }),
   ),
-  t3_thread_interrupt: McpToolAccess.writesThreads(
-    (input) => [input.threadId],
-    (input) =>
-      Effect.gen(function* () {
-        const scope = yield* McpInvocationContext.McpInvocationContext;
-        const service = yield* OrchestratorMcpService.OrchestratorMcpService;
-        return yield* service.interruptThread(scope, input);
-      }),
+  t3_thread_interrupt: McpToolAccess.afterForwarding(
+    McpToolAccess.writesThreads(
+      (input) => [input.threadId],
+      (input) =>
+        Effect.gen(function* () {
+          const scope = yield* McpInvocationContext.McpInvocationContext;
+          const service = yield* OrchestratorMcpService.OrchestratorMcpService;
+          // Noted first: the stop's own events can reach the watcher before this call returns.
+          yield* noteOwnStop(scope.environmentId, input.threadId);
+          const forget = forgetOwnStop(scope.environmentId, input.threadId);
+          const result = yield* service
+            .interruptThread(scope, input)
+            .pipe(Effect.tapError(() => forget));
+          if (result.status === "no_active_run") yield* forget;
+          return result;
+        }),
+    ),
+    (input, environmentId, result) =>
+      result.status === "no_active_run"
+        ? Effect.succeed(result)
+        : noteOwnStop(environmentId, input.threadId).pipe(Effect.as(result)),
   ),
 } satisfies McpToolAccess.Handlers<typeof OrchestratorToolkit.tools>;
 
-/** Watches the run a local Tot's message started, so the Tot hears when it ends. */
+/** A Tot that stops a thread already knows, so its watch report skips that stop. */
+const noteOwnStop = Effect.fn("mcp.noteOwnStop")(function* (
+  environmentId: EnvironmentId,
+  threadId: ThreadId,
+) {
+  const tot = yield* readTotCaller();
+  if (Option.isNone(tot) || tot.value.via !== "local") return;
+  yield* (yield* TotService.TotService).noteOwnStop(tot.value.totId, environmentId, threadId);
+});
+
+/** A stop that stopped nothing must not hide a later stop by someone else. */
+const forgetOwnStop = Effect.fn("mcp.forgetOwnStop")(function* (
+  environmentId: EnvironmentId,
+  threadId: ThreadId,
+) {
+  const tot = yield* readTotCaller();
+  if (Option.isNone(tot) || tot.value.via !== "local") return;
+  yield* (yield* TotService.TotService).takeOwnStop(tot.value.totId, environmentId, threadId);
+});
+
+/**
+ * What the calling Tot's run means for its exchange with a target Tot: a person or schedule
+ * starts over, and only a wake from that target's own report continues the exchange.
+ */
+const peerExchangeStep = Effect.fn("mcp.peerExchangeStep")(function* (
+  environmentId: EnvironmentId,
+  target: ThreadId,
+) {
+  const { scope, threads } = yield* readCaller();
+  if (scope.thread === undefined) return "unrelated" as const;
+  const threadId = scope.thread.threadId;
+  const shell = yield* threads.getThreadShell(threadId).pipe(Effect.orElseSucceed(() => null));
+  // The latest run can be a queued one; the caller is the run that is active.
+  const runId = shell?.activeRunId ?? shell?.latestRunId;
+  if (runId == null) return "unrelated" as const;
+  const { runs, messages } = yield* threads
+    .getThreadRecords(threadId, ["runs", "messages"], {
+      messageRoles: ["user"],
+      messageRunIds: [runId],
+    })
+    .pipe(Effect.orElseSucceed(() => ({ runs: [], messages: [] })));
+  const startedBy = runs.find((run) => run.id === runId)?.userMessageId;
+  if (startedBy === undefined) return "unrelated" as const;
+  const message = messages.find((candidate) => candidate.id === startedBy);
+  if (message?.createdBy === "user" || message?.scheduledTaskId !== undefined) {
+    return "reset" as const;
+  }
+  if (!startedBy.startsWith(TOT_REPORT_MESSAGE_ID_PREFIX)) return "unrelated" as const;
+  const fromTarget = yield* (yield* TotService.TotService).reportCameFrom(
+    startedBy,
+    environmentId,
+    target,
+  );
+  return fromTarget ? ("hop" as const) : ("unrelated" as const);
+});
+
+/**
+ * Watches the run a local Tot's message started, so the Tot hears when it ends. Between two Tots
+ * each report can wake a reply, so that exchange is capped until someone else steps in.
+ */
 const watchSentRun = Effect.fn("mcp.watchSentRun")(function* (
   environmentId: EnvironmentId,
   threadId: ThreadId,
   runId: RunId,
 ) {
   const tot = yield* readTotCaller();
-  if (Option.isNone(tot) || tot.value.via !== "local") return;
-  yield* (yield* TotService.TotService)
+  if (Option.isNone(tot) || tot.value.via !== "local") return {};
+  const tots = yield* TotService.TotService;
+  if (parseTotThreadId(threadId) !== null) {
+    const step = yield* peerExchangeStep(environmentId, threadId);
+    const allowed = yield* tots.allowPeerReport(tot.value.totId, environmentId, threadId, step);
+    if (!allowed) return { reportsBack: false as const };
+  }
+  yield* tots
     .addWatch(tot.value.totId, { environmentId, threadId, reason: "sent", runId })
     .pipe(Effect.ignore);
+  return {};
 });
 
 export const layer = McpToolAccess.toLayer(OrchestratorToolkit, handlers);
