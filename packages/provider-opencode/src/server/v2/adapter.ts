@@ -633,6 +633,10 @@ const claudeUsageLimit = (message: string | undefined) =>
     ? { resetAt: /\bResets at (\d{4}-\d\d-\d\dT[\d:.]+Z)\.?\s*$/.exec(message)?.[1] ?? null }
     : undefined;
 
+// OpenCode Go's and the free tier's own windows. Their text names the window, not when it ends.
+const GO_LIMIT = "provider.go-limit";
+const FREE_LIMIT = "provider.free-limit";
+
 // OpenCode types an empty balance as provider.quota too, but it answers
 // that with HTTP 402 and it never resets. Usage windows and budgets are 429.
 const isUsageLimit = (error: {
@@ -642,7 +646,19 @@ const isUsageLimit = (error: {
 }) =>
   (error.type === "provider.quota" && error.status !== 402) ||
   error.type === "provider.rate-limit" ||
+  error.type === GO_LIMIT ||
+  error.type === FREE_LIMIT ||
   claudeUsageLimit(error.message) !== undefined;
+
+/** The usage window a Go limit message names, as `readServerUsageLimits` ids it. */
+const goLimitWindowId = (message: string) =>
+  /\b5[- ]hours?\b/i.test(message)
+    ? "go_rolling"
+    : /\bweekly\b/i.test(message)
+      ? "go_weekly"
+      : /\bmonthly\b/i.test(message)
+        ? "go_monthly"
+        : undefined;
 
 const INTERRUPT_TIMEOUT = 10_000;
 const INSTRUCTIONS_KEY = "t3-code";
@@ -3093,13 +3109,17 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
           return yield* endExecution(state, turn, { status: "interrupted" });
         case "session.execution.failed": {
           const { type, message, status, response } = event.data.error;
+          const resetAt =
+            type === GO_LIMIT
+              ? yield* goLimitResetAt(state, message)
+              : (claudeUsageLimit(message)?.resetAt ?? null);
           return yield* endExecution(state, turn, {
             status: "failed",
             failure: makeProviderFailure({
               message: readableProviderErrorMessage(message, status, response?.body),
               code: type,
               class: isUsageLimit(event.data.error) ? "usage_limit" : "provider_error",
-              resetAt: claudeUsageLimit(message)?.resetAt ?? null,
+              resetAt,
             }),
           });
         }
@@ -3360,6 +3380,19 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
     };
 
     // Undelivered steers start another execution owned by this turn; Stop starts nothing.
+    // Reads the reset of the window the message names, else of the latest spent Go window.
+    // The probe is bounded and never fails; without an answer the limit has no reset.
+    const goLimitResetAt = Effect.fnUntraced(function* (state: ThreadState, message: string) {
+      const windows = (yield* connection.usageLimits(state.directory))?.windows ?? [];
+      const named = goLimitWindowId(message);
+      const window =
+        windows.find((candidate) => candidate.id === named) ??
+        windows
+          .filter((candidate) => candidate.id.startsWith("go_") && candidate.usedPercent >= 100)
+          .toSorted((a, b) => (b.resetsAt ?? "").localeCompare(a.resetsAt ?? ""))[0];
+      return window?.resetsAt ?? null;
+    });
+
     const endExecution = Effect.fnUntraced(function* (
       state: ThreadState,
       turn: ActiveTurn,
