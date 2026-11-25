@@ -636,6 +636,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
   it.effect.each([
     ["provider.quota", "usage_limit"],
     ["provider.rate-limit", "usage_limit"],
+    ["provider.free-limit", "usage_limit"],
     ["provider", "provider_error"],
   ] as const)("classifies a %s execution failure as %s", ([code, failureClass]) =>
     Effect.gen(function* () {
@@ -753,6 +754,63 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
         code: error.type,
         message: error.message,
         retryable: null,
+      });
+    }),
+  );
+
+  // regression: OpenCode Go window limits were stored as provider errors with no reset
+  const goWeeklyLimit =
+    "OpenCode Go weekly usage limit reached. Switch to a free model, or turn on Extra Usage on the Go page in OpenCode Console to keep going.";
+  const usageLimitsPath = "GET /api/experimental/usage/limits";
+  const meter = (resetsAt: string, limited: boolean) => ({
+    percent: limited ? 100 : 20,
+    limited,
+    resetsAt: Date.parse(resetsAt),
+  });
+  it.effect.each([
+    {
+      name: "the reset of the window its message names",
+      usage: {
+        location: { directory: "/repo" },
+        data: {
+          workspace: { id: "wrk", usageURL: "https://opencode.ai/workspace/wrk/go" },
+          go: {
+            rolling: meter("2026-11-18T12:00:00.000Z", false),
+            weekly: meter("2026-11-22T00:00:00.000Z", true),
+            monthly: meter("2026-12-01T00:00:00.000Z", false),
+          },
+          budgets: [],
+        },
+      },
+      resetAt: "2026-11-22T00:00:00.000Z",
+    },
+    {
+      name: "no reset when OpenCode cannot report usage",
+      usage: { status: 404, body: {} },
+      resetAt: undefined,
+    },
+  ])("classifies an OpenCode Go limit as a usage limit with $name", ({ usage, resetAt }) =>
+    Effect.gen(function* () {
+      const { runtime, thread } = yield* resumed([
+        out("session.prompt", { sessionID: SESSION, text: "<any>" }),
+        promptAccepted,
+        event("session.execution.failed", {
+          sessionID: SESSION,
+          error: { type: "provider.go-limit", message: goWeeklyLimit },
+        }),
+        out(usageLimitsPath, "<any>"),
+        reply(usageLimitsPath, usage),
+      ]);
+      const terminal = yield* terminalOf(runtime).pipe(Effect.forkScoped);
+      yield* runtime.startTurn(turnInput(thread));
+      const ended = yield* Fiber.join(terminal);
+      assert.equal(ended?.status, "failed");
+      assert.deepEqual(ended?.failure, {
+        class: "usage_limit",
+        code: "provider.go-limit",
+        message: goWeeklyLimit,
+        retryable: null,
+        ...(resetAt === undefined ? {} : { resetAt }),
       });
     }),
   );
