@@ -128,6 +128,17 @@ describe("renderTotFace", () => {
   });
 });
 
+describe("renderTotFace open-bot fallback", () => {
+  it("draws an open-bot face as its BoopFace parts, since the bridge cannot draw open-bot yet", () => {
+    const boopFace = { color: "#7C3AED", shape: "flower", antenna: true } as const;
+    expect(
+      renderTotFace({ ...boopFace, style: "open-bot", openBot: { figure: "mug" } }).equals(
+        renderTotFace(boopFace),
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("avatarSpecKey", () => {
   it("stays the same for the same face and changes with any part of it", () => {
     expect(avatarSpecKey(home)).toBe(avatarSpecKey({ color: "#0a7ea4" }));

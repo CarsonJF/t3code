@@ -1,0 +1,35 @@
+{
+  "name": "open-bot-avatar",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Vendored build of open-bot-avatar 0.4.0 with upstream PRs #31 and #32 (MIT) for Tot avatars.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./dom": {
+      "types": "./lib/dom/index.d.ts",
+      "default": "./lib/dom/index.js"
+    },
+    "./materials/fluffy": {
+      "types": "./lib/dom/materials/fluffy.d.ts",
+      "default": "./lib/dom/materials/fluffy.js"
+    },
+    "./materials/glass": {
+      "types": "./lib/dom/materials/glass.d.ts",
+      "default": "./lib/dom/materials/glass.js"
+    },
+    "./materials/soft": {
+      "types": "./lib/dom/materials/soft.d.ts",
+      "default": "./lib/dom/materials/soft.js"
+    },
+    "./gallery": {
+      "types": "./gallery.d.ts",
+      "default": "./gallery.js"
+    }
+  }
+}
