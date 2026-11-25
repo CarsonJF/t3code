@@ -25,6 +25,7 @@ import {
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
@@ -57,6 +58,13 @@ import {
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
 import * as ManagedPolicy from "./policy/ManagedPolicy.ts";
 import { secretProviderDefinitions } from "./secrets/secretProviderDefinitions.ts";
+import {
+  appendThreadGroupHistory,
+  EMPTY_THREAD_GROUP_HISTORY,
+  removedThreadGroups,
+  sameThreadGroups,
+  ThreadGroupHistory,
+} from "./threadGroupHistory.ts";
 import { watchDirectoryReplacements } from "./watchDirectoryReplacements.ts";
 import {
   readSecretFieldValues,
@@ -79,6 +87,10 @@ export {
 
 const encodeServerSettings = Schema.encodeEffect(ServerSettings);
 const encodeServerSettingsJson = Schema.encodeUnknownEffect(fromJsonStringPretty(ServerSettings));
+const decodeThreadGroupHistoryJsonExit = Schema.decodeUnknownExit(
+  fromLenientJson(ThreadGroupHistory),
+);
+const encodeThreadGroupHistoryJson = Schema.encodeEffect(fromJsonStringPretty(ThreadGroupHistory));
 const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
 
 const textEncoder = new TextEncoder();
@@ -299,6 +311,9 @@ export class ServerSettingsService extends Context.Service<
       update: (groupChats: ServerSettings["groupChats"]) => ServerSettings["groupChats"],
     ) => Effect.Effect<ServerSettings, ServerSettingsError>;
 
+    /** The thread groups before each recent change, from the backup beside settings.json. */
+    readonly readThreadGroupHistory: Effect.Effect<ThreadGroupHistory>;
+
     readonly withSettingsSnapshot: <A, E, R>(
       use: (settings: ServerSettings) => Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | ServerSettingsError, R>;
@@ -372,6 +387,7 @@ const makeTest = Effect.fn("serverSettings.makeTest")(function* (
       updateTestSettings((currentSettings) =>
         Effect.succeed({ ...currentSettings, groupChats: update(currentSettings.groupChats) }),
       ),
+    readThreadGroupHistory: Effect.succeed(EMPTY_THREAD_GROUP_HISTORY),
     withSettingsSnapshot: (use) =>
       writeSemaphore.withPermits(1)(getSettings.pipe(Effect.flatMap(use))),
     streamChanges: Stream.empty,
@@ -768,6 +784,52 @@ const make = Effect.gen(function* () {
 
   const emitChange = (settings: ServerSettings) =>
     PubSub.publish(changesPubSub, settings).pipe(Effect.asVoid);
+
+  const threadGroupHistoryPath = pathService.join(
+    pathService.dirname(settingsPath),
+    "thread-groups-history.json",
+  );
+  const readThreadGroupHistory = fs.readFileString(threadGroupHistoryPath).pipe(
+    Effect.option,
+    Effect.map((raw) => {
+      if (Option.isNone(raw)) return EMPTY_THREAD_GROUP_HISTORY;
+      const decoded = decodeThreadGroupHistoryJsonExit(raw.value);
+      return Exit.isSuccess(decoded) ? decoded.value : EMPTY_THREAD_GROUP_HISTORY;
+    }),
+  );
+  // Best effort: a failed backup must never fail the settings write it follows.
+  const recordThreadGroupChange = Effect.fn("serverSettings.recordThreadGroupChange")(
+    function* (
+      previous: ServerSettings["threadGroups"],
+      next: ServerSettings["threadGroups"],
+      source: "update" | "file",
+    ) {
+      if (sameThreadGroups(previous, next)) return;
+      const removed = removedThreadGroups(previous, next);
+      if (removed.length > 0) {
+        yield* Effect.logWarning("thread groups removed", {
+          source,
+          groups: removed.map(({ id, name }) => ({ id, name })),
+        });
+      }
+      const history = appendThreadGroupHistory(
+        yield* readThreadGroupHistory,
+        previous,
+        next,
+        DateTime.formatIso(yield* DateTime.now),
+      );
+      yield* writeFileStringAtomically({
+        filePath: threadGroupHistoryPath,
+        contents: `${yield* encodeThreadGroupHistoryJson(history)}\n`,
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, pathService),
+      );
+    },
+    Effect.catchCause((cause) =>
+      Effect.logWarning("could not back up thread groups", { cause: Cause.pretty(cause) }),
+    ),
+  );
 
   const readConfigExists = fs.exists(settingsPath).pipe(
     Effect.mapError(
@@ -1315,6 +1377,7 @@ const make = Effect.gen(function* () {
           }).pipe(Effect.ensuring(invalidateMaterialized)),
         );
         yield* Cache.set(settingsCache, cacheKey, { settings: next, parseFailure: Option.none() });
+        yield* recordThreadGroupChange(current.threadGroups, next.threadGroups, "update");
         const resolved = toEffective(materializedNext);
         materialized = { source: next, value: resolved };
         yield* emitChange(next);
@@ -1327,7 +1390,16 @@ const make = Effect.gen(function* () {
 
   const revalidateAndEmit = writeSemaphore.withPermits(1)(
     Effect.gen(function* () {
-      const { settings } = yield* reloadSettings;
+      const before = yield* Cache.getSuccess(settingsCache, cacheKey);
+      const { settings, parseFailure } = yield* reloadSettings;
+      // Another program rewrote settings.json; keep what it replaced.
+      if (Option.isSome(before) && Option.isNone(parseFailure)) {
+        yield* recordThreadGroupChange(
+          before.value.settings.threadGroups,
+          settings.threadGroups,
+          "file",
+        );
+      }
       yield* emitChange(settings);
     }),
   );
@@ -1491,6 +1563,7 @@ const make = Effect.gen(function* () {
       updateAndPersistSettings({}, (current) =>
         Effect.succeed({ ...current, groupChats: update(current.groupChats) }),
       ),
+    readThreadGroupHistory,
     withSettingsSnapshot,
     get streamChanges() {
       return materializeChanges(Stream.fromPubSub(changesPubSub));
