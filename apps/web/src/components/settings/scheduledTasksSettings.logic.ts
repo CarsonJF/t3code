@@ -24,6 +24,10 @@ import {
   type WebhookFilterDraft,
 } from "@t3tools/client-runtime/scheduled-task-webhook";
 import { scheduleTimeZoneLabel } from "@t3tools/client-runtime/scheduled-task-time-zone";
+import {
+  scheduledTaskGateDraft,
+  type ScheduledTaskGateDraft,
+} from "@t3tools/client-runtime/scheduled-task-gate";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import { msg } from "gt-react";
 
@@ -114,7 +118,7 @@ export function validateScheduledTasksSearch(raw: Record<string, unknown>) {
 export type ScheduleMode = "fixed" | "once" | "interval" | "webhook";
 export type WorkspaceMode = "root" | "worktree" | "existing_worktree";
 
-export interface DraftState {
+export interface DraftState extends ScheduledTaskGateDraft {
   readonly editingId: string | null;
   readonly title: string;
   readonly prompt: string;
@@ -366,6 +370,7 @@ export function taskToDraft(task: ScheduledTask): DraftState {
         : "",
     filters,
     savedFilters: filters,
+    ...scheduledTaskGateDraft(task),
   };
 }
 

@@ -122,6 +122,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.groupChatsUpdate]: AuthOrchestrationOperateScope,
   [WS_METHODS.groupChatsRemove]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsWriteMemory]: AuthOrchestrationOperateScope,
+  [WS_METHODS.totsRevertMemoryTidy]: AuthOrchestrationOperateScope,
   [WS_METHODS.serverSearchAcpRegistry]: AuthOrchestrationReadScope,
   [WS_METHODS.serverPrepareAcpRegistryAgent]: AuthProvidersManageScope,
   [WS_METHODS.serverUninstallAcpRegistryManagedBinary]: AuthProvidersManageScope,

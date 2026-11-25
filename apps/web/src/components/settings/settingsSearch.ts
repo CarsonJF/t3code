@@ -1213,6 +1213,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("describe a shape avatar figure model")],
   },
   {
+    id: "tot-memory-tidy-model",
+    title: msg("Tidy-up model"),
+    to: "/settings/tots",
+    searchTerms: [msg("tot memory tidy nightly cleanup model")],
+  },
+  {
+    id: "tot-memory-tidy-size",
+    title: msg("Memory size cap"),
+    to: "/settings/tots",
+    searchTerms: [msg("tot memory tidy size limit kilobytes")],
+  },
+  {
     id: "agent-browser-access",
     title: msg("Agent browser access"),
     to: "/settings/browser",

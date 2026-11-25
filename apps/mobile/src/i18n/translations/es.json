@@ -5731,5 +5731,22 @@
   "c89f9a3e9e89efc0": "Idle",
   "267bd2982a153996": "Deleted group",
   "f68ebd9661469c87": "Tell it what you want done. It starts, watches and answers the threads in its scope for you.",
-  "c900815e1a139742": "Tots"
+  "c900815e1a139742": "Tots",
+  "5781cb3bcb8fedb8": "Margen de ejecución perdida no válido",
+  "c460b71d67ca48af": "Introduce minutos enteros de 0 a {max}, o déjalo vacío.",
+  "8ca0ed2936c6f7bb": "Omitida (comprobación previa)",
+  "08a88c17c1b27751": "Omitida (ejecución perdida)",
+  "61f41d071cbfb786": "Omitida",
+  "2db247c57d9f0085": "{label}: {detail}",
+  "f9454e5383f18094": "Comando de comprobación previa",
+  "f1d077b23b6f98cc": "Comando de shell opcional",
+  "43fe3696205a7dcd": "Necesita una tarea con acceso completo",
+  "21e2cabc339e6ee1": "Margen para ejecuciones perdidas (minutos)",
+  "e40e6d4ec89b5365": "Predeterminado",
+  "c0e9384b86cdbf37": "Se ejecuta en la carpeta del proyecto antes de cada ejecución programada, durante 60 segundos como máximo. Una salida distinta de cero omite la ejecución sin iniciar un agente.",
+  "03732d87be62dd2a": "Empezar desde",
+  "25bdaed653d3d2c3": "Las rutinas sugeridas de una plantilla se crean en pausa.",
+  "fc72809a59128290": "En blanco",
+  "6eb33caef72a98a1": "Hacia las 03:30 un modelo económico elimina duplicados y condensa su {memory}. La copia anterior se guarda como {backup}.",
+  "4b3694d90784a5be": "Limpieza nocturna de memoria"
 }

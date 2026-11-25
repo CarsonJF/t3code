@@ -95,6 +95,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.groupChatsUpdate]: "tots",
   [WS_METHODS.groupChatsRemove]: "tots",
   [WS_METHODS.totsWriteMemory]: "tots",
+  [WS_METHODS.totsRevertMemoryTidy]: "tots",
   [WS_METHODS.serverSearchAcpRegistry]: "server",
   [WS_METHODS.serverPrepareAcpRegistryAgent]: "server",
   [WS_METHODS.serverUninstallAcpRegistryManagedBinary]: "server",

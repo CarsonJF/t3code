@@ -154,6 +154,8 @@ const handlers = {
         freshSession,
         bindToCurrentThread,
         modelSelection,
+        precheck,
+        missedRunGraceMinutes,
       }) =>
         Effect.gen(function* () {
           if (scheduledTaskId === undefined) return yield* Effect.die("unreachable");
@@ -168,6 +170,8 @@ const handlers = {
             freshSession,
             bindToCurrentThread,
             modelSelection,
+            precheck,
+            missedRunGraceMinutes,
           });
         }),
     ),

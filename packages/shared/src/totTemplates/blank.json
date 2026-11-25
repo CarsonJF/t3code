@@ -1,0 +1,9 @@
+{
+  "id": "blank",
+  "name": "New Tot",
+  "description": "Start from nothing: you write its instructions and routines.",
+  "scope": "projects",
+  "avatar": { "color": "#0A7EA4" },
+  "instructions": "",
+  "scheduledTasks": []
+}

@@ -1447,6 +1447,11 @@ export const CloudSpeechCredentials = Schema.Struct({
 });
 
 /** Full GLM 5.3 on OpenCode Go is banned here; its Flash variants are separate ids and stay allowed. */
+const DEFAULT_TOT_MEMORY_TIDY_MAX_BYTES = 6 * 1024;
+const TotMemoryTidyMaxBytes = Schema.Int.check(
+  Schema.isBetween({ minimum: 1024, maximum: 256 * 1024 }),
+);
+
 export const ALWAYS_DENIED_FALLBACK_MODELS: ReadonlyArray<string> = ["opencode-go/glm-5.3"];
 
 export const ServerSettings = Schema.Struct({
@@ -1506,6 +1511,14 @@ export const ServerSettings = Schema.Struct({
   // Null follows textGenerationModelSelection; "Describe a shape" in the avatar library uses it.
   avatarDesignModelSelection: Schema.NullOr(ModelSelection).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  // Null follows textGenerationModelSelection; the nightly Tot memory tidy-up uses it.
+  totMemoryTidyModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  /** The size a tidy-up keeps a Tot's `MEMORY.md` under; the rest moves to dated logs. */
+  totMemoryTidyMaxBytes: TotMemoryTidyMaxBytes.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOT_MEMORY_TIDY_MAX_BYTES)),
   ),
   projectAgentBrowserAccessOverrides: Schema.Record(ProjectId, Schema.Boolean).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
@@ -2022,6 +2035,8 @@ export const ServerSettingsPatch = Schema.Struct({
   speechProjectCustomWords: Schema.optionalKey(SpeechCustomWords),
   speechPostProcessingModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   avatarDesignModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  totMemoryTidyModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  totMemoryTidyMaxBytes: Schema.optionalKey(TotMemoryTidyMaxBytes),
   projectAgentBrowserAccessOverrides: Schema.optionalKey(
     Schema.Record(ProjectId, Schema.NullOr(Schema.Boolean)),
   ),

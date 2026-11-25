@@ -27,6 +27,7 @@ import {
   generatedThreadTitle,
   investigationUnsupported,
   AvatarFigureOutput,
+  MemoryTidyOutput,
   TranscriptionPostProcessingOutput,
 } from "@t3tools/provider-core/server/textGenerationOperations";
 import {
@@ -393,6 +394,17 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
         modelSelection: input.modelSelection,
       });
     });
+  const generateMemoryTidy: ProviderTextGeneration["generateMemoryTidy"] = Effect.fn(
+    "MuseTextGeneration.generateMemoryTidy",
+  )(function* (input) {
+    return yield* runMuseJson({
+      operation: "generateMemoryTidy",
+      prompt: input.prompt,
+      outputSchema: MemoryTidyOutput,
+      modelSelection: input.modelSelection,
+    });
+  });
+
   const generateAvatarFigure: ProviderTextGeneration["generateAvatarFigure"] = Effect.fn(
     "MuseTextGeneration.generateAvatarFigure",
   )(function* (input) {
@@ -413,5 +425,6 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
     generateReviewGuide,
     generateTranscriptionPostProcessing,
     generateAvatarFigure,
+    generateMemoryTidy,
   } satisfies ProviderTextGeneration;
 });
