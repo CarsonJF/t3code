@@ -1,7 +1,13 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import { IsoDateTime, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import {
+  IsoDateTime,
+  NonNegativeInt,
+  ProjectId,
+  ThreadId,
+  TrimmedNonEmptyString,
+} from "./baseSchemas.ts";
 import { ProjectColor, ProjectIconOverride, ReceivedProjectIcon } from "./project.ts";
 
 export const ThreadGroupId = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
@@ -78,6 +84,18 @@ export const ThreadGroupOp = Schema.Union([
     type: Schema.Literal("setThreadGroup"),
     threadId: ThreadId,
     groupId: Schema.NullOr(ThreadGroupId),
+  }),
+  /**
+   * Brings a deleted group back under its own id, so references such as a Tot's scope still hold.
+   * `projectDefaults` lists the `since` of each entry that named the group; only entries the
+   * delete cleared, and threads still ungrouped, return to it.
+   */
+  Schema.Struct({
+    type: Schema.Literal("restoreGroup"),
+    group: ThreadGroup,
+    index: NonNegativeInt,
+    projectDefaults: Schema.Record(ProjectId, Schema.Array(IsoDateTime)),
+    threadIds: Schema.Array(ThreadId),
   }),
   /** One-time upload of client-local groups; adds only groups, projects and threads not yet set. */
   Schema.Struct({ type: Schema.Literal("import"), state: ThreadGroupsState }),

@@ -45,6 +45,7 @@ import * as DeviceService from "./DeviceService.ts";
 import * as SshDeviceHost from "./SshDeviceHost.ts";
 import { agentDeviceSession, releaseAgentDeviceSession } from "./AgentDeviceTarget.ts";
 import { ensureDeviceHub } from "./DeviceToolchain.ts";
+import { EMPTY_THREAD_GROUP_HISTORY } from "../threadGroupHistory.ts";
 
 const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
 const decodeBootError = Schema.decodeUnknownSync(Schema.fromJsonString(DeviceBootError));
@@ -426,6 +427,7 @@ const fixture = Effect.fn("fixture")(function* (
         updateTots: () => Effect.die("Unexpected Tot update"),
         updateGroupChats: () => Effect.die("Unexpected group chat update"),
         updateProviderInstance: () => Effect.die("Unexpected provider mutation"),
+        readThreadGroupHistory: Effect.succeed(EMPTY_THREAD_GROUP_HISTORY),
         withSettingsSnapshot: (use) => Effect.flatMap(Ref.get(settings), use),
         start: Effect.void,
         ready: Effect.void,

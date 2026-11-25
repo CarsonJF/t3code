@@ -7,7 +7,7 @@ import {
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { applyThreadGroupOps } from "./threadGroups.ts";
+import { applyThreadGroupOps, threadGroupRestoreOp } from "./threadGroups.ts";
 
 const PROJECT = ProjectId.make("project-1");
 const THREAD = ThreadId.make("thread-1");
@@ -130,5 +130,66 @@ describe("applyThreadGroupOps", () => {
       threadOverrides: { [THREAD]: null, [ThreadId.make("thread-2")]: "phone" },
     });
     expect(applyThreadGroupOps(state, [{ type: "import", state: legacy }])).toEqual(state);
+  });
+
+  it("restores a deleted group with its id, place and assignments", () => {
+    const before = applyThreadGroupOps(withGroups("a", "games", "c"), [
+      setDefault("games", "2026-10-26T10:00:00.000Z"),
+      { type: "setThreadGroup", threadId: THREAD, groupId: "games" },
+      { type: "setThreadGroup", threadId: ThreadId.make("thread-2"), groupId: "c" },
+    ]);
+    const restore = threadGroupRestoreOp(before, "games")!;
+    const deleted = applyThreadGroupOps(before, [{ type: "deleteGroup", groupId: "games" }]);
+
+    expect(applyThreadGroupOps(deleted, [restore])).toEqual(before);
+    expect(applyThreadGroupOps(before, [restore])).toEqual(before);
+    expect(threadGroupRestoreOp(deleted, "games")).toBeNull();
+  });
+
+  it("keeps assignments made after the delete when restoring", () => {
+    const before = applyThreadGroupOps(withGroups("games", "other"), [
+      setDefault("games", "2026-10-26T10:00:00.000Z"),
+      { type: "setThreadGroup", threadId: THREAD, groupId: "games" },
+    ]);
+    const restore = threadGroupRestoreOp(before, "games")!;
+    const moved = applyThreadGroupOps(before, [
+      { type: "deleteGroup", groupId: "games" },
+      { type: "setThreadGroup", threadId: THREAD, groupId: "other" },
+      setDefault("other", "2026-10-27T10:00:00.000Z"),
+    ]);
+
+    const restored = applyThreadGroupOps(moved, [restore]);
+
+    expect(restored.threadOverrides[THREAD]).toBe("other");
+    expect(restored.projectDefaults[PROJECT]).toEqual([
+      { groupId: "games", since: "2026-10-26T10:00:00.000Z" },
+      { groupId: "other", since: "2026-10-27T10:00:00.000Z" },
+    ]);
+  });
+
+  it("removes a group only through deleteGroup", () => {
+    const state = withGroups("a", "b", "c");
+    const stale: ThreadGroupsState = {
+      ...EMPTY_THREAD_GROUPS_STATE,
+      groups: [{ id: "a", name: "a" }],
+    };
+    const ops: ThreadGroupOp[] = [
+      { type: "createGroup", group: { id: "a", name: "again" } },
+      { type: "updateGroup", groupId: "b", name: "B" },
+      { type: "reorderGroups", groupIds: ["c"] },
+      { type: "reorderGroups", groupIds: [] },
+      setDefault("missing", "2026-10-26T10:00:00.000Z"),
+      { type: "setThreadGroup", threadId: THREAD, groupId: null },
+      { type: "import", state: stale },
+      { type: "import", state: EMPTY_THREAD_GROUPS_STATE },
+    ];
+
+    for (const op of ops) {
+      expect(
+        applyThreadGroupOps(state, [op])
+          .groups.map((group) => group.id)
+          .toSorted(),
+      ).toEqual(["a", "b", "c"]);
+    }
   });
 });

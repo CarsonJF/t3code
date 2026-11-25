@@ -78,6 +78,8 @@ const EnvironmentPreferencesTool = Tool.make("t3_environment_preferences_update"
 const ThreadGroupsResult = Schema.Struct({
   groups: Schema.Array(ThreadGroup),
   projects: Schema.Array(Schema.Struct({ projectId: ProjectId, groupId: ThreadGroupId })),
+  /** Groups the server's backup still holds, which `restoreGroup` can bring back. */
+  deletedGroups: Schema.Array(Schema.Struct({ id: ThreadGroupId, name: ThreadGroup.fields.name })),
 });
 const ThreadGroupsReadTool = Tool.make("t3_thread_groups_read", {
   ...shared,
@@ -93,7 +95,7 @@ const groupGradient = Schema.optionalKey(Schema.NullOr(ThreadGroupGradient));
 const ThreadGroupsUpdateTool = Tool.make("t3_thread_groups_update", {
   ...shared,
   description:
-    "Edit sidebar thread groups. Live full-access or default caller thread only. Ops apply in order, all or none. `createGroup` returns the new id in `groups`; assign it in a later call. `setProjectGroup` moves the project's future threads only; `groupId: null` ungroups. `gradient` is {from, to} colors (set `color` to `from` too); `null` clears it. `reorderGroups` lists group ids in the new order. Deleting a group ungroups its threads.",
+    "Edit sidebar thread groups. Live full-access or default caller thread only. Ops apply in order, all or none. `createGroup` returns the new id in `groups`; assign it in a later call. `setProjectGroup` moves the project's future threads only; `groupId: null` ungroups. `gradient` is {from, to} colors (set `color` to `from` too); `null` clears it. `reorderGroups` lists group ids in the new order. Deleting a group ungroups its threads. `restoreGroup` brings back a group listed in `deletedGroups` with its original id and assignments.",
   parameters: Schema.Struct({
     ops: Schema.Array(
       Schema.Union([
@@ -115,6 +117,7 @@ const ThreadGroupsUpdateTool = Tool.make("t3_thread_groups_update", {
           icon: groupIcon,
         }),
         Schema.Struct({ type: Schema.Literal("deleteGroup"), groupId: ThreadGroupId }),
+        Schema.Struct({ type: Schema.Literal("restoreGroup"), groupId: ThreadGroupId }),
         Schema.Struct({
           type: Schema.Literal("reorderGroups"),
           groupIds: Schema.Array(ThreadGroupId).check(Schema.isMinLength(1)),
