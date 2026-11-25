@@ -397,8 +397,14 @@ const make = Effect.gen(function* () {
       const problem = totThemeProblem(input.theme);
       if (problem !== null) return yield* fail(problem);
     }
+    const { usageLimitFallbackModels: storedFallbacks, ...rest } = tot;
+    const fallbacks =
+      input.usageLimitFallbackModels === undefined
+        ? storedFallbacks
+        : (input.usageLimitFallbackModels ?? undefined);
     const base: Tot = {
-      ...tot,
+      ...rest,
+      ...(fallbacks === undefined ? {} : { usageLimitFallbackModels: fallbacks }),
       ...(input.name === undefined ? {} : { name: input.name }),
       ...(input.avatar === undefined ? {} : { avatar: input.avatar }),
       ...(input.scope === undefined ? {} : { scope: input.scope }),
