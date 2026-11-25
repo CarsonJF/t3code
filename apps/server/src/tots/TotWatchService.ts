@@ -1,4 +1,5 @@
 import {
+  DEFAULT_TOT_REPORT_BATCH_SECONDS,
   type EnvironmentId,
   isOrchestrationV2WorkActive,
   type OrchestratorMcpThreadWaitResult,
@@ -35,16 +36,23 @@ import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as PeerForwarding from "../peer/PeerForwarding.ts";
 import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import { IDLE_COMPACTION_MESSAGE_ID_PREFIX } from "../orchestration-v2/IdleCompaction.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as TotService from "./TotService.ts";
 import { USER_STOP_REASON } from "../orchestration-v2/RunExecutionService.ts";
 import {
   BACKGROUND_WAKE_GRACE_MS,
+  EMPTY_STEERING_NOTE,
+  formatSteeringNote,
   formatWatchExcerpt,
   formatWatchLine,
+  isRoutineWatchEvent,
   liveBackgroundTaskCount,
+  noteSteeringMessage,
+  noteSteeringRun,
   runIsOver,
   sentRunBaseline,
+  type SteeringNote,
   STILL_WORKING_CHECK_IN_MS,
   type TotWatchEvent,
   type TotWatchLineDetail,
@@ -53,10 +61,11 @@ import {
 } from "./totWatchTransitions.ts";
 import { deliversWatchReport } from "./totWatchReports.ts";
 
-/** Reports wait this long so several changes reach a Tot as one message. */
+/** How often queued reports are looked at; urgent ones wait no longer than this. */
 const REPORT_BATCH_WINDOW = Duration.seconds(2);
 
 const FOLLOW_WAIT_MS = 10 * 60 * 1_000;
+const MAX_REMEMBERED_RUNS = 1_000;
 
 /**
  * Between looks at a remote thread whose run ended or stopped to ask: the
@@ -76,6 +85,9 @@ interface Outgoing {
   readonly source: { readonly environmentId: EnvironmentId; readonly threadId: ThreadId };
   /** Set on a stop report, which the Tot that issued the stop does not need. */
   readonly stopped?: { readonly environmentId: EnvironmentId; readonly threadId: ThreadId };
+  /** Sent at the next look; routine news waits for the batch window or urgent news. */
+  readonly urgent: boolean;
+  readonly queuedAt: number;
 }
 
 /** A run whose turn ended with background work live: silent until it ends or the check-in. */
@@ -94,8 +106,10 @@ export class TotWatchService extends Context.Service<
     readonly start: Effect.Effect<void, never, Scope.Scope>;
     /** Looks at one thread again and queues what its Tots should hear. */
     readonly observe: (threadId: ThreadId) => Effect.Effect<void>;
-    /** Sends what is queued now instead of at the end of the batch window. */
+    /** Sends everything queued now, routine reports included. */
     readonly flush: Effect.Effect<void>;
+    /** Sends what is due: every Tot with urgent news, or routine news older than the window. */
+    readonly flushDue: Effect.Effect<void>;
     /** Starts a follower for each watched thread on a linked environment, and stops the rest. */
     readonly syncFollowers: Effect.Effect<void>;
     /** Once after recovery: looks at stored sent watches whose runs ended while the server was down. */
@@ -222,7 +236,17 @@ const touchesWatches = (event: OrchestrationV2DomainEvent): boolean => {
 const isIdleCompactionRun = (
   event: OrchestrationV2DomainEvent,
 ): event is Extract<OrchestrationV2DomainEvent, { readonly type: "run.updated" }> =>
-  event.type === "run.updated" && event.payload.userMessageId.startsWith("idle-compact:");
+  event.type === "run.updated" &&
+  event.payload.userMessageId.startsWith(IDLE_COMPACTION_MESSAGE_ID_PREFIX);
+
+/** A message a person wrote in a thread a Tot launched: the steering its next report mentions. */
+const isPersonMessageInLaunchedThread = (
+  event: OrchestrationV2DomainEvent,
+): event is Extract<OrchestrationV2DomainEvent, { readonly type: "message.updated" }> =>
+  event.type === "message.updated" &&
+  event.payload.role === "user" &&
+  event.payload.createdBy === "user" &&
+  parseTotLaunchedThreadId(event.threadId) !== null;
 
 const inScope = (tot: Tot, environmentId: EnvironmentId, shell: OrchestrationV2ThreadShell) =>
   tot.scope === "all" ||
@@ -246,11 +270,63 @@ const make = Effect.gen(function* () {
   /** Each thread's latest idle-compaction run. */
   const compactionRuns = new Map<ThreadId, string>();
   const outbox: Array<Outgoing> = [];
+  /** What the user did in threads a Tot launched, kept for that Tot's next report on each. */
+  const steering = new Map<string, SteeringNote>();
+  /** Whether a person started each run seen in a launched thread, so it is read once. */
+  const personRuns = new Map<string, boolean>();
   const holds = new Map<ThreadId, BackgroundHold>();
   /** The last look at each run a Tot sent, which the thread's latest run may have passed. */
   const sentSeen = new Map<string, WatchedThreadState>();
   /** Stopped runs with a follower already waiting on their restart decision. */
   const continuationWaits = new Set<string>();
+
+  const enqueue = Effect.fnUntraced(function* (
+    event: TotWatchEvent,
+    item: Omit<Outgoing, "urgent" | "queuedAt">,
+  ) {
+    outbox.push({
+      ...item,
+      urgent: !isRoutineWatchEvent(event),
+      queuedAt: yield* Clock.currentTimeMillis,
+    });
+  });
+
+  const steeringKey = (source: Outgoing["source"]) =>
+    `${source.environmentId}\u0000${source.threadId}`;
+  const noteSteering = (source: Outgoing["source"], change: (note: SteeringNote) => SteeringNote) =>
+    steering.set(
+      steeringKey(source),
+      change(steering.get(steeringKey(source)) ?? EMPTY_STEERING_NOTE),
+    );
+
+  /** Each message once, though its record updates as it queues, starts and ends. */
+  const notedLocalMessages = new Set<string>();
+  const noteLocalSteering = (threadId: ThreadId, messageId: string, text: string) => {
+    if (notedLocalMessages.has(messageId) || text.trim() === "") return;
+    if (notedLocalMessages.size >= MAX_REMEMBERED_RUNS) notedLocalMessages.clear();
+    notedLocalMessages.add(messageId);
+    noteSteering({ environmentId, threadId }, (note) => noteSteeringMessage(note, text));
+  };
+
+  /** Whether a person, rather than the Tot that launched the thread, started this run. */
+  const startedByPerson = Effect.fnUntraced(function* (threadId: ThreadId, runId: RunId) {
+    const key = `${threadId}\u0000${runId}`;
+    const known = personRuns.get(key);
+    if (known !== undefined) return known;
+    const records = yield* threads
+      .getThreadRecords(threadId, ["runs", "messages"], {
+        messageRoles: ["user"],
+        messageRunIds: [runId],
+      })
+      .pipe(Effect.option);
+    if (Option.isNone(records)) return false;
+    const startedBy = records.value.runs.find((run) => run.id === runId)?.userMessageId;
+    const person =
+      records.value.messages.find((message) => message.id === startedBy)?.createdBy === "user";
+    if (personRuns.size >= MAX_REMEMBERED_RUNS) personRuns.clear();
+    personRuns.set(key, person);
+    return person;
+  });
 
   /** Keeps a run's report back while its background work is live and just after it ends. */
   const throughHold = (
@@ -438,6 +514,7 @@ const make = Effect.gen(function* () {
         inScope(tot, environmentId, shell);
       if (explicit.length === 0 && !viaAll) continue;
       if (next.ended) {
+        steering.delete(steeringKey(source));
         // A first look is only a baseline unless the Tot started this work itself.
         const counts = previous !== undefined || explicit.some((w) => w.reason !== "requested");
         if (counts && explicit.length > 0 && watchTransition(previous, next) === "ended") {
@@ -467,7 +544,7 @@ const make = Effect.gen(function* () {
           yield* tots.removeWatchEntry(tot.id, entry).pipe(Effect.ignore);
           sentSeen.delete(sentKey(tot.id, threadId, entry.runId));
           if (deliversWatchReport({ mode, reasons: ["sent"], viaAll: false })) {
-            outbox.push({
+            yield* enqueue("ended_unseen", {
               totId: tot.id,
               expectedThreadId: tot.threadId,
               line: formatWatchLine("ended_unseen", link, environmentLabel),
@@ -505,7 +582,7 @@ const make = Effect.gen(function* () {
           event !== "ended" &&
           deliversWatchReport({ mode, reasons: ["sent"], viaAll: false })
         ) {
-          outbox.push({
+          yield* enqueue(event, {
             totId: tot.id,
             expectedThreadId: tot.threadId,
             line: formatWatchLine(
@@ -534,7 +611,18 @@ const make = Effect.gen(function* () {
       if (!deliversWatchReport({ mode, reasons: broad.map((watch) => watch.reason), viaAll })) {
         continue;
       }
-      outbox.push({
+      // The user's own run in a thread this Tot launched is news for its next report, not a wake.
+      if (
+        owner === tot.id &&
+        next.runId !== null &&
+        (yield* startedByPerson(threadId, RunId.make(next.runId)))
+      ) {
+        noteSteering(source, (note) =>
+          noteSteeringRun(note, event, { backgroundTasks: next.backgroundTasks }),
+        );
+        continue;
+      }
+      yield* enqueue(event, {
         totId: tot.id,
         expectedThreadId: tot.threadId,
         line: formatWatchLine(
@@ -675,6 +763,10 @@ const make = Effect.gen(function* () {
     let wakeGraceUsed = false;
     const link = formatThreadLink({ environmentId: watch.environmentId, threadId: watch.threadId });
     const source = { environmentId: watch.environmentId, threadId: watch.threadId };
+    // The user's messages there since this follower started, for the next report's note.
+    const launchedByThisTot = parseTotLaunchedThreadId(watch.threadId) === totId;
+    const followStartedAt = yield* Clock.currentTimeMillis;
+    const notedMessages = new Set<string>();
     const remoteRead = (limit: number, maxCharsPerItem: number, runLimit = 1) =>
       forwarding
         .readThread(scope, watch.environmentId, {
@@ -732,7 +824,7 @@ const make = Effect.gen(function* () {
           .removeWatchEntry(totId, { ...source, reason: "sent", runId })
           .pipe(Effect.ignore);
         if (deliversWatchReport({ mode, reasons: ["sent"], viaAll: false })) {
-          outbox.push({
+          yield* enqueue("ended_unseen", {
             totId,
             expectedThreadId: tot.threadId,
             line: formatWatchLine("ended_unseen", link, label),
@@ -824,9 +916,36 @@ const make = Effect.gen(function* () {
         viaAll: false,
       });
       if (event !== null && event !== "ended" && delivers) {
-        const lastItems = carriesExcerpt(event)
-          ? Option.getOrUndefined(yield* remoteRead(20, 20_000))?.items
-          : undefined;
+        let personRun = false;
+        const lastItems =
+          carriesExcerpt(event) || launchedByThisTot
+            ? Option.getOrUndefined(yield* remoteRead(20, 20_000))?.items
+            : undefined;
+        if (launchedByThisTot && lastItems !== undefined) {
+          for (const item of lastItems) {
+            if (
+              item.type !== "user_message" ||
+              item.createdBy !== "user" ||
+              item.text === null ||
+              item.messageId === null ||
+              notedMessages.has(item.messageId) ||
+              Date.parse(item.updatedAt) < followStartedAt
+            ) {
+              continue;
+            }
+            notedMessages.add(item.messageId);
+            noteSteering(source, (note) => noteSteeringMessage(note, item.text!));
+          }
+          const startedBy = lastItems.find(
+            (item) => item.type === "user_message" && item.runId === next.runId,
+          );
+          personRun = target === undefined && startedBy?.createdBy === "user";
+          if (personRun) {
+            noteSteering(source, (note) =>
+              noteSteeringRun(note, event, { backgroundTasks: next.backgroundTasks }),
+            );
+          }
+        }
         // Only this run's words: a later run may be the newest thing in the thread.
         const excerpt = formatWatchExcerpt(
           lastItems?.findLast(
@@ -834,16 +953,18 @@ const make = Effect.gen(function* () {
               item.type === "assistant_message" && item.text !== null && item.runId === next.runId,
           )?.text,
         );
-        outbox.push({
-          totId,
-          expectedThreadId: tot.threadId,
-          line: formatWatchLine(event, link, label, {
-            excerpt,
-            backgroundTasks: next.backgroundTasks,
-          }),
-          source,
-          ...(event === "stopped" ? { stopped: source } : {}),
-        });
+        if (!personRun) {
+          yield* enqueue(event, {
+            totId,
+            expectedThreadId: tot.threadId,
+            line: formatWatchLine(event, link, label, {
+              excerpt,
+              backgroundTasks: next.backgroundTasks,
+            }),
+            source,
+            ...(event === "stopped" ? { stopped: source } : {}),
+          });
+        }
       }
       if (runIsOver(next)) {
         // Work the Tot started ends with its run there; looking on would poll forever.
@@ -923,9 +1044,30 @@ const make = Effect.gen(function* () {
     }
   });
 
-  const flush = Effect.gen(function* () {
+  const batchWindowMs = settings.getSettings.pipe(
+    Effect.map((current) => current.totReportBatchSeconds * 1_000),
+    Effect.orElseSucceed(() => DEFAULT_TOT_REPORT_BATCH_SECONDS * 1_000),
+  );
+
+  /** Takes every queued report of each Tot that is due, so one wake carries all of its news. */
+  const takeDue = Effect.fnUntraced(function* (all: boolean) {
+    if (all) return outbox.splice(0, outbox.length);
+    const now = yield* Clock.currentTimeMillis;
+    const windowMs = yield* batchWindowMs;
+    const due = new Set(
+      outbox
+        .filter((item) => item.urgent || now - item.queuedAt >= windowMs)
+        .map((item) => item.totId),
+    );
+    const batch = outbox.filter((item) => due.has(item.totId));
+    const kept = outbox.filter((item) => !due.has(item.totId));
+    outbox.splice(0, outbox.length, ...kept);
+    return batch;
+  });
+
+  const send = Effect.fnUntraced(function* (all: boolean) {
     yield* sweepHolds;
-    const batch = outbox.splice(0, outbox.length);
+    const batch = yield* takeDue(all);
     const groups = new Map<
       string,
       {
@@ -950,6 +1092,12 @@ const make = Effect.gen(function* () {
         sources: [],
       };
       group.lines.push(item.line);
+      // The user's own words and runs ride with the launching Tot's next line about that thread.
+      const note = steering.get(steeringKey(item.source));
+      if (note !== undefined && parseTotLaunchedThreadId(item.source.threadId) === item.totId) {
+        steering.delete(steeringKey(item.source));
+        group.lines.push(...formatSteeringNote(note));
+      }
       if (
         !group.sources.some(
           (source) =>
@@ -967,6 +1115,8 @@ const make = Effect.gen(function* () {
         .pipe(Effect.ignore);
     }
   });
+  const flush = send(true);
+  const flushDue = send(false);
 
   const start = Effect.gen(function* () {
     // Followers track the Tot settings: a new remote watch starts one, a removed one stops it.
@@ -981,10 +1131,15 @@ const make = Effect.gen(function* () {
       Stream.filter(
         (event) =>
           touchesWatches(event) ||
+          isPersonMessageInLaunchedThread(event) ||
           (event.type === "provider-thread.updated" && holds.has(event.threadId)),
       ),
       Stream.runForEach((event) =>
         Effect.suspend(() => {
+          if (isPersonMessageInLaunchedThread(event)) {
+            noteLocalSteering(event.threadId, event.payload.id, event.payload.text);
+            return Effect.void;
+          }
           if (isIdleCompactionRun(event)) compactionRuns.set(event.threadId, event.payload.id);
           return observe(event.threadId);
         }),
@@ -993,13 +1148,20 @@ const make = Effect.gen(function* () {
       Effect.forkScoped,
     );
     yield* Effect.sleep(REPORT_BATCH_WINDOW).pipe(
-      Effect.andThen(flush),
+      Effect.andThen(flushDue),
       Effect.forever,
       Effect.forkScoped,
     );
   });
 
-  return TotWatchService.of({ start, observe, flush, syncFollowers, recoverSentWatches });
+  return TotWatchService.of({
+    start,
+    observe,
+    flush,
+    flushDue,
+    syncFollowers,
+    recoverSentWatches,
+  });
 });
 
 export const layer = Layer.effect(TotWatchService, make);
