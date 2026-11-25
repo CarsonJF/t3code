@@ -65,6 +65,8 @@ const instructionsBlock = (tot: Tot): string =>
     INSTRUCTIONS_START,
     "## Your personality and instructions",
     "",
+    "T3 Code rewrites this block from your settings. Change it with `t3_tot_instructions`; edits made here by hand are lost.",
+    "",
     tot.instructions.trim() === "" ? "(None yet.)" : tot.instructions.trim(),
     INSTRUCTIONS_END,
   ].join("\n");

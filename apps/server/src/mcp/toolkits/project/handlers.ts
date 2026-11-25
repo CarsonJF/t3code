@@ -210,13 +210,39 @@ const withSavedProjectSettings = Effect.gen(function* () {
     const resolved = resolveProjectSettings(settings, project.id, project);
     return {
       ...project,
-      defaultModelSelection:
-        resolved.sources.defaultModelSelection === "project"
-          ? resolved.settings.defaultModelSelection
-          : null,
+      // What is stored, even when a disabled provider or hidden model keeps it from applying.
+      defaultModelSelection: resolved.overrides.defaultModelSelection ?? null,
       scripts: resolveProjectScripts(settings, project),
     };
   };
+});
+
+/**
+ * New threads read a project's default model from its Settings override; the project row's
+ * copy is only folded in once, on first start. Null clears the override.
+ */
+const saveProjectDefaultModel = Effect.fn("mcp.saveProjectDefaultModel")(function* (
+  projectId: ProjectId,
+  selection: ModelSelection | null,
+) {
+  const settings = yield* ServerSettings.ServerSettingsService;
+  const current = yield* settings.getSettings.pipe(Effect.mapError(unavailable));
+  const { defaultModelSelection: _previous, ...rest } =
+    current.projectSettingsOverrides[projectId] ?? {};
+  const entry = selection === null ? rest : { ...rest, defaultModelSelection: selection };
+  yield* settings
+    .updateSettings({
+      projectSettingsOverrides: { [projectId]: Object.keys(entry).length === 0 ? null : entry },
+    })
+    .pipe(
+      Effect.mapError(
+        (error) =>
+          new OrchestratorMcpFailure({
+            code: "orchestration_error",
+            message: `The project was updated, but its default model could not be saved: ${error.message}`,
+          }),
+      ),
+    );
 });
 
 // The project is already committed, so a failed Settings read must not report the create as failed.
@@ -673,6 +699,8 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
       const updated = yield* projects
         .update({ ...input, commandId: yield* newCommandId() })
         .pipe(Effect.mapError(projectFailure));
+      if (input.defaultModelSelection !== undefined)
+        yield* saveProjectDefaultModel(updated.id, input.defaultModelSelection);
       return (yield* withSavedProjectSettings)(updated);
     }),
   ),
