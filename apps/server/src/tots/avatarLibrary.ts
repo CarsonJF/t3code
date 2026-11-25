@@ -17,7 +17,7 @@ import { gallery } from "open-bot-avatar/gallery";
 import * as ServerConfig from "../config.ts";
 
 /** Figures every build ships; a library figure may not take one of their ids. */
-const BUILT_IN_FIGURE_IDS: ReadonlySet<string> = new Set(
+export const BUILT_IN_FIGURE_IDS: ReadonlySet<string> = new Set(
   [...examples, ...gallery].map((figure) => figure.id),
 );
 
