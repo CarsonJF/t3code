@@ -156,6 +156,8 @@ export const Tot = Schema.Struct({
   theme: Schema.optional(TotTheme),
   /** Opt-in: absent or false keeps the Tot's own thread out of automatic settlement. */
   autoSettle: Schema.optional(Schema.Boolean),
+  /** Replaces the environment's usage-limit fallback list for this Tot's work; `[]` turns it off. */
+  usageLimitFallbackModels: Schema.optional(Schema.Array(ModelSelection)),
 });
 export type Tot = typeof Tot.Type;
 
@@ -296,6 +298,8 @@ export const TotUpdateInput = Schema.Struct({
   theme: Schema.optional(TotThemePatch),
   watchReports: Schema.optional(TotWatchReports),
   autoSettle: Schema.optional(Schema.Boolean),
+  /** Null goes back to the environment's list. */
+  usageLimitFallbackModels: Schema.optional(Schema.NullOr(Schema.Array(ModelSelection))),
 });
 export type TotUpdateInput = typeof TotUpdateInput.Type;
 
