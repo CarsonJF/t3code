@@ -22,6 +22,7 @@ import {
   type ThreadGroupsState,
   type ThreadId,
 } from "@t3tools/contracts";
+import { threadGroupRestoreOp, type ThreadGroupRestoreOp } from "@t3tools/shared/threadGroups";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -143,6 +144,11 @@ const sendThreadGroupOps = (environmentId: EnvironmentId, threadGroupOps: Thread
     { label: "Thread group update" },
   );
 
+export type ThreadGroupRestores = ReadonlyArray<{
+  readonly environmentId: EnvironmentId;
+  readonly op: ThreadGroupRestoreOp;
+}>;
+
 export const newThreadGroup = (details: ThreadGroupDetails): ThreadGroup => ({
   id: randomUUID(),
   ...details,
@@ -168,11 +174,21 @@ export const threadGroupActions = {
       void sendThreadGroupOps(environmentId, [{ type: "reorderGroups", groupIds }]);
     }
   },
-  delete: (groupId: string) => {
+  /** Deletes the group from only these machines; the result undoes it with `restore`. */
+  delete: (groupId: string, environmentIds: ReadonlyArray<EnvironmentId>): ThreadGroupRestores => {
     const { byEnvironment } = readThreadGroupsView();
-    for (const environmentId of environmentsWithThreadGroup(byEnvironment, groupId)) {
+    const restores: Array<ThreadGroupRestores[number]> = [];
+    for (const environmentId of environmentIds) {
+      const state = byEnvironment.get(environmentId);
+      const op = state ? threadGroupRestoreOp(state, groupId) : null;
+      if (op === null) continue;
+      restores.push({ environmentId, op });
       void sendThreadGroupOps(environmentId, [{ type: "deleteGroup", groupId }]);
     }
+    return restores;
+  },
+  restore: (restores: ThreadGroupRestores) => {
+    for (const { environmentId, op } of restores) void sendThreadGroupOps(environmentId, [op]);
   },
   setProjectDefault: (projectRefs: ReadonlyArray<ScopedProjectRef>, group: ThreadGroup | null) => {
     const { byEnvironment } = readThreadGroupsView();

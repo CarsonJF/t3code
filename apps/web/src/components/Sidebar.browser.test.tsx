@@ -483,7 +483,7 @@ describe("sidebar thread menu", () => {
 });
 
 describe("sidebar thread groups", () => {
-  it("hides empty groups and moves visible groups past them", async () => {
+  it("keeps empty groups as dimmed headers with their menu", async () => {
     const activeProject = project("active");
     const threads = [1, 2, 3].map((index) => threadShell(activeProject.id, index));
     const threadRef = { environmentId: activeProject.environmentId, threadId: threads[1]!.id };
@@ -536,12 +536,27 @@ describe("sidebar thread groups", () => {
     const collapsedHeader = screen.getByText("Collapsed group");
     await expect.element(collapsedHeader).toBeInTheDocument();
     await expect.element(screen.getByText("Open group")).toBeInTheDocument();
-    await expect.element(screen.getByText("Empty group")).not.toBeInTheDocument();
+    const emptyHeader = screen.getByText("Empty group");
+    await expect.element(emptyHeader).toBeInTheDocument();
+    expect(
+      emptyHeader.element().closest("[data-testid='sidebar-thread-group-header']"),
+    ).toHaveAttribute("data-empty");
     await expect.element(screen.getByText("Thread 2").first()).toBeInTheDocument();
     await expect.element(screen.getByText("Thread 3")).not.toBeInTheDocument();
 
     await userEvent.click(collapsedHeader, { button: "right" });
-    await vi.waitFor(() => expect(move).toHaveBeenCalledWith("collapsed", "open", "before"));
+    await vi.waitFor(() => expect(move).toHaveBeenCalledWith("collapsed", "empty", "before"));
+
+    show.mockResolvedValue(null);
+    await userEvent.click(emptyHeader, { button: "right" });
+    await vi.waitFor(() =>
+      expect(show.mock.lastCall?.[0].map((item: { id: string }) => item.id)).toEqual([
+        "edit",
+        "move-up",
+        "move-down",
+        "delete",
+      ]),
+    );
   });
 });
 
