@@ -1,5 +1,6 @@
 import {
   DEFAULT_TOT_REPORT_BATCH_SECONDS,
+  DEFAULT_TOT_STALL_MINUTES,
   type EnvironmentId,
   isOrchestrationV2WorkActive,
   type OrchestratorMcpThreadWaitResult,
@@ -48,14 +49,21 @@ import {
   formatWatchLine,
   isRoutineWatchEvent,
   liveBackgroundTaskCount,
+  noteRunActivity,
   noteSteeringMessage,
   noteSteeringRun,
+  type RunActivity,
   runIsOver,
+  type RunStall,
+  runStall,
   sentRunBaseline,
+  startRunActivity,
   type SteeringNote,
   STILL_WORKING_CHECK_IN_MS,
   type TotWatchEvent,
+  type TotWaitReason,
   type TotWatchLineDetail,
+  waitReasonOf,
   watchTransition,
   type WatchedThreadState,
 } from "./totWatchTransitions.ts";
@@ -65,6 +73,7 @@ import { deliversWatchReport } from "./totWatchReports.ts";
 const REPORT_BATCH_WINDOW = Duration.seconds(2);
 
 const FOLLOW_WAIT_MS = 10 * 60 * 1_000;
+const STALL_EXCERPT_MAX_CHARS = 300;
 const MAX_REMEMBERED_RUNS = 1_000;
 
 /**
@@ -97,6 +106,8 @@ interface BackgroundHold {
   readonly checkedIn: boolean;
   /** Set once the work ended, while a wake run may still be about to start. */
   readonly graceUntil: number | null;
+  /** The wait already reported, so the wake runs that keep waiting on it stay quiet. */
+  readonly waitReported?: TotWaitReason;
 }
 
 export class TotWatchService extends Context.Service<
@@ -165,14 +176,40 @@ const watchedStateFromShell = (shell: OrchestrationV2ThreadShell | null): Watche
           : "approval";
   const backgroundTasks =
     shell.status === "completed" ? liveBackgroundTaskCount(shell.pendingBackgroundTasks ?? []) : 0;
+  const status = backgroundTasks > 0 ? "waiting" : statusOf(shell.status);
+  const waitingOn =
+    status === "waiting"
+      ? waitReasonOf(
+          shell.pendingBackgroundTasks ?? [],
+          (shell.pullRequests ?? []).flatMap((link) =>
+            link.watch === undefined || link.source === "stack-dismissed"
+              ? []
+              : [
+                  {
+                    ...(link.watch.checksPending === undefined
+                      ? {}
+                      : { checksPending: link.watch.checksPending }),
+                    approval: (link.watch.awaitingApproval?.length ?? 0) > 0,
+                  },
+                ],
+          ),
+        )
+      : status === "running"
+        ? shell.blockedOnThreadWait === true
+          ? "thread_wait"
+          : request !== null && request.userOnly === true
+            ? "approval"
+            : undefined
+        : undefined;
   return {
-    status: backgroundTasks > 0 ? "waiting" : statusOf(shell.status),
+    status,
     pending,
     runId: shell.latestRunId,
     requestId: pending === null || request === null ? null : request.id,
     ended: false,
     backgroundTasks,
     restartPending: false,
+    ...(waitingOn === undefined ? {} : { waitingOn }),
   };
 };
 
@@ -180,10 +217,12 @@ const watchedStateFromShell = (shell: OrchestrationV2ThreadShell | null): Watche
 const watchedStateFromWait = (
   waited: OrchestratorMcpThreadWaitResult,
   backgroundTasks: number,
+  waitingOn?: TotWaitReason,
 ): WatchedThreadState => {
   const status = statusOf(waited.status);
   const holding = status === "completed" && backgroundTasks > 0;
   return {
+    ...(holding && waitingOn !== undefined ? { waitingOn } : {}),
     status: holding ? "waiting" : status,
     pending: waited.attention ?? null,
     runId: waited.runId,
@@ -204,7 +243,42 @@ const stoppedByFrom = (message: string | undefined) =>
         : null;
 
 const carriesExcerpt = (event: TotWatchEvent) =>
-  event === "completed" || event === "failed" || event === "stopped" || event === "still_working";
+  event === "completed" ||
+  event === "failed" ||
+  event === "stopped" ||
+  event === "still_working" ||
+  event === "waiting";
+
+/** Model output, tool use and requests; bookkeeping such as thread metadata is not activity. */
+const runActivityOf = (
+  event: OrchestrationV2DomainEvent,
+): { readonly retryKey: string | null; readonly text: string | null } | null => {
+  switch (event.type) {
+    case "turn-item.updated": {
+      const item = event.payload;
+      if (item.type === "error")
+        return { retryKey: `${item.id}#${item.retry?.attempt ?? 0}`, text: null };
+      // Streamed text arrives as message updates, which carry it.
+      if (item.type === "assistant_message" || item.type === "reasoning") {
+        return { retryKey: null, text: null };
+      }
+      const what = item.type.replaceAll("_", " ");
+      return { retryKey: null, text: item.title === null ? what : `${what}: ${item.title}` };
+    }
+    case "message.updated":
+      return event.payload.role === "assistant"
+        ? { retryKey: null, text: event.payload.text }
+        : null;
+    case "runtime-request.updated":
+    case "plan.updated":
+    case "subagent.updated":
+    case "provider-turn.updated":
+    case "run-attempt.updated":
+      return { retryKey: null, text: null };
+    default:
+      return null;
+  }
+};
 
 /** Keyed by the Tot's current thread too, so a fresh start restarts its followers. */
 const followerKey = (
@@ -279,6 +353,18 @@ const make = Effect.gen(function* () {
   const sentSeen = new Map<string, WatchedThreadState>();
   /** Stopped runs with a follower already waiting on their restart decision. */
   const continuationWaits = new Set<string>();
+  /** What each watched running run last did, for stall reports. */
+  const activities = new Map<ThreadId, RunActivity>();
+
+  const stallMinutesSetting = settings.getSettings.pipe(
+    Effect.map((current) => current.totStallMinutes),
+    Effect.orElseSucceed(() => DEFAULT_TOT_STALL_MINUTES),
+  );
+  const stallMsOf = (tot: Tot, globalMinutes: number) =>
+    (tot.stallMinutes ?? globalMinutes) * 60_000;
+  /** The Tots a look at a thread considers at all, before what each watches. */
+  const hearsWatchReports = (tot: Tot, threadId: ThreadId) =>
+    tot.threadId !== null && tot.threadId !== threadId && totWatchReportsOf(tot) !== "off";
 
   const enqueue = Effect.fnUntraced(function* (
     event: TotWatchEvent,
@@ -377,7 +463,16 @@ const make = Effect.gen(function* () {
     threadId: ThreadId,
     event: TotWatchEvent,
     next: WatchedThreadState,
+    stall: RunStall | null = null,
   ) {
+    if (event === "stalled" && stall !== null) {
+      return {
+        stall,
+        excerpt: formatWatchExcerpt(activities.get(threadId)?.lastText, {
+          maxChars: STALL_EXCERPT_MAX_CHARS,
+        }),
+      } satisfies TotWatchLineDetail;
+    }
     const runId = next.runId === null ? null : RunId.make(next.runId);
     if (runId === null || !carriesExcerpt(event)) return {} satisfies TotWatchLineDetail;
     const { messages } = yield* threads
@@ -406,6 +501,7 @@ const make = Effect.gen(function* () {
       excerpt,
       stoppedBy,
       backgroundTasks: next.backgroundTasks,
+      ...(next.waitingOn === undefined ? {} : { waitingOn: next.waitingOn }),
     } satisfies TotWatchLineDetail;
   });
 
@@ -473,12 +569,45 @@ const make = Effect.gen(function* () {
       ? throughHold(threadId, current, shell, previous === undefined, now, wokenByWork)
       : current;
     // The startup pass must not become the baseline a launched watch's next look compares with.
-    if (!sentOnly) seen.set(threadId, next);
+    if (!sentOnly) {
+      seen.set(threadId, next);
+      if (watched && next.status === "running" && next.runId !== null) {
+        if (activities.get(threadId)?.runId !== next.runId) {
+          activities.set(threadId, startRunActivity(next.runId, now));
+        }
+      } else {
+        activities.delete(threadId);
+      }
+    }
     if (restartPending && stoppedRun !== null) {
       yield* lookAfterContinuation(threadId, stoppedRun);
     }
+    // A reported wait stands in for the check-in: the Tot already knows what the run waits on.
     const isCheckIn =
-      checkIn && next.status === "waiting" && next.backgroundTasks > 0 && next.pending === null;
+      checkIn &&
+      next.status === "waiting" &&
+      next.backgroundTasks > 0 &&
+      next.pending === null &&
+      next.waitingOn === undefined;
+    const globalStallMinutes = activities.has(threadId)
+      ? yield* stallMinutesSetting
+      : DEFAULT_TOT_STALL_MINUTES;
+    /** One stall report per Tot per episode; marked even where this Tot hears nothing of it. */
+    const stallFor = (tot: Tot): RunStall | null => {
+      const activity = activities.get(threadId);
+      if (activity === undefined || next.pending !== null || activity.alerted.has(tot.id)) {
+        return null;
+      }
+      const stall = runStall(activity, now, stallMsOf(tot, globalStallMinutes));
+      if (stall !== null) {
+        activities.set(threadId, { ...activity, alerted: new Set([...activity.alerted, tot.id]) });
+      }
+      return stall;
+    };
+    const waitReported = holds.get(threadId)?.waitReported;
+    /** A wake run that ends still waiting on what was already reported is not news. */
+    const repeatsWait = (event: TotWatchEvent | null, state: WatchedThreadState) =>
+      event === "waiting" && state.status === "waiting" && state.waitingOn === waitReported;
     const owner = parseTotLaunchedThreadId(threadId);
     const link = formatThreadLink({ environmentId, threadId }, shell?.title);
     const source = { environmentId, threadId };
@@ -498,10 +627,13 @@ const make = Effect.gen(function* () {
           )?.runs
         : undefined;
     for (const tot of allTots) {
-      if (tot.threadId === null || tot.threadId === threadId) continue;
-      const mode = totWatchReportsOf(tot);
       // Off keeps its watches: switching reports back on resumes them.
-      if (mode === "off") continue;
+      if (!hearsWatchReports(tot, threadId) || tot.threadId === null) continue;
+      const mode = totWatchReportsOf(tot);
+      const stall = stallFor(tot);
+      // A run blocked on something outside it is waiting, not stuck.
+      const stallEvent: TotWatchEvent | null =
+        stall === null ? null : next.waitingOn === undefined ? "stalled" : "waiting";
       const explicit = tot.watches.filter(
         (watch) => watch.environmentId === environmentId && watch.threadId === threadId,
       );
@@ -568,10 +700,12 @@ const make = Effect.gen(function* () {
         // A later run took over from a turn whose background work was still live.
         const overtaken =
           own.status === "completed" && run.id !== next.runId && prior.backgroundTasks > 0;
-        const event: TotWatchEvent | null =
+        const transition: TotWatchEvent | null =
           overtaken || (isCheckIn && run.id === next.runId)
             ? "still_working"
             : watchTransition(prior.runId === run.id ? prior : sentRunBaseline(run.id), own);
+        const found = transition ?? (run.id === next.runId ? stallEvent : null);
+        const event = repeatsWait(found, own) ? null : found;
         sentSeen.set(key, own);
         if (runIsOver(own)) {
           yield* tots.removeWatchEntry(tot.id, { ...entry, runId: run.id }).pipe(Effect.ignore);
@@ -593,6 +727,7 @@ const make = Effect.gen(function* () {
                 threadId,
                 event,
                 overtaken ? { ...own, backgroundTasks: prior.backgroundTasks } : own,
+                stall,
               ),
             ),
             source,
@@ -605,7 +740,8 @@ const make = Effect.gen(function* () {
       if (broad.length === 0 && !viaAll) continue;
       // A first look is only a baseline unless the Tot started this work itself.
       if (previous === undefined && !broad.some((watch) => watch.reason === "launched")) continue;
-      const event = isCheckIn ? "still_working" : watchTransition(previous, next);
+      const found = (isCheckIn ? "still_working" : watchTransition(previous, next)) ?? stallEvent;
+      const event = repeatsWait(found, next) ? null : found;
       if (event === null || event === "ended") continue;
       if (next.runId !== null && sentRunsHere.has(next.runId)) continue;
       if (!deliversWatchReport({ mode, reasons: broad.map((watch) => watch.reason), viaAll })) {
@@ -629,11 +765,20 @@ const make = Effect.gen(function* () {
           event,
           link,
           environmentLabel,
-          yield* localDetail(threadId, event, next),
+          yield* localDetail(threadId, event, next, stall),
         ),
         source,
         ...(event === "stopped" ? { stopped: source } : {}),
       });
+    }
+    const hold = holds.get(threadId);
+    if (
+      !sentOnly &&
+      hold !== undefined &&
+      next.status === "waiting" &&
+      next.waitingOn !== undefined
+    ) {
+      holds.set(threadId, { ...hold, waitReported: next.waitingOn });
     }
   });
 
@@ -761,6 +906,11 @@ const make = Effect.gen(function* () {
     let previous: WatchedThreadState | undefined = undefined;
     let hold: { readonly dueAt: number; readonly checkedIn: boolean } | null = null;
     let wakeGraceUsed = false;
+    let waitReported: TotWaitReason | undefined = undefined;
+    /** The running run and when this follower first saw it, so silence has a floor. */
+    let running: { readonly runId: string; readonly seenAt: number } | null = null;
+    /** The quiet stretch already reported, by when its last activity was. */
+    let stallReportedFor: number | null = null;
     const link = formatThreadLink({ environmentId: watch.environmentId, threadId: watch.threadId });
     const source = { environmentId: watch.environmentId, threadId: watch.threadId };
     // The user's messages there since this follower started, for the next report's note.
@@ -790,12 +940,14 @@ const make = Effect.gen(function* () {
         (each) => each.reason === "sent" && each.runId !== undefined,
       )?.runId;
       const asked = target;
+      const stallMs = stallMsOf(tot, yield* stallMinutesSetting);
       const waited = yield* forwarding
         .waitForThread(scope, watch.environmentId, {
           threadId: watch.threadId,
           ...(asked === undefined ? {} : { runId: asked }),
           until: "attention",
-          timeoutMs: FOLLOW_WAIT_MS,
+          // A wait that returns no sooner than the stall time would report a stall late.
+          timeoutMs: stallMs > 0 ? Math.min(FOLLOW_WAIT_MS, stallMs) : FOLLOW_WAIT_MS,
         })
         .pipe(
           Effect.map((result) => ({ result, lost: null })),
@@ -842,9 +994,12 @@ const make = Effect.gen(function* () {
       const read =
         result.status === "completed" ? Option.getOrUndefined(yield* remoteRead(10, 1)) : undefined;
       const detail = read?.thread;
+      const liveTasks = detail?.pendingBackgroundTasks ?? [];
+      // A peer does not say whether a watched pull request waits on checks, so it reads as checks.
       let next = watchedStateFromWait(
         result,
-        liveBackgroundTaskCount(detail?.pendingBackgroundTasks ?? []),
+        liveBackgroundTaskCount(liveTasks),
+        waitReasonOf(liveTasks),
       );
       const moveTo = (runId: RunId) =>
         asked === undefined
@@ -889,9 +1044,15 @@ const make = Effect.gen(function* () {
         next = { ...next, status: "waiting" };
       } else if (next.status !== "running") {
         hold = null;
+        waitReported = undefined;
       }
       const checkIn =
-        heldNow && hold !== null && !hold.checkedIn && now >= hold.dueAt && next.pending === null;
+        heldNow &&
+        hold !== null &&
+        !hold.checkedIn &&
+        now >= hold.dueAt &&
+        next.pending === null &&
+        next.waitingOn === undefined;
       if (checkIn && hold !== null) hold = { ...hold, checkedIn: true };
       // A first look is only a baseline for a thread the Tot only asked to watch.
       const baseline =
@@ -901,11 +1062,44 @@ const make = Effect.gen(function* () {
         target !== undefined && previous?.runId !== next.runId
           ? sentRunBaseline(next.runId ?? target)
           : previous;
-      const event: TotWatchEvent | null = baseline
+      // Remote timeline items carry no retry attempts, so only silence counts as a stall here.
+      let stall: { readonly stall: RunStall; readonly lastText: string | null } | null = null;
+      if (next.status === "running" && next.runId !== null) {
+        const current: { readonly runId: string; readonly seenAt: number } =
+          running?.runId === next.runId ? running : { runId: next.runId, seenAt: now };
+        running = current;
+        if (next.pending === null && stallMs > 0) {
+          const page = Option.getOrUndefined(yield* remoteRead(20, 2_000));
+          const items = (page?.items ?? []).filter(
+            (item) => item.runId === next.runId && item.type !== "error",
+          );
+          // With nothing of this run in view, the quiet counts from when this follower saw it.
+          const lastAt =
+            items.length === 0
+              ? current.seenAt
+              : Math.max(...items.map((item) => Date.parse(item.updatedAt)));
+          const found = runStall({ lastAt, retries: [] }, now, stallMs);
+          if (found !== null && stallReportedFor !== lastAt) {
+            stallReportedFor = lastAt;
+            const last = items.at(-1);
+            stall = { stall: found, lastText: last?.text ?? last?.title ?? null };
+            if (page?.thread.blockedOnThreadWait === true) {
+              next = { ...next, waitingOn: "thread_wait" };
+            }
+          }
+        }
+      } else {
+        running = null;
+      }
+      const found: TotWatchEvent | null = baseline
         ? null
-        : checkIn
-          ? "still_working"
-          : watchTransition(prior, next);
+        : ((checkIn ? "still_working" : watchTransition(prior, next)) ??
+          (stall === null ? null : next.waitingOn === undefined ? "stalled" : "waiting"));
+      const event =
+        found === "waiting" && next.status === "waiting" && next.waitingOn === waitReported
+          ? null
+          : found;
+      if (event === "waiting" && next.status === "waiting") waitReported = next.waitingOn;
       previous = next;
       const delivers = deliversWatchReport({
         mode,
@@ -947,12 +1141,17 @@ const make = Effect.gen(function* () {
           }
         }
         // Only this run's words: a later run may be the newest thing in the thread.
-        const excerpt = formatWatchExcerpt(
-          lastItems?.findLast(
-            (item) =>
-              item.type === "assistant_message" && item.text !== null && item.runId === next.runId,
-          )?.text,
-        );
+        const excerpt =
+          event === "stalled"
+            ? formatWatchExcerpt(stall?.lastText, { maxChars: STALL_EXCERPT_MAX_CHARS })
+            : formatWatchExcerpt(
+                lastItems?.findLast(
+                  (item) =>
+                    item.type === "assistant_message" &&
+                    item.text !== null &&
+                    item.runId === next.runId,
+                )?.text,
+              );
         if (!personRun) {
           yield* enqueue(event, {
             totId,
@@ -960,6 +1159,8 @@ const make = Effect.gen(function* () {
             line: formatWatchLine(event, link, label, {
               excerpt,
               backgroundTasks: next.backgroundTasks,
+              ...(next.waitingOn === undefined ? {} : { waitingOn: next.waitingOn }),
+              ...(stall === null ? {} : { stall: stall.stall }),
             }),
             source,
             ...(event === "stopped" ? { stopped: source } : {}),
@@ -1044,6 +1245,24 @@ const make = Effect.gen(function* () {
     }
   });
 
+  /** Looks again at each run that went quiet or kept retrying past a Tot's stall time. */
+  const sweepStalls = Effect.gen(function* () {
+    if (activities.size === 0) return;
+    const now = yield* Clock.currentTimeMillis;
+    const globalMinutes = yield* stallMinutesSetting;
+    const all = yield* tots.list;
+    for (const [threadId, activity] of activities) {
+      if (seen.get(threadId)?.pending != null) continue;
+      const due = all.some(
+        (tot) =>
+          hearsWatchReports(tot, threadId) &&
+          !activity.alerted.has(tot.id) &&
+          runStall(activity, now, stallMsOf(tot, globalMinutes)) !== null,
+      );
+      if (due) yield* look(threadId);
+    }
+  });
+
   const batchWindowMs = settings.getSettings.pipe(
     Effect.map((current) => current.totReportBatchSeconds * 1_000),
     Effect.orElseSucceed(() => DEFAULT_TOT_REPORT_BATCH_SECONDS * 1_000),
@@ -1067,6 +1286,7 @@ const make = Effect.gen(function* () {
 
   const send = Effect.fnUntraced(function* (all: boolean) {
     yield* sweepHolds;
+    yield* sweepStalls;
     const batch = yield* takeDue(all);
     const groups = new Map<
       string,
@@ -1127,6 +1347,15 @@ const make = Effect.gen(function* () {
       Effect.forkScoped,
     );
     yield* threads.streamDomainEvents.pipe(
+      Stream.tap((event) =>
+        Effect.gen(function* () {
+          const activity = activities.get(event.threadId);
+          const change = activity === undefined ? null : runActivityOf(event);
+          if (activity === undefined || change === null) return;
+          const now = yield* Clock.currentTimeMillis;
+          activities.set(event.threadId, noteRunActivity(activity, now, change));
+        }),
+      ),
       // While a hold is open, any task list change can be the end of work it counts.
       Stream.filter(
         (event) =>

@@ -437,6 +437,7 @@ const make = Effect.gen(function* () {
     const {
       usageLimitFallbackModels: storedFallbacks,
       idleCompaction: storedIdleCompaction,
+      stallMinutes: storedStallMinutes,
       ...rest
     } = tot;
     const fallbacks =
@@ -447,10 +448,13 @@ const make = Effect.gen(function* () {
       input.idleCompaction === undefined
         ? storedIdleCompaction
         : (input.idleCompaction ?? undefined);
+    const stallMinutes =
+      input.stallMinutes === undefined ? storedStallMinutes : (input.stallMinutes ?? undefined);
     const base: Tot = {
       ...rest,
       ...(fallbacks === undefined ? {} : { usageLimitFallbackModels: fallbacks }),
       ...(idleCompaction === undefined ? {} : { idleCompaction }),
+      ...(stallMinutes === undefined ? {} : { stallMinutes }),
       ...(input.name === undefined ? {} : { name: input.name }),
       ...(input.avatar === undefined ? {} : { avatar: input.avatar }),
       ...(input.scope === undefined ? {} : { scope: input.scope }),
