@@ -15,6 +15,11 @@ import * as Settings from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { readCaller, unavailable } from "../../threadAccess.ts";
+import {
+  deletedThreadGroups,
+  restoreOpFromHistory,
+  type ThreadGroupHistory,
+} from "../../../threadGroupHistory.ts";
 import { EnvironmentToolkit } from "./tools.ts";
 
 export function preferences(settings: ServerSettings) {
@@ -38,10 +43,11 @@ export function preferences(settings: ServerSettings) {
     },
   };
 }
-function threadGroups(state: ThreadGroupsState) {
+function threadGroups(state: ThreadGroupsState, history: ThreadGroupHistory) {
   const known = new Set(state.groups.map((group) => group.id));
   return {
     groups: state.groups,
+    deletedGroups: deletedThreadGroups(history, state),
     projects: Object.entries(state.projectDefaults).flatMap(([projectId, entries]) => {
       const groupId = entries.at(-1)?.groupId;
       return groupId != null && known.has(groupId)
@@ -98,7 +104,7 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
     Effect.gen(function* () {
       const { settings } = yield* access;
       const current = yield* settings.getSettings.pipe(Effect.mapError(unavailable));
-      return threadGroups(current.threadGroups);
+      return threadGroups(current.threadGroups, yield* settings.readThreadGroupHistory);
     }),
   ),
   t3_thread_groups_update: McpToolAccess.writesEnvironment(({ ops }, check) =>
@@ -120,8 +126,19 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
         // The settings patch silently drops ops naming a missing group, so check them first.
         const groups = new Set(current.threadGroups.groups.map((group) => group.id));
         const since = DateTime.formatIso(yield* DateTime.now);
+        const history = yield* settings.readThreadGroupHistory;
         const threadGroupOps: ThreadGroupOp[] = [];
         for (const op of ops) {
+          if (op.type === "restoreGroup") {
+            if (groups.has(op.groupId))
+              return yield* invalid(`Thread group ${op.groupId} already exists.`);
+            const restore = restoreOpFromHistory(history, op.groupId);
+            if (restore === null)
+              return yield* invalid(`No backup holds a thread group with id ${op.groupId}.`);
+            groups.add(op.groupId);
+            threadGroupOps.push(restore);
+            continue;
+          }
           if (op.type === "createGroup") {
             const { type: _type, ...details } = op;
             const id = yield* crypto.uuidV4();
@@ -153,7 +170,7 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
         const next = yield* settings
           .updateSettings({ threadGroupOps })
           .pipe(Effect.mapError(unavailable));
-        return threadGroups(next.threadGroups);
+        return threadGroups(next.threadGroups, yield* settings.readThreadGroupHistory);
       });
       return yield* scope.thread === undefined
         ? update

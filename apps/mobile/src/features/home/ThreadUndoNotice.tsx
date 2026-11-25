@@ -89,7 +89,9 @@ export function ThreadUndoNotice(props: { readonly visible: boolean }) {
             ? gt("Settled thread")
             : notice.action === "Snoozed"
               ? gt("Snoozed thread")
-              : gt("Unpinned thread")
+              : notice.action === "DeletedGroup"
+                ? gt("Deleted group")
+                : gt("Unpinned thread")
         }
         action={{
           label: gt("Undo"),

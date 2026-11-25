@@ -1,7 +1,11 @@
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
-import { projectColorHex } from "@t3tools/client-runtime/thread-groups";
+import {
+  environmentsWithThreadGroup,
+  projectColorHex,
+  threadGroupProjectCount,
+} from "@t3tools/client-runtime/thread-groups";
 import {
   CircleAlertIcon,
   CircleCheckIcon,
@@ -14,7 +18,14 @@ import {
 import { useState, type DragEvent, type MouseEvent } from "react";
 
 import { readLocalApi } from "../../localApi";
-import { threadGroupActions, type ThreadGroup } from "../../threadGroupsStore";
+import { readPrimaryEnvironmentId, readEnvironment } from "../../state/environments";
+import {
+  readThreadGroupsView,
+  threadGroupActions,
+  type ThreadGroup,
+} from "../../threadGroupsStore";
+import { requestThreadGroupDelete } from "../ThreadGroupDeleteDialog";
+import { toastManager } from "../ui/toast";
 import { cn } from "../../lib/utils";
 import { projectIconColorStyle } from "../../projectIconColors";
 import { useUiStateStore } from "../../uiStateStore";
@@ -63,6 +74,7 @@ const GROUP_STATUS: Record<
 async function openThreadGroupMenu(
   group: ThreadGroup,
   visibleGroupIds: ReadonlyArray<string>,
+  threadCount: number,
   position: { x: number; y: number },
 ) {
   const api = readLocalApi();
@@ -104,23 +116,46 @@ async function openThreadGroupMenu(
   } else if (clicked.value === "move-down" && nextId !== undefined) {
     threadGroupActions.move(group.id, nextId, "after");
   } else if (clicked.value === "delete") {
-    const confirmed = await settlePromise(() =>
-      api.dialogs.confirm(
-        [
-          `Delete group "${group.name}"?`,
-          "Its threads and projects stay; they become ungrouped.",
-        ].join("\n"),
-        { variant: "destructive" },
-      ),
-    );
-    if (confirmed._tag === "Failure" || !confirmed.value) return;
-    threadGroupActions.delete(group.id);
+    await confirmAndDeleteThreadGroup(group, threadCount);
   }
+}
+
+/** Asks which machines to delete the group from, then offers to undo it. */
+export async function confirmAndDeleteThreadGroup(group: ThreadGroup, threadCount: number) {
+  const { byEnvironment } = readThreadGroupsView();
+  const primaryEnvironmentId = readPrimaryEnvironmentId();
+  const holders = environmentsWithThreadGroup(byEnvironment, group.id).toSorted(
+    (left, right) => Number(right === primaryEnvironmentId) - Number(left === primaryEnvironmentId),
+  );
+  if (holders.length === 0) return;
+  const environmentIds = await requestThreadGroupDelete({
+    groupName: group.name,
+    projectCount: threadGroupProjectCount(byEnvironment, group.id),
+    threadCount,
+    machines: holders.map((environmentId) => ({
+      environmentId,
+      label: readEnvironment(environmentId)?.label ?? environmentId,
+    })),
+  });
+  if (environmentIds === null) return;
+  const restores = threadGroupActions.delete(group.id, environmentIds);
+  if (restores.length === 0) return;
+  const toastId = toastManager.add({
+    type: "info",
+    title: `Deleted group "${group.name}"`,
+    actionProps: {
+      children: "Undo",
+      onClick: () => {
+        toastManager.close(toastId);
+        threadGroupActions.restore(restores);
+      },
+    },
+  });
 }
 
 export function SidebarThreadGroupHeader(props: {
   group: ThreadGroup;
-  /** Move up/down step over groups the sidebar is hiding. */
+  /** The sidebar's group order, for Move up/down. */
   visibleGroupIds: ReadonlyArray<string>;
   count: number;
   expanded: boolean;
@@ -153,8 +188,11 @@ export function SidebarThreadGroupHeader(props: {
       data-testid="sidebar-thread-group-header"
       draggable
       style={projectIconColorStyle(props.group.color)}
+      data-empty={props.count === 0 ? true : undefined}
       className={cn(
         "relative isolate mx-0.5 h-8 list-none",
+        // An empty group keeps a dimmed header so its menu stays reachable.
+        props.count === 0 && "h-6 opacity-60",
         colorClassName,
         dropEdge === "before" &&
           "before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:rounded-full before:bg-ring",
@@ -181,7 +219,7 @@ export function SidebarThreadGroupHeader(props: {
       }}
       onContextMenu={(event: MouseEvent) => {
         event.preventDefault();
-        void openThreadGroupMenu(props.group, props.visibleGroupIds, {
+        void openThreadGroupMenu(props.group, props.visibleGroupIds, props.count, {
           x: event.clientX,
           y: event.clientY,
         });

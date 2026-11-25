@@ -53,6 +53,7 @@ import * as ProjectStore from "./ProjectStore.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ThreadSettlementService from "./ThreadSettlementService.ts";
+import { EMPTY_THREAD_GROUP_HISTORY } from "../threadGroupHistory.ts";
 
 const NOW_MS = Date.parse("2026-06-10T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -686,6 +687,7 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
     updateTots: () => Effect.die("Unexpected Tot update"),
     updateGroupChats: () => Effect.die("Unexpected group chat update"),
     updateProviderInstance: () => Effect.die("Unexpected provider mutation"),
+    readThreadGroupHistory: Effect.succeed(EMPTY_THREAD_GROUP_HISTORY),
     withSettingsSnapshot: (use) => Ref.get(settings).pipe(Effect.flatMap(use)),
     streamChanges: Stream.fromPubSub(settingsChanges),
     subscribeChanges: PubSub.subscribe(settingsChanges).pipe(
