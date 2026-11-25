@@ -82,6 +82,9 @@ import * as EnvironmentHandlers from "./toolkits/environment/handlers.ts";
 import { ThemeToolkit } from "./toolkits/theme/tools.ts";
 import * as ThemeHandlers from "./toolkits/theme/handlers.ts";
 import { TotToolkit } from "./toolkits/tots/tools.ts";
+import * as TotService from "../tots/TotService.ts";
+import * as AvatarLibraryHandlers from "./toolkits/avatars/handlers.ts";
+import { AvatarLibraryTool, AvatarLibraryToolkit } from "./toolkits/avatars/tools.ts";
 import * as TotHandlers from "./toolkits/tots/handlers.ts";
 import { ProjectToolkit } from "./toolkits/project/tools.ts";
 import * as ProjectHandlers from "./toolkits/project/handlers.ts";
@@ -846,7 +849,8 @@ const registerPreviewSnapshot = Effect.fn("McpHttpServer.registerPreviewSnapshot
 });
 
 interface ImageToolResult {
-  readonly screenshot: {
+  /** Absent for a call that drew nothing, such as a listing: the result is then text only. */
+  readonly screenshot?: {
     readonly mimeType: "image/png";
     readonly data: string;
     readonly width: number;
@@ -951,7 +955,10 @@ const registerImageTool = Effect.fn("McpHttpServer.registerImageTool")(function*
             onFailure: imageToolFailure(tool.name, operation, failureText),
             onSuccess: ({ encodedResult }) => {
               const { screenshot, ...rest } = encodedResult as ImageToolResult;
-              const metadata = {
+              const metadata =
+                screenshot === undefined
+                  ? rest
+                  : {
                 ...rest,
                 screenshot: {
                   mimeType: screenshot.mimeType,
@@ -965,11 +972,15 @@ const registerImageTool = Effect.fn("McpHttpServer.registerImageTool")(function*
                   structuredContent: metadata,
                   content: [
                     { type: "text", text: JSON.stringify(metadata) },
+                    ...(screenshot === undefined
+                      ? []
+                      : [
                     {
                       type: "image" as const,
                       data: new Uint8Array(Buffer.from(screenshot.data, "base64")),
                       mimeType: screenshot.mimeType,
                     },
+                        ]),
                   ],
                 }),
               );
@@ -1033,6 +1044,31 @@ const registerHtmlPreview = Effect.fn("McpHttpServer.registerHtmlPreview")(funct
       isOrchestratorMcpFailure(error) || AiError.isAiError(error)
         ? error.message
         : "HTML preview failed.",
+  );
+});
+
+const registerAvatarLibrary = Effect.fn("McpHttpServer.registerAvatarLibrary")(function* () {
+  const htmlRender = yield* HtmlRender.HtmlRender;
+  const threads = yield* ThreadManagementService.ThreadManagementService;
+  const tots = yield* TotService.TotService;
+  const built = yield* decodeAsAdvertised(AvatarLibraryToolkit);
+  yield* registerImageTool(
+    AvatarLibraryTool,
+    (payload) =>
+      built
+        .handle("t3_avatar_library", payload)
+        .pipe(Stream.unwrap, Stream.run(Sink.last()), Effect.flatMap(Effect.fromOption)),
+    (effect) =>
+      effect.pipe(
+        Effect.provideService(HtmlRender.HtmlRender, htmlRender),
+        Effect.provideService(ThreadManagementService.ThreadManagementService, threads),
+        Effect.provideService(TotService.TotService, tots),
+      ),
+    "avatar_library",
+    (error) =>
+      isOrchestratorMcpFailure(error) || AiError.isAiError(error)
+        ? error.message
+        : "The avatar library failed.",
   );
 });
 
@@ -1481,6 +1517,12 @@ export const layerHtmlToolkit = Layer.mergeAll(
   imageToolRegistration(registerHtmlPreview(), HtmlHandlers.layerPreview),
 ).pipe(Layer.provide(HtmlRender.layer));
 
+// Draws its previews with the same HtmlRender layer, which Effect shares when built together.
+const layerAvatarLibraryToolkit = imageToolRegistration(
+  registerAvatarLibrary(),
+  AvatarLibraryHandlers.layer,
+).pipe(Layer.provide(HtmlRender.layer));
+
 const layerPreviewStandardToolkitRegistration = toolkitRegistration(
   PreviewStandardToolkit,
   PreviewHandlers.layerStandard,
@@ -1614,6 +1656,7 @@ export const layerTools = Layer.mergeAll(
   layerIssuesToolkit,
   layerDeviceToolkit,
   layerHtmlToolkit,
+  layerAvatarLibraryToolkit,
   layerMessageToolkit,
 );
 

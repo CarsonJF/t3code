@@ -11,6 +11,7 @@ import {
   type TotSkinSeries,
 } from "@t3tools/client-runtime/tots/skins";
 import {
+  TOT_BUILT_IN_THEMES,
   TOT_OPEN_BOT_MAX_DEPTH,
   TOT_SHAPES,
   type TotAccessory,
@@ -24,6 +25,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
+import { useAvatarLibrary } from "./avatarLibraryStore";
 import { DEFAULT_OPEN_BOT, useOpenBotKit } from "./OpenBotFace";
 import { loadBoopFace, TotAvatar as TotFace } from "./TotAvatar";
 
@@ -83,6 +85,11 @@ export function TotFaceEditor(props: {
   const accessories = value.accessories ?? [];
   const look = totFaceLookOf(value);
   const openBot = value.style === "open-bot" ? (value.openBot ?? DEFAULT_OPEN_BOT) : null;
+  const library = useAvatarLibrary();
+  const themes = [
+    ...TOT_BUILT_IN_THEMES.map((theme) => ({ theme, custom: false })),
+    ...library.themes.map((theme) => ({ theme, custom: true })),
+  ];
   const kit = useOpenBotKit(openBot !== null);
   const eyeColor = (openBot?.eyeColor ?? OPEN_BOT_EYE_COLORS[0]!.color).toLowerCase();
   const [accessoryChoices, setAccessoryChoices] =
@@ -165,6 +172,21 @@ export function TotFaceEditor(props: {
         >
           Open Bot
         </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5" aria-label="Face themes" role="group">
+        {themes.map(({ theme, custom }) => (
+          <button
+            key={theme.id}
+            type="button"
+            aria-label={`Face theme ${theme.name}${custom ? " (custom)" : ""}`}
+            className="flex items-center gap-1 rounded-md border border-border py-0.5 pr-2 pl-0.5 text-muted-foreground text-xs hover:text-foreground data-[custom-theme]:border-dashed"
+            data-custom-theme={custom ? "" : undefined}
+            onClick={() => props.onChange(theme.avatar)}
+          >
+            <TotFace avatar={theme.avatar} state="idle" animation="still" size={20} />
+            {theme.name}
+          </button>
+        ))}
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         {COLOR_CHOICES.map((choice) => (
@@ -267,13 +289,17 @@ export function TotFaceEditor(props: {
             aria-label="Figure"
             role="group"
           >
-            {(kit?.figures ?? []).map((figure) => (
+            {[
+              ...(kit?.figures ?? []).map((figure) => ({ figure, custom: false })),
+              ...library.figures.map((figure) => ({ figure, custom: true })),
+            ].map(({ figure, custom }) => (
               <button
                 key={figure.id}
                 type="button"
-                aria-label={`Figure ${figure.name}`}
+                aria-label={`Figure ${figure.name}${custom ? " (custom)" : ""}`}
                 aria-pressed={openBot.figure === figure.id}
-                className="rounded-md border border-transparent p-0.5 aria-pressed:border-ring"
+                data-custom-figure={custom ? "" : undefined}
+                className="relative rounded-md border border-transparent p-0.5 aria-pressed:border-ring data-[custom-figure]:border-dashed data-[custom-figure]:border-muted-foreground/40 data-[custom-figure]:aria-pressed:border-ring"
                 onClick={() => props.onChange(openBotFace(openBotWith({ figure: figure.id })))}
               >
                 <TotFace
