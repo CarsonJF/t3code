@@ -20,6 +20,7 @@ import * as ServerConfig from "./config.ts";
 import * as SqlitePersistence from "./persistence/Sqlite.ts";
 import * as ManagedPolicy from "./policy/ManagedPolicy.ts";
 import * as ServerSettingsModule from "./serverSettings.ts";
+import { restoreOpFromHistory, THREAD_GROUP_HISTORY_LIMIT } from "./threadGroupHistory.ts";
 
 const decodeServerSettingsJson = Schema.decodeUnknownEffect(Schema.fromJsonString(ServerSettings));
 
@@ -126,6 +127,82 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server thread gr
     }).pipe(Effect.provide(layerServerSettings())),
   );
 
+  it.effect("backs up the groups before each change and restores a deleted one", () =>
+    Effect.gen(function* () {
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      yield* service.updateSettings({
+        threadGroupOps: [
+          { type: "createGroup", group: group("games") },
+          { type: "createGroup", group: group("work") },
+          {
+            type: "setProjectDefault",
+            projectIds: [PROJECT],
+            groupId: "games",
+            since: "2026-10-26T10:00:00.000Z",
+          },
+        ],
+      });
+      const before = (yield* service.getSettings).threadGroups;
+      yield* service.updateSettings({
+        threadGroupOps: [{ type: "deleteGroup", groupId: "games" }],
+      });
+      // Enough later changes to rotate the delete out of the recent states.
+      for (let index = 0; index < THREAD_GROUP_HISTORY_LIMIT + 5; index++) {
+        yield* service.updateSettings({
+          threadGroupOps: [
+            { type: "setThreadGroup", threadId: ThreadId.make(`thread-${index}`), groupId: "work" },
+          ],
+        });
+      }
+      // A patch that leaves the groups alone adds nothing.
+      yield* service.updateSettings({ enableAgentDeviceAccess: true });
+
+      const history = yield* service.readThreadGroupHistory;
+      assert.equal(history.recent.length, THREAD_GROUP_HISTORY_LIMIT);
+      assert.deepEqual(
+        history.beforeRemoval.map((entry) => entry.threadGroups),
+        [before],
+      );
+      assert.isFalse(
+        history.recent.some((entry) => entry.threadGroups.groups.some((g) => g.id === "games")),
+      );
+
+      const restore = restoreOpFromHistory(history, "games");
+      assert.isNotNull(restore);
+      const { threadGroups } = yield* service.updateSettings({ threadGroupOps: [restore!] });
+      assert.deepEqual(
+        threadGroups.groups.map((g) => g.id),
+        ["games", "work"],
+      );
+      assert.deepEqual(threadGroups.projectDefaults[PROJECT], before.projectDefaults[PROJECT]);
+    }).pipe(Effect.provide(layerServerSettings())),
+  );
+
+  it.effect("keeps groups through the legacy provider migration at startup", () =>
+    Effect.gen(function* () {
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const threadGroups = {
+        groups: [group("games"), group("2026-11")],
+        projectDefaults: { [PROJECT]: [{ groupId: "games", since: "2026-10-26T10:00:00.000Z" }] },
+        threadOverrides: { [ThreadId.make("a")]: "2026-11" },
+      };
+      yield* fs.writeFileString(
+        config.settingsPath,
+        JSON.stringify({
+          providers: { opencode: { serverUrl: "http://127.0.0.1:4096" } },
+          threadGroups,
+        }),
+      );
+
+      assert.deepEqual((yield* service.getSettings).threadGroups, threadGroups);
+      const saved = yield* decodeServerSettingsJson(yield* fs.readFileString(config.settingsPath));
+      assert.notProperty(JSON.parse(yield* fs.readFileString(config.settingsPath)), "providers");
+      assert.deepEqual(saved.threadGroups, threadGroups);
+    }).pipe(Effect.provide(layerServerSettings())),
+  );
+
   it("requires settings:write to change groups", () => {
     assert.deepEqual(
       requiredScopesForServerSettingsPatch({
@@ -135,3 +212,35 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server thread gr
     );
   });
 });
+
+it.live("keeps the groups an outside rewrite of settings.json replaced", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      yield* service.start;
+      yield* service.updateSettings({
+        threadGroupOps: [{ type: "createGroup", group: group("games") }],
+      });
+      const changes = yield* service.subscribeChanges;
+
+      yield* fs.writeFileString(config.settingsPath, "{}");
+      // The watch may first echo the service's own write.
+      yield* changes.pipe(
+        Stream.filter((settings) => settings.threadGroups.groups.length === 0),
+        Stream.runHead,
+      );
+
+      assert.deepEqual((yield* service.getSettings).threadGroups.groups, []);
+      const history = yield* service.readThreadGroupHistory;
+      assert.deepEqual(history.beforeRemoval.at(-1)?.threadGroups.groups, [group("games")]);
+    }),
+  ).pipe(
+    Effect.provide(
+      layerServerSettings().pipe(
+        Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+      ),
+    ),
+  ),
+);
