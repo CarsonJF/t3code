@@ -252,6 +252,7 @@ interface ScheduledTaskRow {
   readonly thread_mode: string;
   readonly workspace_strategy_json: string;
   readonly model_selection_json: string;
+  readonly model_pinned: number;
   readonly runtime_mode: string;
   readonly interaction_mode: string;
   readonly created_by: string;
@@ -444,6 +445,7 @@ const decodeRow = Effect.fnUntraced(
       threadMode: row.thread_mode,
       workspaceStrategy,
       modelSelection,
+      ...(row.model_pinned === 1 ? { modelPinned: true } : {}),
       runtimeMode: row.runtime_mode,
       interactionMode: row.interaction_mode,
       createdBy: row.created_by,
@@ -574,6 +576,7 @@ export const layer = Layer.effect(
         thread_mode,
         workspace_strategy_json,
         model_selection_json,
+        model_pinned,
         runtime_mode,
         interaction_mode,
         created_by,
@@ -617,6 +620,7 @@ export const layer = Layer.effect(
         thread_mode,
         workspace_strategy_json,
         model_selection_json,
+        model_pinned,
         runtime_mode,
         interaction_mode,
         created_by,
@@ -698,6 +702,7 @@ export const layer = Layer.effect(
           thread_mode,
           workspace_strategy_json,
           model_selection_json,
+          model_pinned,
           runtime_mode,
           interaction_mode,
           created_by,
@@ -724,6 +729,7 @@ export const layer = Layer.effect(
           ${scheduledTaskThreadMode(task)},
           ${JSON.stringify(task.workspaceStrategy)},
           ${JSON.stringify(task.modelSelection)},
+          ${task.modelPinned === true ? 1 : 0},
           ${task.runtimeMode},
           ${task.interactionMode},
           ${task.createdBy},
@@ -757,6 +763,7 @@ export const layer = Layer.effect(
           thread_mode = excluded.thread_mode,
           workspace_strategy_json = excluded.workspace_strategy_json,
           model_selection_json = excluded.model_selection_json,
+          model_pinned = excluded.model_pinned,
           runtime_mode = excluded.runtime_mode,
           interaction_mode = excluded.interaction_mode,
           creation_source = excluded.creation_source,
@@ -1005,15 +1012,16 @@ export const layer = Layer.effect(
         if (retried !== null)
           outcome = (yield* awaitRunOutcome(thread, retried.messageId)) ?? outcome;
       }
-      // A bound run uses its thread's model, not the stored one, so keep the stored one true.
-      if (scheduledTaskThreadMode(task) !== "new_thread") {
+      // An unpinned bound run uses its thread's model, not the stored one, so keep the stored one
+      // true. A pinned task's stored model is what its runs send, so it is never overwritten.
+      if (scheduledTaskThreadMode(task) !== "new_thread" && task.modelPinned !== true) {
         yield* Effect.gen(function* () {
           const current = yield* threadManagement.getThreadShell(threadId);
           if (current === null) return;
           const json = yield* encodeModelSelectionJson(current.modelSelection);
           yield* sql`
             UPDATE scheduled_tasks SET model_selection_json = ${json}
-            WHERE task_id = ${taskId} AND thread_id = ${threadId}
+            WHERE task_id = ${taskId} AND thread_id = ${threadId} AND model_pinned = 0
               AND model_selection_json IS NOT ${json}
           `;
         }).pipe(
@@ -1185,6 +1193,7 @@ export const layer = Layer.effect(
               text: prompt,
               attachments: [],
               mode: "queue",
+              ...(active.modelPinned === true ? { modelSelection: active.modelSelection } : {}),
               ...(threadMode === "fresh_session" ? { freshContext: true } : {}),
               createdBy: active.createdBy,
               creationSource: active.creationSource,
@@ -1236,7 +1245,7 @@ export const layer = Layer.effect(
               )
             : yield* Effect.exit(
                 // The stored selection only seeds fresh threads. A bound run
-                // follows the thread's current provider, so it passes none.
+                // follows the thread's current provider unless the task pins its model.
                 sendBound(ThreadId.make(active.threadId), active.projectId, 2).pipe(
                   Effect.as(ThreadId.make(active.threadId)),
                 ),
@@ -1610,8 +1619,8 @@ export const layer = Layer.effect(
         keptThreadId === existingTask.threadId;
       const threadId = threadMode === "new_thread" || movedOffThread ? null : keptThreadId;
       // An unchanged destination is not rechecked, so a task on an archived thread stays editable.
-      // A bound run uses its thread's model, so a new binding stores that one rather than a
-      // selection it ignores; each run refreshes it after that.
+      // An unpinned bound run uses its thread's model, so a new binding stores that one rather
+      // than a selection it ignores; each run refreshes it after that. A pin keeps the input's.
       const boundModel =
         threadId !== null && threadId !== existingTask?.threadId
           ? (yield* requireDestinationThread(threadId, input.projectId, id)).modelSelection
@@ -1760,6 +1769,7 @@ export const layer = Layer.effect(
       if (!scheduleUnchanged)
         yield* requireFutureOnce({ enabled: input.enabled, schedule }, now, id);
       const createdByTotId = existingTask?.createdByTotId ?? input.createdByTotId;
+      const modelPinned = input.modelPinned ?? existingTask?.modelPinned ?? false;
       const task: ScheduledTask = {
         id,
         title: input.title,
@@ -1770,7 +1780,8 @@ export const layer = Layer.effect(
         threadId,
         threadMode,
         workspaceStrategy,
-        modelSelection: boundModel ?? input.modelSelection,
+        modelSelection: modelPinned ? input.modelSelection : (boundModel ?? input.modelSelection),
+        ...(modelPinned ? { modelPinned: true } : {}),
         runtimeMode: input.runtimeMode,
         interactionMode: input.interactionMode,
         createdBy: existingTask?.createdBy ?? input.createdBy ?? "user",

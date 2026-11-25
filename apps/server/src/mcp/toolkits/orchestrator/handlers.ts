@@ -22,6 +22,30 @@ import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 import * as ThreadMetadataMcpService from "../../ThreadMetadataMcpService.ts";
 
+/** A Tot here and what it owns, so its default task listing covers its projects. */
+const scheduledTaskListTot = Effect.fnUntraced(function* (
+  scope: McpInvocationContext.McpInvocationScope,
+) {
+  const caller = yield* readTotCaller();
+  if (Option.isNone(caller) || caller.value.via !== "local") return undefined;
+  const tot = (yield* (yield* TotService.TotService).list).find(
+    (candidate) => candidate.id === caller.value.totId,
+  );
+  if (tot === undefined) return undefined;
+  return {
+    totId: tot.id,
+    projects:
+      tot.scope === "all"
+        ? ("all" as const)
+        : new Set(
+            tot.scope.projects
+              .filter((project) => project.environmentId === scope.environmentId)
+              .map((project) => project.projectId),
+          ),
+    hasGroups: tot.scope !== "all" && tot.scope.groups.length > 0,
+  } satisfies OrchestratorMcpService.ScheduledTaskListTot;
+});
+
 const handlers = {
   orchestrator_capabilities: McpToolAccess.reads((input) =>
     Effect.gen(function* () {
@@ -121,7 +145,16 @@ const handlers = {
       { refused: "schedule tasks in this environment" },
     ),
     McpToolAccess.writes(
-      ({ scheduledTaskId, prompt, title, schedule, enabled, freshSession, bindToCurrentThread }) =>
+      ({
+        scheduledTaskId,
+        prompt,
+        title,
+        schedule,
+        enabled,
+        freshSession,
+        bindToCurrentThread,
+        modelSelection,
+      }) =>
         Effect.gen(function* () {
           if (scheduledTaskId === undefined) return yield* Effect.die("unreachable");
           const scope = yield* McpInvocationContext.McpInvocationContext;
@@ -134,6 +167,7 @@ const handlers = {
             enabled,
             freshSession,
             bindToCurrentThread,
+            modelSelection,
           });
         }),
     ),
@@ -142,7 +176,7 @@ const handlers = {
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const service = yield* OrchestratorMcpService.OrchestratorMcpService;
-      return yield* service.listScheduledTasks(scope, input);
+      return yield* service.listScheduledTasks(scope, input, yield* scheduledTaskListTot(scope));
     }),
   ),
   delete_scheduled_task: McpToolAccess.writes((input) =>
