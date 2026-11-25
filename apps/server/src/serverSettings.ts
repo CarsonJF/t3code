@@ -62,6 +62,7 @@ import {
   appendThreadGroupHistory,
   EMPTY_THREAD_GROUP_HISTORY,
   removedThreadGroups,
+  sameThreadGroups,
   ThreadGroupHistory,
 } from "./threadGroupHistory.ts";
 import { watchDirectoryReplacements } from "./watchDirectoryReplacements.ts";
@@ -797,7 +798,7 @@ const make = Effect.gen(function* () {
       next: ServerSettings["threadGroups"],
       source: "update" | "file",
     ) {
-      if (JSON.stringify(previous) === JSON.stringify(next)) return;
+      if (sameThreadGroups(previous, next)) return;
       const removed = removedThreadGroups(previous, next);
       if (removed.length > 0) {
         yield* Effect.logWarning("thread groups removed", {

@@ -30,13 +30,16 @@ export const EMPTY_THREAD_GROUP_HISTORY: ThreadGroupHistory = { recent: [], befo
 export const removedThreadGroups = (previous: ThreadGroupsState, next: ThreadGroupsState) =>
   previous.groups.filter((group) => !next.groups.some((kept) => kept.id === group.id));
 
+export const sameThreadGroups = (left: ThreadGroupsState, right: ThreadGroupsState) =>
+  JSON.stringify(left) === JSON.stringify(right);
+
 export function appendThreadGroupHistory(
   history: ThreadGroupHistory,
   previous: ThreadGroupsState,
   next: ThreadGroupsState,
   savedAt: string,
 ): ThreadGroupHistory {
-  if (JSON.stringify(previous) === JSON.stringify(next)) return history;
+  if (sameThreadGroups(previous, next)) return history;
   const entry = { savedAt, threadGroups: previous };
   return {
     recent: [...history.recent, entry].slice(-THREAD_GROUP_HISTORY_LIMIT),
