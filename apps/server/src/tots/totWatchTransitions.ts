@@ -15,7 +15,20 @@ export interface WatchedThreadState {
   readonly backgroundTasks: number;
   /** A stopped run a restart may still continue, so it has not really ended. */
   readonly restartPending: boolean;
+  /** What a held or blocked run waits on outside itself; absent when nothing external is known. */
+  readonly waitingOn?: TotWaitReason;
 }
+
+/** Something outside the run that it waits on, from what the server already tracks. */
+export type TotWaitReason =
+  | "checks"
+  | "review"
+  | "deploy"
+  | "approval"
+  | "background_task"
+  | "thread_wait";
+
+export type TotStallKind = "silent" | "retrying";
 
 export type TotWatchEvent =
   | "completed"
@@ -25,12 +38,16 @@ export type TotWatchEvent =
   | "ended_unseen"
   | "question"
   | "approval"
-  | "ended";
+  | "ended"
+  | "waiting"
+  | "stalled";
 
 export interface TotWatchLineDetail {
   readonly backgroundTasks?: number;
   readonly stoppedBy?: string | null;
   readonly excerpt?: TotWatchExcerpt | null;
+  readonly waitingOn?: TotWaitReason;
+  readonly stall?: RunStall;
 }
 
 export interface TotWatchExcerpt {
@@ -108,12 +125,121 @@ export function watchTransition(
   if (next.status === "completed" && (prior.status !== "completed" || !sameRun)) {
     return "completed";
   }
+  if (
+    next.status === "waiting" &&
+    next.waitingOn !== undefined &&
+    (prior.waitingOn !== next.waitingOn || !sameRun)
+  ) {
+    return "waiting";
+  }
   return null;
 }
 
 /** Routine news waits to share a wake; anything else reaches the Tot at once. */
 export const isRoutineWatchEvent = (event: TotWatchEvent) =>
-  event === "completed" || event === "still_working";
+  event === "completed" || event === "still_working" || event === "waiting";
+
+const DEPLOY_PATTERN = /\bdeploy/iu;
+
+/**
+ * What a turn that ended with live work waits on. Only work the agent resumes on counts: a
+ * subagent, or a command or monitor it marked awaited. A dev server left running is not a wait.
+ */
+export function waitReasonOf(
+  tasks: ReadonlyArray<{
+    readonly taskId: string;
+    readonly kind: string;
+    readonly awaited?: boolean | undefined;
+    readonly description?: string | undefined;
+    readonly command?: string | undefined;
+  }>,
+  /** The watched pull requests' own state, when known; a remote peer does not send it. */
+  pullRequests?: ReadonlyArray<{ readonly checksPending?: boolean; readonly approval: boolean }>,
+): TotWaitReason | undefined {
+  const awaited = tasks.filter((task) => task.awaited === true || task.kind === "subagent");
+  if (awaited.length === 0) return undefined;
+  if (awaited.some(isPullRequestWatchTask)) {
+    if (pullRequests?.some((pr) => pr.approval) === true) return "approval";
+    // A watch holds on its own only while checks run; otherwise it was told to hold until merge.
+    if (pullRequests !== undefined && pullRequests.every((pr) => pr.checksPending === false)) {
+      return "review";
+    }
+    return "checks";
+  }
+  if (
+    awaited.some((task) => DEPLOY_PATTERN.test(`${task.description ?? ""} ${task.command ?? ""}`))
+  ) {
+    return "deploy";
+  }
+  return "background_task";
+}
+
+/** How many retry or rate-limit errors inside one stall window count as a stall. */
+const STALL_RETRY_LIMIT = 3;
+const MAX_REMEMBERED_RETRIES = 20;
+
+/** What a running run last did, as the watcher saw it arrive. */
+export interface RunActivity {
+  readonly runId: string;
+  /** When the run last did something that was not a retry. */
+  readonly lastAt: number;
+  readonly lastText: string | null;
+  /** Retry and rate-limit errors since then, each attempt once. */
+  readonly retries: ReadonlyArray<{ readonly key: string; readonly at: number }>;
+  /** Tots told about the current stall; new activity starts a new episode. */
+  readonly alerted: ReadonlySet<string>;
+}
+
+export const startRunActivity = (runId: string, now: number): RunActivity => ({
+  runId,
+  lastAt: now,
+  lastText: null,
+  retries: [],
+  alerted: new Set(),
+});
+
+export function noteRunActivity(
+  previous: RunActivity,
+  now: number,
+  change: { readonly retryKey: string | null; readonly text: string | null },
+): RunActivity {
+  if (change.retryKey !== null) {
+    const key = change.retryKey;
+    if (previous.retries.some((retry) => retry.key === key)) return previous;
+    return {
+      ...previous,
+      retries: [...previous.retries, { key, at: now }].slice(-MAX_REMEMBERED_RETRIES),
+    };
+  }
+  return {
+    runId: previous.runId,
+    lastAt: now,
+    lastText: change.text ?? previous.lastText,
+    retries: [],
+    alerted: new Set(),
+  };
+}
+
+export interface RunStall {
+  readonly kind: TotStallKind;
+  /** Since the run last did something other than retry. */
+  readonly quietMs: number;
+  readonly retries: number;
+}
+
+/** Whether a run has stalled for a Tot that allows `stallMs` of quiet; 0 turns it off. */
+export function runStall(
+  activity: Pick<RunActivity, "lastAt" | "retries">,
+  now: number,
+  stallMs: number,
+): RunStall | null {
+  if (stallMs <= 0) return null;
+  const quietMs = now - activity.lastAt;
+  const retries = activity.retries.filter((retry) => now - retry.at < stallMs).length;
+  if (retries >= STALL_RETRY_LIMIT) return { kind: "retrying", quietMs, retries };
+  if (quietMs >= stallMs) return { kind: "silent", quietMs, retries };
+  return null;
+}
 
 /**
  * One line of the worker's last message, safe to place in a report. It keeps the end, where a
@@ -213,7 +339,40 @@ const label = (event: TotWatchEvent, detail: TotWatchLineDetail): string => {
       return "Needs approval";
     case "ended":
       return "Settled or archived";
+    case "waiting":
+      return `Waiting (${waitLabel(detail)})`;
+    case "stalled":
+      return stallLabel(detail.stall);
   }
+};
+
+const minutes = (ms: number) => `${Math.max(1, Math.round(ms / 60_000))} min`;
+
+const waitLabel = (detail: TotWatchLineDetail): string => {
+  switch (detail.waitingOn ?? "background_task") {
+    case "checks":
+      return "CI checks";
+    case "review":
+      return "pull request review or merge";
+    case "deploy":
+      return "deploy";
+    case "approval":
+      return "an approval";
+    case "thread_wait":
+      return "another thread";
+    case "background_task": {
+      const count = detail.backgroundTasks ?? 0;
+      return count > 1 ? `${count} background tasks` : "a background task";
+    }
+  }
+};
+
+const stallLabel = (stall: RunStall | undefined): string => {
+  if (stall === undefined) return "Stalled";
+  if (stall.kind === "retrying") {
+    return `Stalled (${stall.retries} provider retries or rate-limit errors, nothing else for ${minutes(stall.quietMs)})`;
+  }
+  return `Stalled (no new activity for ${minutes(stall.quietMs)})`;
 };
 
 export const formatWatchLine = (
@@ -224,8 +383,11 @@ export const formatWatchLine = (
 ) => {
   const line = `- ${label(event, detail)}: ${link} on ${environmentLabel}`;
   if (!detail.excerpt) return line;
-  const lead = detail.excerpt.truncated
-    ? "End of last message, truncated, open the thread for the rest"
-    : "Last message";
+  const lead =
+    event === "stalled"
+      ? "Last activity"
+      : detail.excerpt.truncated
+        ? "End of last message, truncated, open the thread for the rest"
+        : "Last message";
   return `${line}. ${lead} (untrusted thread text): \`${detail.excerpt.text}\``;
 };

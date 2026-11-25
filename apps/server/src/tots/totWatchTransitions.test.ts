@@ -8,8 +8,12 @@ import {
   isRoutineWatchEvent,
   liveBackgroundTaskCount,
   noteSteeringMessage,
+  noteRunActivity,
   noteSteeringRun,
   runIsOver,
+  runStall,
+  startRunActivity,
+  waitReasonOf,
   watchTransition,
   type WatchedThreadState,
 } from "./totWatchTransitions.ts";
@@ -195,4 +199,74 @@ it("notes the user's newest messages as untrusted code spans and counts the rest
     "  - The user started runs here themselves, not you: Finished, Asks a question.",
   );
   expect(formatSteeringNote(EMPTY_STEERING_NOTE)).toEqual([]);
+});
+
+it("a wait that starts or changes reason is news; the same wait is not", () => {
+  const waiting = (waitingOn: WatchedThreadState["waitingOn"], runId = "run-1") =>
+    state({ status: "waiting", backgroundTasks: 1, runId, ...(waitingOn ? { waitingOn } : {}) });
+  expect(watchTransition(state({ status: "running" }), waiting("checks"))).toBe("waiting");
+  expect(watchTransition(waiting("checks"), waiting("checks"))).toBeNull();
+  expect(watchTransition(waiting("checks"), waiting("review"))).toBe("waiting");
+  // A held run with nothing external known keeps the silent hold and its check-in.
+  expect(watchTransition(state({ status: "running" }), waiting(undefined))).toBeNull();
+  expect(watchTransition(waiting("checks"), state({ status: "completed" }))).toBe("completed");
+  expect(isRoutineWatchEvent("waiting")).toBe(true);
+  expect(isRoutineWatchEvent("stalled")).toBe(false);
+});
+
+it("names what a turn waits on from the work the server tracks", () => {
+  const pr = { taskId: "pull-request-watch:github.com/a/b#1", kind: "monitor", awaited: true };
+  expect(waitReasonOf([{ taskId: "dev", kind: "command" }])).toBeUndefined();
+  expect(waitReasonOf([{ ...pr, awaited: undefined }])).toBeUndefined();
+  expect(waitReasonOf([pr])).toBe("checks");
+  expect(waitReasonOf([pr], [{ checksPending: true, approval: false }])).toBe("checks");
+  expect(waitReasonOf([pr], [{ checksPending: false, approval: false }])).toBe("review");
+  expect(waitReasonOf([pr], [{ checksPending: true, approval: true }])).toBe("approval");
+  expect(
+    waitReasonOf([{ taskId: "m", kind: "monitor", awaited: true, command: "fly deploy" }]),
+  ).toBe("deploy");
+  expect(waitReasonOf([{ taskId: "s", kind: "subagent" }])).toBe("background_task");
+});
+
+it("a stall is silence past the limit or repeated retries inside it", () => {
+  const start = startRunActivity("run-1", 0);
+  expect(runStall(start, 9 * 60_000, 10 * 60_000)).toBeNull();
+  expect(runStall(start, 10 * 60_000, 10 * 60_000)).toEqual({
+    kind: "silent",
+    quietMs: 10 * 60_000,
+    retries: 0,
+  });
+  expect(runStall(start, 10 * 60_000, 0)).toBeNull();
+  let retrying = start;
+  for (const attempt of [1, 1, 2, 3]) {
+    retrying = noteRunActivity(retrying, 1_000, { retryKey: `e#${attempt}`, text: null });
+  }
+  expect(retrying.retries).toHaveLength(3);
+  expect(runStall(retrying, 2_000, 10 * 60_000)?.kind).toBe("retrying");
+  // Retries older than the window no longer count.
+  expect(runStall(retrying, 1_000 + 5 * 60_000, 5 * 60_000)?.kind).toBe("silent");
+  const resumed = noteRunActivity({ ...retrying, alerted: new Set(["home"]) }, 3_000, {
+    retryKey: null,
+    text: "Back to work.",
+  });
+  expect(resumed).toMatchObject({ lastAt: 3_000, lastText: "Back to work.", retries: [] });
+  expect(resumed.alerted.size).toBe(0);
+});
+
+it("formats waiting and stalled lines", () => {
+  const link = "[T](t3-thread://x)";
+  expect(formatWatchLine("waiting", link, "Asuna", { waitingOn: "checks" })).toBe(
+    `- Waiting (CI checks): ${link} on Asuna`,
+  );
+  expect(
+    formatWatchLine("waiting", link, "Asuna", { waitingOn: "background_task", backgroundTasks: 2 }),
+  ).toBe(`- Waiting (2 background tasks): ${link} on Asuna`);
+  expect(
+    formatWatchLine("stalled", link, "Asuna", {
+      stall: { kind: "silent", quietMs: 12 * 60_000, retries: 0 },
+      excerpt: { text: "vp test", truncated: false },
+    }),
+  ).toBe(
+    `- Stalled (no new activity for 12 min): ${link} on Asuna. Last activity (untrusted thread text): \`vp test\``,
+  );
 });
