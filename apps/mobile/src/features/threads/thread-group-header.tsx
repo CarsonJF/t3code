@@ -12,6 +12,7 @@ import {
   type ThreadGroup,
   type ThreadGroupGradient,
 } from "@t3tools/contracts";
+import * as ThreadUndo from "@t3tools/client-runtime/state/thread-undo";
 import * as Schema from "effect/Schema";
 import { Image } from "expo-image";
 import { memo, useId } from "react";
@@ -30,13 +31,18 @@ import {
   projectIconColorClassNames,
   resolveProjectIconSymbol,
 } from "../../lib/projectIcon";
+import { appAtomRegistry } from "../../state/atom-registry";
+import { environmentPresentations } from "../../state/presentation";
 import {
   canEditThreadGroup,
   normalizeThreadGroupName,
+  readThreadGroupsView,
   threadGroupActions,
   useCollapsedThreadGroups,
   useThreadGroupsView,
 } from "../../state/thread-groups";
+import { showThreadUndoNotice } from "../home/thread-undo-notice";
+import { threadGroupDeletePrompt } from "./thread-group-delete";
 import type {
   ThreadListV2GroupListItem,
   ThreadGroupHeaderStatus,
@@ -310,7 +316,7 @@ function promptGroupIcon(group: ThreadGroup, kind: "emoji" | "monogram") {
   });
 }
 
-function handleGroupMenuAction(group: ThreadGroup, event: string) {
+function handleGroupMenuAction(group: ThreadGroup, threadCount: number, event: string) {
   if (event === "group-rename") {
     Dialog.prompt({
       title: "Rename group",
@@ -335,15 +341,35 @@ function handleGroupMenuAction(group: ThreadGroup, event: string) {
   if (event === "group-icon:none") threadGroupActions.update(group.id, { icon: null });
   if (event === "group-icon:emoji") promptGroupIcon(group, "emoji");
   if (event === "group-icon:monogram") promptGroupIcon(group, "monogram");
-  if (event === "group-delete") {
-    Dialog.confirm({
-      title: `Delete group "${group.name}"?`,
-      message: "Its threads and projects stay; they become ungrouped.",
-      confirmText: "Delete",
-      destructive: true,
-      onConfirm: () => threadGroupActions.delete(group.id),
-    });
-  }
+  if (event === "group-delete") confirmDeleteThreadGroup(group, threadCount);
+}
+
+function confirmDeleteThreadGroup(group: ThreadGroup, threadCount: number) {
+  const presentations = appAtomRegistry.get(environmentPresentations.presentationsAtom);
+  const prompt = threadGroupDeletePrompt({
+    group,
+    threadCount,
+    byEnvironment: readThreadGroupsView().byEnvironment,
+    labelOf: (environmentId) =>
+      presentations.get(environmentId)?.entry.target.label ?? environmentId,
+  });
+  if (prompt === null) return;
+  Dialog.alert(prompt.title, prompt.message, [
+    { text: "Cancel", style: "cancel" },
+    ...prompt.choices.map((choice) => ({
+      text: choice.label,
+      style: "destructive" as const,
+      onPress: () => {
+        const restores = threadGroupActions.delete(group.id, choice.environmentIds);
+        if (restores.length === 0) return;
+        showThreadUndoNotice({
+          action: "DeletedGroup",
+          claim: ThreadUndo.begin("delete-group", group.id),
+          undo: () => threadGroupActions.restore(restores),
+        });
+      },
+    })),
+  ]);
 }
 
 export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
@@ -454,7 +480,7 @@ export const ThreadGroupHeader = memo(function ThreadGroupHeader(props: {
   return (
     <Menu
       actions={groupMenuActions(group)}
-      onPressAction={({ nativeEvent }) => handleGroupMenuAction(group, nativeEvent.event)}
+      onPressAction={({ nativeEvent }) => handleGroupMenuAction(group, count, nativeEvent.event)}
       shouldOpenOnLongPress
     >
       {header}
