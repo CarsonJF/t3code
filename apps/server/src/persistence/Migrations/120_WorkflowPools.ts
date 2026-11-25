@@ -6,7 +6,7 @@ export default Effect.gen(function* () {
   // A place a run holds or waits for in a named pool, in the order runs asked. `state` is
   // `queued`, `held`, `away` (held when its run paused) or `returning` (that run was resumed).
   yield* sql`
-    CREATE TABLE workflow_pool_places (
+    CREATE TABLE IF NOT EXISTS workflow_pool_places (
       seq INTEGER PRIMARY KEY AUTOINCREMENT,
       pool TEXT NOT NULL,
       size INTEGER NOT NULL,
@@ -16,5 +16,5 @@ export default Effect.gen(function* () {
       UNIQUE (run_id, name)
     )
   `;
-  yield* sql`CREATE INDEX workflow_pool_places_pool ON workflow_pool_places (pool, state, seq)`;
+  yield* sql`CREATE INDEX IF NOT EXISTS workflow_pool_places_pool ON workflow_pool_places (pool, state, seq)`;
 });
