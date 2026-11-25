@@ -191,6 +191,10 @@
       "types": "./src/Struct.ts",
       "import": "./src/Struct.ts"
     },
+    "./threadGroups": {
+      "types": "./src/threadGroups.ts",
+      "import": "./src/threadGroups.ts"
+    },
     "./serverSettings": {
       "types": "./src/serverSettings.ts",
       "import": "./src/serverSettings.ts"

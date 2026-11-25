@@ -22,6 +22,7 @@ import {
   type ThreadGroupsState,
   type ThreadId,
 } from "@t3tools/contracts";
+import { threadGroupRestoreOp, type ThreadGroupRestoreOp } from "@t3tools/shared/threadGroups";
 import { AsyncResult, Atom } from "effect/reactivity";
 
 import * as Dialog from "../components/ui/Dialog";
@@ -55,7 +56,7 @@ const threadGroupsViewAtom = Atom.make((get): ThreadGroupsView => {
 
 export const useThreadGroupsView = () => useAtomValue(threadGroupsViewAtom);
 
-const readThreadGroupsView = () => appAtomRegistry.get(threadGroupsViewAtom);
+export const readThreadGroupsView = () => appAtomRegistry.get(threadGroupsViewAtom);
 
 export function canEditThreadGroup(view: ThreadGroupsView, groupId: string) {
   const environmentIds = environmentsWithThreadGroup(view.byEnvironment, groupId);
@@ -107,6 +108,11 @@ export interface ThreadGroupDetails {
   readonly icon: ProjectIconOverride | null;
 }
 
+export type ThreadGroupRestores = ReadonlyArray<{
+  readonly environmentId: EnvironmentId;
+  readonly op: ThreadGroupRestoreOp;
+}>;
+
 export const newThreadGroup = (name: string): ThreadGroup => ({
   id: uuidv4(),
   name,
@@ -123,11 +129,23 @@ export const threadGroupActions = {
       void sendThreadGroupOps(environmentId, [{ type: "updateGroup", groupId, ...details }]);
     }
   },
-  delete: (groupId: string) => {
+  /** Deletes the group from only these machines; the result undoes it with `restore`. */
+  delete: (groupId: string, environmentIds: ReadonlyArray<EnvironmentId>): ThreadGroupRestores => {
     const { byEnvironment } = readThreadGroupsView();
-    for (const environmentId of environmentsWithThreadGroup(byEnvironment, groupId)) {
+    const restores: Array<ThreadGroupRestores[number]> = [];
+    for (const environmentId of environmentIds) {
+      const state = byEnvironment.get(environmentId);
+      const op = state ? threadGroupRestoreOp(state, groupId) : null;
+      if (op === null) continue;
+      restores.push({ environmentId, op });
       void sendThreadGroupOps(environmentId, [{ type: "deleteGroup", groupId }]);
     }
+    return restores;
+  },
+  restore: async (restores: ThreadGroupRestores) => {
+    await Promise.all(
+      restores.map(({ environmentId, op }) => sendThreadGroupOps(environmentId, [op])),
+    );
   },
   setProjectDefault: (
     projects: ReadonlyArray<{ readonly environmentId: EnvironmentId; readonly id: ProjectId }>,

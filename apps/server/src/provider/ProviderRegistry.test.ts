@@ -93,6 +93,7 @@ import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretReso
 import * as ProviderHostPathWatcher from "./ProviderHostPathWatcher.ts";
 import * as DesktopTelemetryReceiver from "../resourceTelemetry/DesktopTelemetryReceiver.ts";
 import { providerHostEnvironment } from "../policy/managedProviders.ts";
+import { EMPTY_THREAD_GROUP_HISTORY } from "../threadGroupHistory.ts";
 vi.mock("@anthropic-ai/claude-agent-sdk", { spy: true });
 
 const decodeServerProvider = Schema.decodeSync(ServerProvider);
@@ -459,6 +460,7 @@ function makeMutableServerSettingsService(
           yield* PubSub.publish(changes, next);
           return next;
         }),
+      readThreadGroupHistory: Effect.succeed(EMPTY_THREAD_GROUP_HISTORY),
       withSettingsSnapshot: (use) => Ref.get(settingsRef).pipe(Effect.flatMap(use)),
       get streamChanges() {
         return Stream.fromPubSub(changes);
