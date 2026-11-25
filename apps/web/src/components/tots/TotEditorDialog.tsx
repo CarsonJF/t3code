@@ -47,6 +47,7 @@ import { Label } from "../ui/label";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { TotAvatar } from "./TotAvatar";
+import { useAvatarLibrarySync } from "./useAvatarLibrarySync";
 import { TotFaceEditor, totFaceLookOf, totFaceOf, TOT_FACE_COLORS } from "./TotFaceEditor";
 import { closeTotEditor, type TotEditorTarget, useTotEditorTarget } from "./totEditorStore";
 import { useTotModelChoice } from "./useTotModelChoice";
@@ -69,6 +70,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const hosts = useTotHosts();
   const navigate = useNavigate();
   const tots = useTots();
+  useAvatarLibrarySync([environmentId], editing?.id ?? "new");
   const projects = useProjects();
   const animate = useClientSettings((settings) => settings.animateTotAvatars);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");

@@ -68,12 +68,13 @@ export type TotOpenBotMaterial = (typeof TOT_OPEN_BOT_MATERIALS)[number];
 export const TOT_OPEN_BOT_MAX_DEPTH = 14;
 
 /**
- * The open-bot-avatar look: an object figure with eyes, in the avatar's color.
- * A figure id this build does not know falls back to BoopFace, like an unknown accessory.
+ * The open-bot-avatar look: an object figure with eyes, in the avatar's color. The figure is
+ * a built-in id or a figure in the environment's avatar library; a name neither knows draws
+ * the default figure.
  */
 export const TotOpenBotAvatar = Schema.Struct({
   figure: TotAccessoryId.annotate({
-    description: "An open-bot-avatar figure id, such as mug, cat, rocket or lightbulb.",
+    description: "A built-in figure (mug, cat, rocket…) or a library figure id.",
   }),
   material: Schema.optional(Schema.Literals(TOT_OPEN_BOT_MATERIALS)).annotate({
     description: "flat (default), fluffy (fur), glass or soft (subsurface glow).",
@@ -82,6 +83,8 @@ export const TotOpenBotAvatar = Schema.Struct({
     Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: TOT_OPEN_BOT_MAX_DEPTH })),
   ).annotate({ description: "Volume, 0 (flat) to 14. Default 6." }),
   eyeColor: Schema.optional(Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/))),
+  /** How it looks while idle: neutral (default) or happy, which shapes the eyes. */
+  mood: Schema.optional(Schema.Literals(["neutral", "happy"])),
 });
 export type TotOpenBotAvatar = typeof TotOpenBotAvatar.Type;
 
