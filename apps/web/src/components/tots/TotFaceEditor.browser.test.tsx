@@ -14,6 +14,7 @@ import { TotFaceEditor } from "./TotFaceEditor";
 function Harness(props: {
   readonly initial: TotAvatar;
   readonly onChange: (value: TotAvatar) => void;
+  readonly onManageShapes?: () => void;
 }) {
   const [value, setValue] = useState(props.initial);
   return (
@@ -25,6 +26,7 @@ function Harness(props: {
       }}
       skinSeries={TOT_SKIN_SERIES[0]!}
       onSkinSeriesChange={() => {}}
+      onManageShapes={props.onManageShapes}
     />
   );
 }
@@ -76,7 +78,8 @@ describe("TotFaceEditor styles", () => {
       .element(screen.getByRole("button", { name: "Shape flower" }))
       .not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Figure Mug" }));
+    await userEvent.click(screen.getByRole("button", { name: "Figure: Chat" }));
+    await userEvent.click(screen.getByRole("option", { name: "Figure Mug" }));
     await userEvent.click(screen.getByRole("button", { name: "Glass" }));
     await userEvent.click(screen.getByRole("button", { name: "Light eyes" }));
     expect(onChange).toHaveBeenLastCalledWith({
@@ -105,7 +108,7 @@ describe("TotFaceEditor styles", () => {
 });
 
 describe("TotFaceEditor library", () => {
-  it("lists library figures and themes next to the built-in ones, marked custom", async () => {
+  it("picks built-in and library figures from one searchable list", async () => {
     await loadOpenBot();
     const beacon = {
       id: "beacon",
@@ -129,20 +132,40 @@ describe("TotFaceEditor library", () => {
       themes: [beacon],
     });
     const onChange = vi.fn();
+    const onManageShapes = vi.fn();
     await using screen = await render(
       <Harness
         initial={{ color: "#0A7EA4", style: "open-bot", openBot: { figure: "chat" } }}
         onChange={onChange}
+        onManageShapes={onManageShapes}
       />,
       { router: false /* the editor is a lone form, no routes */ },
     );
 
+    // One large preview of the current figure, not a grid of every figure.
+    const figuresOutsideThemes = () =>
+      [...screen.container.querySelectorAll("[data-open-bot-figure]")].filter(
+        (element) => element.closest('[aria-label="Face themes"]') === null,
+      );
+    expect(figuresOutsideThemes()).toHaveLength(1);
+    await userEvent.click(screen.getByRole("button", { name: "Figure: Chat" }));
+    await expect.element(screen.getByRole("option", { name: "Figure Mug" })).toBeVisible();
+    await userEvent.fill(screen.getByRole("textbox", { name: "Search figures" }), "light");
     await expect
-      .element(screen.getByRole("button", { name: "Figure Lighthouse (custom)" }))
-      .toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Figure Mug" })).toBeVisible();
-    await expect.element(screen.getByRole("button", { name: "Face theme Classic" })).toBeVisible();
+      .element(screen.getByRole("option", { name: "Figure Mug" }))
+      .not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("option", { name: "Figure Lighthouse (mine)" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      color: "#0A7EA4",
+      style: "open-bot",
+      openBot: { figure: "lighthouse" },
+    });
+    await expect.element(screen.getByRole("button", { name: "Figure: Lighthouse" })).toBeVisible();
 
+    await userEvent.click(screen.getByRole("button", { name: "Manage shapes…" }));
+    expect(onManageShapes).toHaveBeenCalledOnce();
+
+    await expect.element(screen.getByRole("button", { name: "Face theme Classic" })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Face theme Beacon (custom)" }));
     expect(onChange).toHaveBeenLastCalledWith(beacon.avatar);
   });

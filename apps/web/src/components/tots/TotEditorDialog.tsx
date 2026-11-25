@@ -364,6 +364,13 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                   skinSeries={skinSeries}
                   onSkinSeriesChange={setSkinSeries}
                   error={errors.color}
+                  onManageShapes={() => {
+                    closeTotEditor();
+                    void navigate({
+                      to: "/settings/avatar-library",
+                      search: { machine: environmentId },
+                    });
+                  }}
                 >
                   {editing === null ? null : (
                     <div className="flex flex-col gap-1.5">

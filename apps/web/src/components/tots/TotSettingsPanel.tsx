@@ -27,6 +27,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { TOT_THEME_TOKEN_NAMES } from "@t3tools/shared/totThemeTokens";
 import { EyeIcon, Globe2, PlayIcon, Trash2Icon } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 
 import { useClientSettings, useEnvironmentSettings } from "../../hooks/useSettings";
@@ -143,6 +144,7 @@ function TotSettingsEditor(props: {
   readonly tot: Tot;
 }) {
   const { environmentId, tot } = props;
+  const navigate = useNavigate();
   const animate = useClientSettings((settings) => settings.animateTotAvatars);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const shell = useThreadShell(props.threadRef);
@@ -257,6 +259,12 @@ function TotSettingsEditor(props: {
               skinSeries={skinSeries}
               onSkinSeriesChange={setSkinSeries}
               error={errors.color}
+              onManageShapes={() =>
+                void navigate({
+                  to: "/settings/avatar-library",
+                  search: { machine: environmentId },
+                })
+              }
             >
               {tot.designs !== undefined && tot.designs.length > 0 ? (
                 <div

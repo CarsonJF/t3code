@@ -37,3 +37,12 @@ export function useAvatarLibrary(): AvatarLibrary {
     () => EMPTY,
   );
 }
+
+/** One environment's avatar library; empty until it answers. */
+export function useEnvironmentAvatarLibrary(environmentId: EnvironmentId | null): AvatarLibrary {
+  return useSyncExternalStore(
+    subscribe,
+    () => (environmentId === null ? EMPTY : (byEnvironment.get(environmentId) ?? EMPTY)),
+    () => EMPTY,
+  );
+}
