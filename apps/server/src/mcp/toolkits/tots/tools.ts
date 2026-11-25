@@ -89,7 +89,7 @@ const GroupChatSayTool = Tool.make("t3_group_chat_say", {
 const TotDesignAvatarTool = Tool.make("t3_tot_design_avatar", {
   ...shared,
   description:
-    "As a Tot, set your own face when the user asks you to design it. It becomes your face and one of your saved options.",
+    "As a Tot, set your own face when the user asks you to design it; it joins your saved faces. Two styles: boopface (default) and open-bot, an object with eyes: `openBot` takes a figure, a finish (flat, fluffy, glass, soft), a depth and an eye color. Built-in figures: mug, cat, rocket, controller, barbell, lightbulb, chat, sprout, watering-can, book, brain, bull, bunny, camera, cloud, egg, ghost, magnifier, paint-brush, palette, shield, star, witch-hat. Send your BoopFace fields too; they are kept for switching back. For a new figure or a reusable theme, use t3_avatar_library first, then apply it.",
   parameters: TotAvatar,
   success: Schema.Struct({ ok: Schema.Literal(true) }),
 }).annotate(Tool.Destructive, false);
