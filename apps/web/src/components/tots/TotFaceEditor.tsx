@@ -386,22 +386,30 @@ export function TotFaceEditor(props: {
                   type="button"
                   aria-label={`${choice.label} eyes`}
                   aria-pressed={eyeColor === choice.color}
-                  className="size-6 rounded-full border border-border aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-ring"
+                  className="size-6 rounded-full border-2 border-muted-foreground/50 aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-ring"
                   style={{ backgroundColor: choice.color }}
                   onClick={() =>
                     props.onChange(openBotFace(openBotWith({ eyeColor: choice.color })))
                   }
                 />
               ))}
-              <input
-                type="color"
-                aria-label="Eye color"
-                className="h-6 w-8 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
-                value={eyeColor}
-                onChange={(event) =>
-                  props.onChange(openBotFace(openBotWith({ eyeColor: event.target.value })))
-                }
-              />
+              <label
+                aria-pressed={!OPEN_BOT_EYE_COLORS.some((choice) => choice.color === eyeColor)}
+                className="relative size-6 cursor-pointer rounded-full border-2 border-muted-foreground/50 aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-ring"
+                style={{
+                  background: `radial-gradient(circle, ${eyeColor} 0 38%, transparent 40%), conic-gradient(#ef4444, #eab308, #22c55e, #06b6d4, #6366f1, #d946ef, #ef4444)`,
+                }}
+              >
+                <input
+                  type="color"
+                  aria-label="Eye color"
+                  className="absolute inset-0 size-full cursor-pointer opacity-0"
+                  value={eyeColor}
+                  onChange={(event) =>
+                    props.onChange(openBotFace(openBotWith({ eyeColor: event.target.value })))
+                  }
+                />
+              </label>
             </div>
           </div>
         </>
