@@ -694,6 +694,10 @@
     "./pull-request-references": {
       "types": "./src/pullRequestReferences.ts",
       "default": "./src/pullRequestReferences.ts"
+    },
+    "./scheduled-task-gate": {
+      "types": "./src/scheduledTaskGate.ts",
+      "default": "./src/scheduledTaskGate.ts"
     }
   },
   "scripts": {

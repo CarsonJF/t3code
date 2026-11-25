@@ -6,6 +6,7 @@ import {
   type TotThemePatch,
 } from "@t3tools/contracts";
 import { totThemeProblem } from "@t3tools/shared/totTheme";
+import { findTotTemplate } from "@t3tools/shared/totTemplates";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -294,13 +295,15 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
         });
       const invalid = (error: { readonly message: string }) =>
         new OrchestratorMcpFailure({ code: "invalid_request", message: error.message });
+      const template = input.template === undefined ? undefined : findTotTemplate(input.template);
       const created = yield* tots
         .create({
           name: input.name,
-          avatar: input.avatar ?? DEFAULT_HOME_TOT.avatar,
+          avatar: input.avatar ?? template?.avatar ?? DEFAULT_HOME_TOT.avatar,
           scope: input.scope,
-          instructions: input.instructions ?? "",
+          instructions: input.instructions ?? template?.instructions ?? "",
           modelSelection,
+          ...(input.template === undefined ? {} : { template: input.template }),
         })
         .pipe(Effect.mapError(invalid));
       const { threadId } = yield* tots.enable(created.id, modelSelection).pipe(

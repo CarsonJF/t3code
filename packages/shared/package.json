@@ -706,6 +706,10 @@
     "./assistantInsights": {
       "types": "./src/assistantInsights.ts",
       "import": "./src/assistantInsights.ts"
+    },
+    "./totTemplates": {
+      "types": "./src/totTemplates.ts",
+      "import": "./src/totTemplates.ts"
     }
   },
   "scripts": {

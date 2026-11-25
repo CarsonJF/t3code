@@ -15,6 +15,7 @@ import {
   TrimmedNonEmptyString,
 } from "@t3tools/contracts";
 import * as SecureRandom from "effect/crypto/SecureRandom";
+import { TOT_TEMPLATES } from "@t3tools/shared/totTemplates";
 import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
 
@@ -177,6 +178,12 @@ const TotCreateTool = Tool.make("t3_tot_create", {
     environmentId: OrchestratorMcpEnvironmentTarget,
     name: Tot.fields.name,
     scope: TotScope,
+    template: Schema.optional(
+      Schema.Literals(TOT_TEMPLATES.map((template) => template.id)).annotate({
+        description:
+          "Starts from a built-in template: its instructions and face unless you pass your own, and its routines, paused.",
+      }),
+    ),
     instructions: Schema.optional(
       Schema.String.annotate({ description: "Personality for its AGENTS.md, in Markdown." }),
     ),

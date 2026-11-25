@@ -38,6 +38,7 @@ import {
 import { scheduleTimeZoneLabel } from "@t3tools/client-runtime/scheduled-task-time-zone";
 import { scheduledTaskWorktreeBaseRef } from "@t3tools/client-runtime/scheduled-task-worktree";
 import {
+  MAX_MISSED_RUN_GRACE_MINUTES,
   MAX_WEBHOOK_DELIVERY_AGE_MINUTES,
   MAX_WEBHOOK_FILTERS,
   MIN_SCHEDULED_TASK_INTERVAL_MS,
@@ -109,6 +110,12 @@ import {
   type ScheduleMode,
   type WorkspaceMode,
 } from "./scheduledTasksSettings.logic";
+import {
+  lastSkipLabel,
+  scheduledTaskGateDraft,
+  scheduledTaskGateFields,
+  visibleLastSkip,
+} from "@t3tools/client-runtime/scheduled-task-gate";
 import { Label } from "../ui/label";
 import { Menu, MenuTrigger, MenuPopup, MenuItem, MenuSeparator } from "../ui/menu";
 import { ToggleGroup, Toggle } from "../ui/toggle-group";
@@ -209,6 +216,7 @@ const EMPTY_DRAFT: DraftState = {
   coalesceWindowSeconds: "",
   filters: [],
   savedFilters: [],
+  ...scheduledTaskGateDraft(null),
 };
 
 function WebhookFiltersField({
@@ -787,6 +795,7 @@ function ScheduledTaskRow({
   const [busy, setBusy] = useState(false);
   const [deliveriesOpen, setDeliveriesOpen] = useState(false);
   const isWebhook = task.schedule.type === "webhook";
+  const lastSkip = visibleLastSkip(task);
   const toggle = useAtomCommand(serverEnvironment.setScheduledTaskEnabled, {
     label: "scheduled task enabled",
   });
@@ -862,6 +871,11 @@ function ScheduledTaskRow({
             <ScheduledTaskThreadLink environmentId={environmentId} threadId={task.threadId} />
           ) : null}
           {task.lastRunError ? <span className="text-destructive">{task.lastRunError}</span> : null}
+          {lastSkip === null ? null : (
+            <Badge variant="outline" title={lastSkip.detail ?? undefined}>
+              {lastSkipLabel(lastSkip.reason, messages)}
+            </Badge>
+          )}
         </div>
       }
       control={
@@ -1511,6 +1525,9 @@ function ScheduledTaskEditorForm({
           projectId: defaultScheduledTaskProjectId(scopedProjects, scope),
         },
   );
+  const precheckAllowed =
+    (clampManagedRuntimeMode(environment?.serverConfig?.managedPolicy, draft.runtimeMode) ??
+      draft.runtimeMode) === "full-access";
   // Pinned first. The chosen project stays listed after it is archived.
   const projects = scopedProjects
     .filter(
@@ -1649,6 +1666,11 @@ function ScheduledTaskEditorForm({
       );
       return;
     }
+    const gate = scheduledTaskGateFields(draft, m);
+    if (!gate.ok) {
+      reportFailure(gate.title, gate.description);
+      return;
+    }
     if (draft.workspaceMode === "existing_worktree" && !draft.existingWorktreePath.trim()) {
       reportFailure(
         gt("Checkout path is required"),
@@ -1684,6 +1706,7 @@ function ScheduledTaskEditorForm({
         draft.runtimeMode,
       interactionMode: draft.interactionMode,
       creationSource: "web",
+      ...gate.fields,
     };
     // Lock before React renders, and keep successful creates locked until the form closes.
     submissionPending.current = true;
@@ -2332,6 +2355,63 @@ function ScheduledTaskEditorForm({
               </div>
             )}
           </div>
+
+          {draft.scheduleMode === "webhook" ? null : (
+            <div className="space-y-4">
+              <Field
+                label={gt("Precheck command")}
+                hint={gt("shell, optional")}
+                htmlFor="scheduled-task-precheck"
+              >
+                <Input
+                  id="scheduled-task-precheck"
+                  aria-describedby="scheduled-task-precheck-description"
+                  // oxlint-disable-next-line t3code/no-untranslated-copy -- a shell command stays English
+                  placeholder="gh pr list --search review-requested:@me | grep -q ."
+                  disabled={!precheckAllowed}
+                  value={draft.precheck}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, precheck: event.target.value }))
+                  }
+                />
+              </Field>
+              <p id="scheduled-task-precheck-description" className="text-xs text-muted-foreground">
+                {precheckAllowed
+                  ? gt(
+                      "Runs in the project folder before each scheduled run, for up to 60 seconds. A non-zero exit skips the run without starting an agent.",
+                    )
+                  : gt("A precheck runs a shell command, so it needs a full-access task.")}
+              </p>
+              <Field
+                label={gt("Missed-run grace")}
+                hint={gt("minutes, optional")}
+                htmlFor="scheduled-task-missed-run-grace"
+              >
+                <Input
+                  id="scheduled-task-missed-run-grace"
+                  type="number"
+                  nativeInput
+                  min={0}
+                  max={MAX_MISSED_RUN_GRACE_MINUTES}
+                  className="w-32"
+                  placeholder={gt("Default")}
+                  value={draft.missedRunGraceMinutes}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      missedRunGraceMinutes: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+              <p className="text-xs text-muted-foreground">
+                <T>
+                  After the server was down, run one late occurrence if it is at most this late, and
+                  skip older ones.
+                </T>
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0 space-y-1">

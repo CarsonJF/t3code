@@ -61,6 +61,7 @@ const unsupportedTextGeneration: ProviderTextGeneration = (() => {
     generateReviewGuide: () => unsupported("generateReviewGuide"),
     generateTranscriptionPostProcessing: () => unsupported("generateTranscriptionPostProcessing"),
     generateAvatarFigure: () => unsupported("generateAvatarFigure"),
+    generateMemoryTidy: () => unsupported("generateMemoryTidy"),
   };
 })();
 
