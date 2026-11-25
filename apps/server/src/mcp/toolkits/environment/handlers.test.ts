@@ -27,6 +27,11 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { liveThreadShell, liveThreadsLayer } from "../../McpToolAccess.testkit.ts";
 import * as EnvironmentHandlers from "./handlers.ts";
+import {
+  appendThreadGroupHistory,
+  EMPTY_THREAD_GROUP_HISTORY,
+  type ThreadGroupHistory,
+} from "../../../threadGroupHistory.ts";
 import { EnvironmentToolkit } from "./tools.ts";
 
 const environmentId = EnvironmentId.make("environment:preferences");
@@ -115,7 +120,11 @@ it("keeps agent feedback out of the preferences agents read and write", () => {
 });
 
 const projectId = ProjectId.make("project:groups");
-const groupsLayer = (settings: Ref.Ref<ServerSettings>, updates: Ref.Ref<number>) =>
+const groupsLayer = (
+  settings: Ref.Ref<ServerSettings>,
+  updates: Ref.Ref<number>,
+  history: Ref.Ref<ThreadGroupHistory> = Ref.makeUnsafe(EMPTY_THREAD_GROUP_HISTORY),
+) =>
   McpToolAccess.HandlersLayer.layer(EnvironmentHandlers.layer).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
@@ -151,11 +160,21 @@ const groupsLayer = (settings: Ref.Ref<ServerSettings>, updates: Ref.Ref<number>
         }),
         Layer.mock(Settings.ServerSettingsService)({
           getSettings: Ref.get(settings),
+          readThreadGroupHistory: Ref.get(history),
           updateSettings: (patch) =>
             Ref.update(updates, (count) => count + 1).pipe(
-              Effect.andThen(
-                Ref.updateAndGet(settings, (current) => applyServerSettingsPatch(current, patch)),
-              ),
+              Effect.andThen(Ref.get(settings)),
+              Effect.flatMap((current) => {
+                const next = applyServerSettingsPatch(current, patch);
+                return Ref.update(history, (saved) =>
+                  appendThreadGroupHistory(
+                    saved,
+                    current.threadGroups,
+                    next.threadGroups,
+                    "2026-11-24T00:00:00.000Z",
+                  ),
+                ).pipe(Effect.andThen(Ref.set(settings, next)), Effect.as(next));
+              }),
             ),
         }),
       ),
@@ -192,7 +211,45 @@ it.effect("creates a group, then puts a project's new threads in it", () =>
       expect(yield* callGroupsTool("t3_thread_groups_read", {})).toEqual({
         groups: [{ id: groupId, name: "Client work", color: "blue" }],
         projects: [{ projectId, groupId }],
+        deletedGroups: [],
       });
+    }).pipe(Effect.provide(groupsLayer(settings, updates)));
+  }),
+);
+
+it.effect("restores a deleted group from the backup with its id and projects", () =>
+  Effect.gen(function* () {
+    const settings = yield* Ref.make(DEFAULT_SERVER_SETTINGS);
+    const updates = yield* Ref.make(0);
+    yield* Effect.gen(function* () {
+      yield* callGroupsTool("t3_thread_groups_update", {
+        ops: [{ type: "createGroup", name: "Games" }],
+      });
+      const groupId = (yield* Ref.get(settings)).threadGroups.groups[0]!.id;
+      yield* callGroupsTool("t3_thread_groups_update", {
+        ops: [{ type: "setProjectGroup", projectIds: [projectId], groupId }],
+      });
+      const deleted = yield* callGroupsTool("t3_thread_groups_update", {
+        ops: [{ type: "deleteGroup", groupId }],
+      });
+      expect(deleted).toEqual({
+        groups: [],
+        projects: [],
+        deletedGroups: [{ id: groupId, name: "Games" }],
+      });
+
+      const restored = yield* callGroupsTool("t3_thread_groups_update", {
+        ops: [{ type: "restoreGroup", groupId }],
+      });
+      expect(restored).toEqual({
+        groups: [{ id: groupId, name: "Games" }],
+        projects: [{ projectId, groupId }],
+        deletedGroups: [],
+      });
+      const again = yield* callGroupsTool("t3_thread_groups_update", {
+        ops: [{ type: "restoreGroup", groupId }],
+      });
+      expect(again).toMatchObject({ code: "invalid_request" });
     }).pipe(Effect.provide(groupsLayer(settings, updates)));
   }),
 );

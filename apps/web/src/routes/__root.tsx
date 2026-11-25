@@ -18,6 +18,7 @@ import { APP_DISPLAY_NAME, APP_VERSION } from "../branding";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { CustomSnoozeDialogHost } from "../components/CustomSnoozeDialog";
+import { ThreadGroupDeleteDialogHost } from "../components/ThreadGroupDeleteDialog";
 import { ThreadGroupNameDialogHost } from "../components/ThreadGroupNameDialog";
 import { GuestShareDialogHost } from "../components/chat/GuestShareControls";
 import { UseInAnotherAppDialogHost } from "../components/mcp/UseInAnotherAppDialog";
@@ -204,6 +205,7 @@ function RootRouteBranch() {
       <WorktreeLayoutApprovalDialogHost />
       <CustomSnoozeDialogHost />
       <ThreadGroupNameDialogHost />
+      <ThreadGroupDeleteDialogHost />
       <GuestShareDialogHost />
       <ProjectCloneToastCoordinator />
       <ConnectDeviceApprovalCoordinator />
