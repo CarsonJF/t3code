@@ -115,6 +115,16 @@ describe("tot settings draft", () => {
     );
   });
 
+  it("edits the memory tidy-up, off until a Tot turns it on", () => {
+    const draft = totSettingsDraftFromTot(tot);
+    expect(draft.memoryTidy).toBe(false);
+    expect(totSettingsDraftKey({ ...draft, memoryTidy: true })).not.toBe(
+      totSettingsDraftKey(draft),
+    );
+    expect(totSettingsDraftUpdate({ ...draft, memoryTidy: true }).memoryTidy).toBe(true);
+    expect(totSettingsDraftFromTot({ ...tot, memoryTidy: true }).memoryTidy).toBe(true);
+  });
+
   it("edits watch reports, auto-settle and idle compaction, each at its default until set", () => {
     const draft = totSettingsDraftFromTot(tot);
     expect(draft.watchReports).toBe("launched");

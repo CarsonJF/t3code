@@ -5720,5 +5720,22 @@
   "c89f9a3e9e89efc0": "Idle",
   "267bd2982a153996": "Deleted group",
   "f68ebd9661469c87": "Tell it what you want done. It starts, watches and answers the threads in its scope for you.",
-  "c900815e1a139742": "Tots"
+  "c900815e1a139742": "Tots",
+  "5781cb3bcb8fedb8": "Invalid missed-run grace",
+  "c460b71d67ca48af": "Enter whole minutes from 0 to {max}, or leave it blank.",
+  "8ca0ed2936c6f7bb": "Skipped (precheck)",
+  "08a88c17c1b27751": "Skipped (missed run)",
+  "61f41d071cbfb786": "Skipped",
+  "2db247c57d9f0085": "{label}: {detail}",
+  "f9454e5383f18094": "Precheck command",
+  "f1d077b23b6f98cc": "Optional shell command",
+  "43fe3696205a7dcd": "Needs a full-access task",
+  "21e2cabc339e6ee1": "Missed-run grace (minutes)",
+  "e40e6d4ec89b5365": "Default",
+  "c0e9384b86cdbf37": "Runs in the project folder before each scheduled run, for up to 60 seconds. A non-zero exit skips the run without starting an agent.",
+  "03732d87be62dd2a": "Start from",
+  "25bdaed653d3d2c3": "A template's suggested routines are created paused.",
+  "fc72809a59128290": "Blank",
+  "6eb33caef72a98a1": "Around 03:30 a cheap model dedupes and condenses its {memory}. The previous copy is kept as {backup}.",
+  "4b3694d90784a5be": "Nightly memory tidy-up"
 }

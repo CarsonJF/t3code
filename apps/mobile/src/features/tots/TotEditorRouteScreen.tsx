@@ -4,7 +4,11 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { isTotProject } from "@t3tools/client-runtime/tots";
-import { validateTotDraft, type TotDraftErrors } from "@t3tools/client-runtime/tots/editor";
+import {
+  applyTotTemplate,
+  validateTotDraft,
+  type TotDraftErrors,
+} from "@t3tools/client-runtime/tots/editor";
 import {
   EnvironmentId,
   HOME_TOT_ID,
@@ -15,7 +19,10 @@ import {
   type TotId,
   type TotScope,
   type TotShape,
+  type TotTemplate,
 } from "@t3tools/contracts";
+import { findTotTemplate, TOT_TEMPLATES } from "@t3tools/shared/totTemplates";
+import { useGT } from "gt-react-native";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
@@ -120,6 +127,24 @@ function TotEditorForm(props: {
   const faceAvatar = accessories.length === 0 ? { color, shape } : { color, shape, accessories };
   const [scope, setScope] = useState<TotScope>(editing?.scope ?? "all");
   const [instructions, setInstructions] = useState(editing?.instructions ?? "");
+  const [template, setTemplate] = useState<TotTemplate | undefined>(undefined);
+  const [memoryTidy, setMemoryTidy] = useState(editing === null || editing.memoryTidy === true);
+  const gt = useGT();
+  const pickTemplate = (id: string) => {
+    const next = findTotTemplate(id);
+    if (next === undefined) return;
+    const filled = applyTotTemplate(
+      { name, instructions, scope, template: template?.id },
+      next,
+      template,
+    );
+    setName(filled.name);
+    setInstructions(filled.instructions);
+    setScope(filled.scope);
+    setColor(next.avatar.color);
+    setShape(next.avatar.shape ?? "round");
+    setTemplate(next);
+  };
   const [errors, setErrors] = useState<TotDraftErrors>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -168,11 +193,13 @@ function TotEditorForm(props: {
         shape,
         accessories,
         // Mobile cannot draw the open-bot look yet; keep it so saving here does not drop it.
-        style: editing?.avatar.style,
-        openBot: editing?.avatar.openBot,
+        style: editing?.avatar.style ?? template?.avatar.style,
+        openBot: editing?.avatar.openBot ?? template?.avatar.openBot,
         scope,
         instructions,
         modelSelection: model,
+        memoryTidy,
+        ...(editing === null && template !== undefined ? { template: template.id } : {}),
       },
       tots.map((tot) => tot.id),
       editing?.id ?? null,
@@ -292,6 +319,22 @@ function TotEditorForm(props: {
 
   const details = (
     <>
+      {editing !== null ? null : (
+        <ListSection
+          title={gt("Start from")}
+          footer={gt("A template's suggested routines are created paused.")}
+        >
+          {TOT_TEMPLATES.map((entry) => (
+            <ListChoiceRow
+              key={entry.id}
+              label={entry.id === "blank" ? gt("Blank") : entry.name}
+              description={entry.description}
+              selected={template?.id === entry.id}
+              onPress={() => pickTemplate(entry.id)}
+            />
+          ))}
+        </ListSection>
+      )}
       {props.hosts.length === 0 ? null : (
         <ListSection
           title="Lives on"
@@ -336,6 +379,19 @@ function TotEditorForm(props: {
           placeholder="Warm and brief. Owns everything Cardinal Systems."
           onChangeText={setInstructions}
           accessibilityLabel="Personality and instructions"
+        />
+      </ListSection>
+
+      <ListSection
+        footer={gt(
+          "Around 03:30 a cheap model dedupes and condenses its {memory}. The previous copy is kept as {backup}.",
+          { memory: "MEMORY.md", backup: "MEMORY.md.pre-tidy" },
+        )}
+      >
+        <ListToggleRow
+          label={gt("Nightly memory tidy-up")}
+          value={memoryTidy}
+          onValueChange={setMemoryTidy}
         />
       </ListSection>
 

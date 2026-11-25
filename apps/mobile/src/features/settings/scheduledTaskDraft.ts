@@ -20,6 +20,10 @@ import {
   type WebhookFilterDraft,
 } from "@t3tools/client-runtime/scheduled-task-webhook";
 import {
+  scheduledTaskGateDraft,
+  type ScheduledTaskGateDraft,
+} from "@t3tools/client-runtime/scheduled-task-gate";
+import {
   resolveProjectSettings,
   type LegacyProjectSettingsFields,
 } from "@t3tools/shared/projectSettings";
@@ -198,7 +202,7 @@ export function scheduleFromDraft(draft: ScheduleDraft): ScheduledTaskUpsertSche
 }
 
 type Workspace = "worktree" | "root" | "existing_worktree";
-export type ScheduledTaskDraft = {
+export type ScheduledTaskDraft = ScheduledTaskGateDraft & {
   readonly task: ScheduledTask | null;
   readonly title: string;
   readonly prompt: string;
@@ -244,6 +248,8 @@ function draftSignature(draft: ScheduledTaskDraft): string {
     draft.enabled,
     draft.startFromOrigin,
     draft.runtimeMode,
+    draft.precheck,
+    draft.missedRunGraceMinutes,
   ]);
 }
 
@@ -306,6 +312,7 @@ export function createDraft(
     enabled: true,
     startFromOrigin: true,
     runtimeMode: "full-access",
+    ...scheduledTaskGateDraft(null),
   };
 }
 
@@ -332,5 +339,6 @@ export function editDraft(task: ScheduledTask): ScheduledTaskDraft {
         ? (task.workspaceStrategy.startFromOrigin ?? false)
         : true,
     runtimeMode: task.runtimeMode,
+    ...scheduledTaskGateDraft(task),
   };
 }

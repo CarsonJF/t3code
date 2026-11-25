@@ -111,6 +111,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.groupChatsUpdate]: AuthOrchestrationOperateScope,
   [WS_METHODS.groupChatsRemove]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsWriteMemory]: AuthOrchestrationOperateScope,
+  [WS_METHODS.totsRevertMemoryTidy]: AuthOrchestrationOperateScope,
   // A guest link hands thread access to someone outside, like a pairing link.
   [WS_METHODS.guestShareCreate]: AuthAccessWriteScope,
   [WS_METHODS.peerLinksLink]: AuthAccessWriteScope,
