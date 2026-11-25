@@ -15,6 +15,8 @@ import {
   finishedOneOffTasks,
   scheduledTaskBelongsToTot,
   scheduledTaskScopeLabel,
+  totIdleCompactionChoice,
+  totIdleCompactionValue,
   totSettingsDraftErrors,
   totSettingsDraftFromTot,
   totSettingsDraftKey,
@@ -113,7 +115,7 @@ describe("tot settings draft", () => {
     );
   });
 
-  it("edits watch reports and auto-settle, launched and off until set", () => {
+  it("edits watch reports, auto-settle and idle compaction, each at its default until set", () => {
     const draft = totSettingsDraftFromTot(tot);
     expect(draft.watchReports).toBe("launched");
     expect(totSettingsDraftKey({ ...draft, watchReports: "off" })).not.toBe(
@@ -125,6 +127,15 @@ describe("tot settings draft", () => {
       totSettingsDraftKey(draft),
     );
     expect(totSettingsDraftUpdate({ ...draft, autoSettle: true }).autoSettle).toBe(true);
+    expect(draft.idleCompaction).toBe(null);
+    expect(totSettingsDraftKey({ ...draft, idleCompaction: false })).not.toBe(
+      totSettingsDraftKey(draft),
+    );
+    expect(totSettingsDraftUpdate({ ...draft, idleCompaction: false }).idleCompaction).toBe(false);
+    expect(totSettingsDraftFromTot({ ...tot, idleCompaction: true }).idleCompaction).toBe(true);
+    for (const value of [null, true, false]) {
+      expect(totIdleCompactionValue(totIdleCompactionChoice(value))).toBe(value);
+    }
     expect(totSettingsDraftFromTot({ ...tot, watchReports: "explicit" }).watchReports).toBe(
       "explicit",
     );
