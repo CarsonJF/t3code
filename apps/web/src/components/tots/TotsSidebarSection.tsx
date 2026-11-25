@@ -38,6 +38,7 @@ import { TotAvatar } from "./TotAvatar";
 import { useGroupChatActions } from "./useGroupChatActions";
 import { useTotAccent } from "./totAccent";
 import { useTotActions } from "./useTotActions";
+import { useAvatarLibrarySync } from "./useAvatarLibrarySync";
 
 const DRAG_TYPE = "application/x-t3-tot";
 const SECTION_EXPANDED_KEY = "t3code:sidebar:tots-expanded";
@@ -300,6 +301,10 @@ const GroupChatRow = memo(function GroupChatRow(props: {
 /** The user's Tots and group chats, under the search bar and above drafts and threads. */
 export const TotsSidebarSection = memo(function TotsSidebarSection() {
   const tots = useTots();
+  useAvatarLibrarySync(
+    tots.map((entry) => entry.environmentId),
+    tots.map((entry) => JSON.stringify(entry.tot.avatar)).join(),
+  );
   const rooms = useGroupChats();
   const shown = useShownThreadRouteTarget().shownTarget;
   const totOrder = useUiStateStore((state) => state.totOrder);

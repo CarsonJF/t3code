@@ -15,7 +15,8 @@ import {
 } from "@t3tools/contracts";
 import { useEffect, useRef, useState } from "react";
 
-import { OpenBotFace, useOpenBotKit } from "./OpenBotFace";
+import { useAvatarLibrary } from "./avatarLibraryStore";
+import { OpenBotFace, openBotFigure, useOpenBotKit } from "./OpenBotFace";
 
 interface BoopFaceElement extends HTMLElement {
   play(action: string): unknown;
@@ -45,10 +46,11 @@ interface TotAvatarProps {
   readonly hovered?: boolean;
 }
 
-/** A Tot's face in its chosen style; BoopFace when open-bot has no figure by that id. */
+/** A Tot's face in its chosen style; a figure name nobody has draws the default figure. */
 export function TotAvatar(props: TotAvatarProps) {
   const openBot = totAvatarStyleOf(props.avatar) === "open-bot" ? props.avatar.openBot : undefined;
   const kit = useOpenBotKit(openBot !== undefined);
+  const library = useAvatarLibrary();
   if (openBot === undefined) return <BoopFaceAvatar {...props} />;
   if (kit === null) {
     return (
@@ -58,8 +60,7 @@ export function TotAvatar(props: TotAvatarProps) {
       />
     );
   }
-  const figure = kit.figures.find((entry) => entry.id === openBot.figure);
-  if (figure === undefined) return <BoopFaceAvatar {...props} />;
+  const figure = openBotFigure(kit, library.figures, openBot.figure);
   return (
     <OpenBotFace
       kit={kit}
