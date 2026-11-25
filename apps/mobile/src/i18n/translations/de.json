@@ -5738,5 +5738,22 @@
   "c89f9a3e9e89efc0": "Idle",
   "267bd2982a153996": "Deleted group",
   "f68ebd9661469c87": "Tell it what you want done. It starts, watches and answers the threads in its scope for you.",
-  "c900815e1a139742": "Tots"
+  "c900815e1a139742": "Tots",
+  "5781cb3bcb8fedb8": "Ungültige Nachholfrist",
+  "c460b71d67ca48af": "Gib ganze Minuten von 0 bis {max} ein oder lass das Feld leer.",
+  "8ca0ed2936c6f7bb": "Übersprungen (Vorabprüfung)",
+  "08a88c17c1b27751": "Übersprungen (verpasster Lauf)",
+  "61f41d071cbfb786": "Übersprungen",
+  "2db247c57d9f0085": "{label}: {detail}",
+  "f9454e5383f18094": "Vorabprüfungsbefehl",
+  "f1d077b23b6f98cc": "Optionaler Shell-Befehl",
+  "43fe3696205a7dcd": "Braucht eine Aufgabe mit Vollzugriff",
+  "21e2cabc339e6ee1": "Nachholfrist (Minuten)",
+  "e40e6d4ec89b5365": "Standard",
+  "c0e9384b86cdbf37": "Läuft vor jedem geplanten Lauf bis zu 60 Sekunden im Projektordner. Ein Exit-Code ungleich null überspringt den Lauf, ohne einen Agenten zu starten.",
+  "03732d87be62dd2a": "Ausgangspunkt",
+  "25bdaed653d3d2c3": "Die vorgeschlagenen Routinen einer Vorlage werden pausiert angelegt.",
+  "fc72809a59128290": "Leer",
+  "6eb33caef72a98a1": "Gegen 03:30 entfernt ein günstiges Modell Doppeltes aus {memory} und fasst es zusammen. Die vorige Fassung bleibt als {backup}.",
+  "4b3694d90784a5be": "Nächtliches Aufräumen des Gedächtnisses"
 }

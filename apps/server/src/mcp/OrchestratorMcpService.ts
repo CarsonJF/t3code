@@ -332,6 +332,17 @@ function scheduledTaskSummary(task: ScheduledTask, mayRun: boolean): Orchestrato
     schedule: task.schedule,
     nextRunAt: task.nextRunAt,
     lastRunStatus: task.lastRunStatus,
+    ...(task.precheck === undefined ? {} : { precheck: task.precheck }),
+    ...(task.missedRunGraceMinutes === undefined
+      ? {}
+      : { missedRunGraceMinutes: task.missedRunGraceMinutes }),
+    ...(task.lastSkip === undefined
+      ? {}
+      : {
+          lastSkip: `${task.lastSkip.at} skipped (${task.lastSkip.reason})${
+            task.lastSkip.detail === null ? "" : `: ${task.lastSkip.detail}`
+          }`,
+        }),
     ...(task.webhook?.url == null || !mayRun || task.blockedByPolicy !== undefined
       ? {}
       : { webhookUrl: task.webhook.url }),
@@ -2431,6 +2442,17 @@ const make = Effect.gen(function* () {
     };
   });
 
+  /** A precheck runs a shell command with no approval prompt, so only full access may set one. */
+  const requirePrecheckAccess = (precheck: string | null | undefined, runtimeMode: RuntimeMode) =>
+    precheck != null && runtimeMode !== "full-access"
+      ? Effect.fail(
+          failure(
+            "capability_denied",
+            "`precheck` runs a shell command, so only a full-access caller can set it.",
+          ),
+        )
+      : Effect.void;
+
   const scheduledTaskRunModes = Effect.fn("OrchestratorMcpService.scheduledTaskRunModes")(
     function* (task: ScheduledTask) {
       const modes = [{ runtimeMode: task.runtimeMode, interactionMode: task.interactionMode }];
@@ -2542,6 +2564,7 @@ const make = Effect.gen(function* () {
         );
       }
       yield* bannedScheduledModel(input.modelSelection);
+      yield* requirePrecheckAccess(input.precheck, limits.runtimeMode);
       const modelSelection =
         input.modelSelection ??
         parent?.thread.modelSelection ??
@@ -2583,6 +2606,10 @@ const make = Effect.gen(function* () {
         creationSource: "mcp",
         ...(totId === undefined ? {} : { createdByTotId: totId }),
         ...(commandId === undefined ? {} : { commandId }),
+        ...(input.precheck === undefined ? {} : { precheck: input.precheck }),
+        ...(input.missedRunGraceMinutes === undefined
+          ? {}
+          : { missedRunGraceMinutes: input.missedRunGraceMinutes }),
       };
       // A replayed key rewrites the task it created, which its user may since have raised or
       // rebound: that is an edit of the task as it now stands.
@@ -2649,6 +2676,7 @@ const make = Effect.gen(function* () {
         const existing = yield* loadScheduledTask(input.scheduledTaskId, limits);
         yield* assertLiveCallerForOtherProject(scope, parent, existing.projectId);
         yield* bannedScheduledModel(input.modelSelection);
+        yield* requirePrecheckAccess(input.precheck, limits.runtimeMode);
         if (
           input.bindToCurrentThread === true &&
           (parent === undefined || parent.thread.projectId !== existing.projectId)
@@ -2711,6 +2739,10 @@ const make = Effect.gen(function* () {
           interactionMode: existing.interactionMode,
           createdBy: existing.createdBy,
           creationSource: existing.creationSource,
+          ...(input.precheck === undefined ? {} : { precheck: input.precheck }),
+          ...(input.missedRunGraceMinutes === undefined
+            ? {}
+            : { missedRunGraceMinutes: input.missedRunGraceMinutes }),
         };
         const { task } = yield* scheduledTasks
           .upsert(upsertInput)

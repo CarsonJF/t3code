@@ -139,10 +139,28 @@ export interface AvatarFigureGenerationInput {
   modelSelection: ModelSelection;
 }
 
+/** A Tot's memory as the model drafted it after a tidy-up; the caller applies it. */
+export interface MemoryTidyDraft {
+  readonly memory: string;
+  readonly archive: ReadonlyArray<string>;
+  readonly summary: string;
+}
+
+/** A whole tidy-up prompt, answered with no tools. */
+export interface MemoryTidyGenerationInput {
+  cwd: string;
+  prompt: string;
+  modelSelection: ModelSelection;
+}
+
 export interface ProviderTextGeneration {
   readonly generateAvatarFigure: (
     input: AvatarFigureGenerationInput,
   ) => Effect.Effect<AvatarFigureDraft, TextGenerationError>;
+
+  readonly generateMemoryTidy: (
+    input: MemoryTidyGenerationInput,
+  ) => Effect.Effect<MemoryTidyDraft, TextGenerationError>;
 
   readonly generateTranscriptionPostProcessing: (
     input: TranscriptionPostProcessingInput,

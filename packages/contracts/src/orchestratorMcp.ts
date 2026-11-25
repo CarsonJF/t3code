@@ -21,6 +21,8 @@ import {
   TurnItemId,
 } from "./baseSchemas.ts";
 import {
+  ScheduledTaskMissedRunGraceMinutes,
+  ScheduledTaskPrecheck,
   ScheduledTaskRunStatus,
   ScheduledTaskSchedule,
   ScheduledTaskUpsertSchedule,
@@ -764,6 +766,21 @@ export const OrchestratorMcpScheduleTaskInput = Schema.Struct({
         "Model for every run, bound or not. Default: this thread's model, which bound runs then follow as it changes.",
     }),
   ),
+  precheck: Schema.optional(
+    Schema.NullOr(
+      ScheduledTaskPrecheck.annotate({
+        description:
+          "Shell gate in the project folder, 60 s limit. Non-zero exit skips the run. Full-access callers only. null clears.",
+      }),
+    ),
+  ),
+  missedRunGraceMinutes: Schema.optional(
+    Schema.NullOr(
+      ScheduledTaskMissedRunGraceMinutes.annotate({
+        description: "After downtime, one catch-up run if at most this late; older skipped.",
+      }),
+    ),
+  ),
   clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
 });
 export type OrchestratorMcpScheduleTaskInput = typeof OrchestratorMcpScheduleTaskInput.Type;
@@ -790,6 +807,9 @@ export const OrchestratorMcpScheduledTask = Schema.Struct({
   schedule: ScheduledTaskSchedule,
   nextRunAt: Schema.NullOr(IsoDateTime),
   lastRunStatus: ScheduledTaskRunStatus,
+  precheck: Schema.optional(Schema.String),
+  missedRunGraceMinutes: Schema.optional(Schema.Number),
+  lastSkip: Schema.optional(Schema.String),
   webhookUrl: Schema.optional(Schema.String).annotate({
     description:
       "Webhook bearer URL, returned only on task creation to callers allowed to run it. Lists and updates omit it; the user can copy it from Settings. Creation may omit it without T3 Connect remote access or run permission.",
@@ -835,6 +855,8 @@ export const OrchestratorMcpUpdateScheduledTaskInput = Schema.Struct({
   bindToCurrentThread: Schema.optional(Schema.Boolean),
   freshSession: Schema.optional(Schema.Boolean),
   modelSelection: Schema.optional(ModelSelection),
+  precheck: Schema.optional(Schema.NullOr(ScheduledTaskPrecheck)),
+  missedRunGraceMinutes: Schema.optional(Schema.NullOr(ScheduledTaskMissedRunGraceMinutes)),
 });
 export type OrchestratorMcpUpdateScheduledTaskInput =
   typeof OrchestratorMcpUpdateScheduledTaskInput.Type;

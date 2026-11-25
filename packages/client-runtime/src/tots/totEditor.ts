@@ -8,6 +8,7 @@ import {
   type TotOpenBotAvatar,
   type TotScope,
   type TotShape,
+  type TotTemplate,
   totSlug,
 } from "@t3tools/contracts";
 
@@ -24,6 +25,9 @@ export interface TotDraft {
   readonly scope: TotScope;
   readonly instructions: string;
   readonly modelSelection: ModelSelection;
+  /** A built-in template id; creating the Tot also adds that template's routines, paused. */
+  readonly template?: string | undefined;
+  readonly memoryTidy?: boolean | undefined;
 }
 
 export type TotDraftErrors = Partial<Record<"name" | "color" | "scope", string>>;
@@ -73,6 +77,27 @@ export function validateTotDraft(
       scope: draft.scope,
       instructions: draft.instructions,
       modelSelection: draft.modelSelection,
+      ...(draft.template === undefined ? {} : { template: draft.template }),
+      ...(draft.memoryTidy === undefined ? {} : { memoryTidy: draft.memoryTidy }),
     },
+  };
+}
+
+/** Fills a new Tot's draft from a template, keeping a name the user typed themselves. */
+export function applyTotTemplate<
+  Draft extends Pick<TotDraft, "name" | "instructions" | "scope" | "template">,
+>(draft: Draft, template: TotTemplate, previous: TotTemplate | undefined): Draft {
+  const keepName = draft.name.trim() !== "" && draft.name !== previous?.name;
+  return {
+    ...draft,
+    name: keepName ? draft.name : template.id === "blank" ? "" : template.name,
+    instructions: template.instructions,
+    scope:
+      template.scope === "all"
+        ? "all"
+        : draft.scope === "all"
+          ? { projects: [], groups: [] }
+          : draft.scope,
+    template: template.id,
   };
 }
