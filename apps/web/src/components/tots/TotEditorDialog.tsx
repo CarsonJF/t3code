@@ -47,7 +47,7 @@ import { Label } from "../ui/label";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { TotAvatar } from "./TotAvatar";
-import { TotFaceEditor, totFaceOf, TOT_FACE_COLORS } from "./TotFaceEditor";
+import { TotFaceEditor, totFaceLookOf, totFaceOf, TOT_FACE_COLORS } from "./TotFaceEditor";
 import { closeTotEditor, type TotEditorTarget, useTotEditorTarget } from "./totEditorStore";
 import { useTotModelChoice } from "./useTotModelChoice";
 
@@ -100,6 +100,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
     setShape(face.shape ?? "round");
     setAntenna(face.antenna === true);
     setAccessories(face.accessories ?? []);
+    setLook(totFaceLookOf(face));
   };
   const askForDesign = async () => {
     if (editing === null || designPrompt.trim() === "") return;
@@ -128,6 +129,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const [accessories, setAccessories] = useState<ReadonlyArray<TotAccessory>>(
     editing?.avatar.accessories ?? [],
   );
+  const [look, setLook] = useState(() => totFaceLookOf(editing?.avatar));
   const [skinSeries, setSkinSeries] = useState(() => totSkinSeriesOf(skin));
   const [scope, setScope] = useState<TotScope>(editing?.scope ?? "all");
   const [instructions, setInstructions] = useState(editing?.instructions ?? "");
@@ -175,6 +177,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
         shape,
         antenna,
         accessories,
+        ...look,
         scope,
         instructions,
         modelSelection: model.selection,
@@ -299,7 +302,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
                 <TotAvatar
-                  avatar={totFaceOf(color, skin, shape, antenna, accessories)}
+                  avatar={totFaceOf(color, skin, shape, antenna, accessories, look)}
                   state="idle"
                   animation={animate && !reducedMotion ? "full" : "still"}
                   size={56}
@@ -354,7 +357,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
               <fieldset className="flex flex-col gap-1.5">
                 <legend className="mb-1.5 font-medium text-sm">Face</legend>
                 <TotFaceEditor
-                  value={totFaceOf(color, skin, shape, antenna, accessories)}
+                  value={totFaceOf(color, skin, shape, antenna, accessories, look)}
                   onChange={applyFace}
                   skinSeries={skinSeries}
                   onSkinSeriesChange={setSkinSeries}
@@ -406,7 +409,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                         >
                           {savedDesigns.map((design, index) => (
                             <button
-                              key={`${design.color}${design.skin ?? ""}${design.shape ?? ""}${design.antenna === true}${JSON.stringify(design.accessories ?? [])}`}
+                              key={JSON.stringify(design)}
                               type="button"
                               aria-label={`Use design ${index + 1}`}
                               className="rounded-md border border-transparent p-0.5 hover:border-ring"

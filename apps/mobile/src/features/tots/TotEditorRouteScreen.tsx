@@ -167,6 +167,9 @@ function TotEditorForm(props: {
         skin: editing?.avatar.skin ?? null,
         shape,
         accessories,
+        // Mobile cannot draw the open-bot look yet; keep it so saving here does not drop it.
+        style: editing?.avatar.style,
+        openBot: editing?.avatar.openBot,
         scope,
         instructions,
         modelSelection: model,

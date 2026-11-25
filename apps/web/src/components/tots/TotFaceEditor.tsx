@@ -10,16 +10,45 @@ import {
   totSkinsIn,
   type TotSkinSeries,
 } from "@t3tools/client-runtime/tots/skins";
-import { TOT_SHAPES, type TotAccessory, type TotAvatar, type TotShape } from "@t3tools/contracts";
+import {
+  TOT_OPEN_BOT_MAX_DEPTH,
+  TOT_SHAPES,
+  type TotAccessory,
+  type TotAvatar,
+  type TotOpenBotAvatar,
+  type TotOpenBotMaterial,
+  type TotShape,
+} from "@t3tools/contracts";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
+import { DEFAULT_OPEN_BOT, useOpenBotKit } from "./OpenBotFace";
 import { loadBoopFace, TotAvatar as TotFace } from "./TotAvatar";
+
+const OPEN_BOT_FINISHES: ReadonlyArray<{ id: TotOpenBotMaterial; label: string }> = [
+  { id: "flat", label: "Flat" },
+  { id: "fluffy", label: "Fluffy" },
+  { id: "glass", label: "Glass" },
+  { id: "soft", label: "Soft" },
+];
+/** open-bot-avatar's own ink, then a light one for dark bodies. */
+const OPEN_BOT_EYE_COLORS = [
+  { color: "#151515", label: "Dark" },
+  { color: "#f8fafc", label: "Light" },
+];
 
 const COLOR_CHOICES = ["#0A7EA4", "#7C3AED", "#DB2777", "#EA580C", "#16A34A", "#475569"];
 export const TOT_FACE_COLORS = COLOR_CHOICES;
+
+/** The style fields of a face, kept apart from BoopFace's so switching back loses nothing. */
+export type TotFaceLook = Pick<TotAvatar, "style" | "openBot">;
+
+export const totFaceLookOf = (avatar: TotFaceLook | undefined): TotFaceLook => ({
+  ...(avatar?.style === "open-bot" ? { style: avatar.style } : {}),
+  ...(avatar?.openBot === undefined ? {} : { openBot: avatar.openBot }),
+});
 
 export const totFaceOf = (
   color: string,
@@ -27,12 +56,14 @@ export const totFaceOf = (
   shape: TotShape,
   antenna: boolean,
   accessories: ReadonlyArray<TotAccessory> = [],
+  look: TotFaceLook = {},
 ): TotAvatar => ({
   color,
   ...(skin === null ? {} : { skin }),
   ...(shape === "round" ? {} : { shape }),
   ...(antenna ? { antenna } : {}),
   ...(accessories.length === 0 ? {} : { accessories }),
+  ...totFaceLookOf(look),
 });
 
 /** The face controls from the Tot editor, shared with the Tot settings panel. */
@@ -50,6 +81,10 @@ export function TotFaceEditor(props: {
   const shape = value.shape ?? "round";
   const antenna = value.antenna === true;
   const accessories = value.accessories ?? [];
+  const look = totFaceLookOf(value);
+  const openBot = value.style === "open-bot" ? (value.openBot ?? DEFAULT_OPEN_BOT) : null;
+  const kit = useOpenBotKit(openBot !== null);
+  const eyeColor = (openBot?.eyeColor ?? OPEN_BOT_EYE_COLORS[0]!.color).toLowerCase();
   const [accessoryChoices, setAccessoryChoices] =
     useState<ReadonlyArray<TotAccessoryChoice>>(TOT_ACCESSORY_FALLBACK);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reads the accessory catalog the loaded component ships
@@ -87,9 +122,50 @@ export function TotFaceEditor(props: {
       overrides.shape ?? shape,
       overrides.antenna === undefined ? antenna : overrides.antenna,
       overrides.accessories ?? accessories,
+      look,
     );
+  const boopFace = (): TotAvatar =>
+    totFaceOf(
+      color,
+      skin,
+      shape,
+      antenna,
+      accessories,
+      value.openBot === undefined ? {} : { openBot: value.openBot },
+    );
+  const openBotFace = (next: TotOpenBotAvatar): TotAvatar =>
+    totFaceOf(color, skin, shape, antenna, accessories, { style: "open-bot", openBot: next });
+  const openBotWith = (overrides: Partial<TotOpenBotAvatar>): TotOpenBotAvatar => {
+    const merged = { ...(openBot ?? DEFAULT_OPEN_BOT), ...overrides };
+    return {
+      figure: merged.figure,
+      ...(merged.material === undefined || merged.material === "flat"
+        ? {}
+        : { material: merged.material }),
+      ...(merged.depth === undefined ? {} : { depth: merged.depth }),
+      ...(merged.eyeColor === undefined ? {} : { eyeColor: merged.eyeColor }),
+    };
+  };
   return (
     <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5" aria-label="Style" role="group">
+        <button
+          type="button"
+          aria-pressed={openBot === null}
+          className="rounded-md border border-border px-2 py-1 text-muted-foreground text-xs aria-pressed:border-ring aria-pressed:bg-muted aria-pressed:text-foreground"
+          onClick={() => props.onChange(boopFace())}
+        >
+          BoopFace
+        </button>
+        <button
+          type="button"
+          aria-pressed={openBot !== null}
+          className="rounded-md border border-border px-2 py-1 text-muted-foreground text-xs aria-pressed:border-ring aria-pressed:bg-muted aria-pressed:text-foreground"
+          onClick={() => props.onChange(openBotFace(openBot ?? value.openBot ?? DEFAULT_OPEN_BOT))}
+        >
+          Open Bot
+        </button>
+      </div>
       <div className="flex flex-wrap items-center gap-1.5">
         {COLOR_CHOICES.map((choice) => (
           <button
@@ -110,127 +186,234 @@ export function TotFaceEditor(props: {
           onChange={(event) => props.onChange(face({ color: event.target.value }))}
         />
       </div>
-      <div className="flex flex-wrap items-center gap-1.5" aria-label="Shape" role="group">
-        {TOT_SHAPES.map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            aria-label={`Shape ${choice}`}
-            aria-pressed={shape === choice}
-            className="rounded-md border border-transparent p-0.5 aria-pressed:border-ring"
-            onClick={() => props.onChange(face({ shape: choice }))}
-          >
-            <TotFace
-              avatar={totFaceOf(color, skin, choice, antenna, accessories)}
-              state="idle"
-              animation="still"
-              size={28}
-            />
-          </button>
-        ))}
-      </div>
-      <div
-        className="flex max-h-24 flex-wrap items-center gap-1.5 overflow-y-auto"
-        aria-label="Accessories"
-        role="group"
-      >
-        {accessoryChoices.map((choice) => {
-          const accessory = worn(choice);
-          return (
-            <div
-              key={choice.id}
-              className="flex items-center gap-1 rounded-md border border-border p-0.5"
-            >
+      {openBot === null ? (
+        <>
+          <div className="flex flex-wrap items-center gap-1.5" aria-label="Shape" role="group">
+            {TOT_SHAPES.map((choice) => (
               <button
+                key={choice}
                 type="button"
-                aria-label={`${accessory === undefined ? "Wear" : "Remove"} ${choice.label}`}
-                aria-pressed={accessory !== undefined}
-                className="rounded px-1.5 py-1 text-xs aria-pressed:bg-muted aria-pressed:text-foreground"
-                onClick={() =>
-                  props.onChange(
-                    face({
-                      accessories: wearing(
-                        choice,
-                        accessory === undefined ? { kind: choice.id } : null,
-                      ),
-                    }),
-                  )
-                }
+                aria-label={`Shape ${choice}`}
+                aria-pressed={shape === choice}
+                className="rounded-md border border-transparent p-0.5 aria-pressed:border-ring"
+                onClick={() => props.onChange(face({ shape: choice }))}
               >
-                {choice.label}
+                <TotFace
+                  avatar={totFaceOf(color, skin, choice, antenna, accessories)}
+                  state="idle"
+                  animation="still"
+                  size={28}
+                />
               </button>
-              {accessory === undefined ? null : (
-                <input
-                  type="color"
-                  aria-label={`${choice.label} color`}
-                  className="size-5 cursor-pointer rounded border-0 bg-transparent p-0"
-                  value={totAccessoryColor(accessory, accessoryChoices)}
-                  onChange={(event) =>
-                    props.onChange(
-                      face({
-                        accessories: wearing(choice, {
-                          kind: choice.id,
-                          color: event.target.value,
+            ))}
+          </div>
+          <div
+            className="flex max-h-24 flex-wrap items-center gap-1.5 overflow-y-auto"
+            aria-label="Accessories"
+            role="group"
+          >
+            {accessoryChoices.map((choice) => {
+              const accessory = worn(choice);
+              return (
+                <div
+                  key={choice.id}
+                  className="flex items-center gap-1 rounded-md border border-border p-0.5"
+                >
+                  <button
+                    type="button"
+                    aria-label={`${accessory === undefined ? "Wear" : "Remove"} ${choice.label}`}
+                    aria-pressed={accessory !== undefined}
+                    className="rounded px-1.5 py-1 text-xs aria-pressed:bg-muted aria-pressed:text-foreground"
+                    onClick={() =>
+                      props.onChange(
+                        face({
+                          accessories: wearing(
+                            choice,
+                            accessory === undefined ? { kind: choice.id } : null,
+                          ),
                         }),
-                      }),
-                    )
+                      )
+                    }
+                  >
+                    {choice.label}
+                  </button>
+                  {accessory === undefined ? null : (
+                    <input
+                      type="color"
+                      aria-label={`${choice.label} color`}
+                      className="size-5 cursor-pointer rounded border-0 bg-transparent p-0"
+                      value={totAccessoryColor(accessory, accessoryChoices)}
+                      onChange={(event) =>
+                        props.onChange(
+                          face({
+                            accessories: wearing(choice, {
+                              kind: choice.id,
+                              color: event.target.value,
+                            }),
+                          }),
+                        )
+                      }
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <>
+          <div
+            className="flex max-h-32 flex-wrap items-center gap-1.5 overflow-y-auto"
+            aria-label="Figure"
+            role="group"
+          >
+            {(kit?.figures ?? []).map((figure) => (
+              <button
+                key={figure.id}
+                type="button"
+                aria-label={`Figure ${figure.name}`}
+                aria-pressed={openBot.figure === figure.id}
+                className="rounded-md border border-transparent p-0.5 aria-pressed:border-ring"
+                onClick={() => props.onChange(openBotFace(openBotWith({ figure: figure.id })))}
+              >
+                <TotFace
+                  avatar={totFaceOf(color, null, "round", false, [], {
+                    style: "open-bot",
+                    // Thumbnails stay flat: a fluffy coat is a WebGL render per figure.
+                    openBot: { figure: figure.id },
+                  })}
+                  state="idle"
+                  animation="still"
+                  size={28}
+                />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {props.children}
+      {openBot === null ? (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground text-xs">Antenna</span>
+            <Switch
+              aria-label="Antenna"
+              checked={antenna}
+              onCheckedChange={(checked) => props.onChange(face({ antenna: checked }))}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground text-xs">Skin</span>
+            <Select
+              value={String(skinSeries.series)}
+              onValueChange={(series) =>
+                props.onSkinSeriesChange(
+                  TOT_SKIN_SERIES.find((entry) => String(entry.series) === series) ?? skinSeries,
+                )
+              }
+            >
+              <SelectTrigger size="sm" className="w-48" aria-label="Skin series">
+                <SelectValue>{skinSeries.title}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {TOT_SKIN_SERIES.map((entry) => (
+                  <SelectItem key={entry.series} value={String(entry.series)}>
+                    {entry.title}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[null, ...totSkinsIn(skinSeries)].map((choice) => (
+              <button
+                key={choice ?? "flat"}
+                type="button"
+                aria-label={choice === null ? "No skin" : `Skin ${choice}`}
+                aria-pressed={skin === choice}
+                className="rounded-md border border-transparent p-0.5 aria-pressed:border-ring"
+                onClick={() => props.onChange(face({ skin: choice }))}
+              >
+                <TotFace
+                  avatar={totFaceOf(color, choice, shape, antenna, accessories)}
+                  state="idle"
+                  animation="still"
+                  size={28}
+                />
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground text-xs">Finish</span>
+            <div className="flex items-center gap-1" aria-label="Finish" role="group">
+              {OPEN_BOT_FINISHES.map((finish) => (
+                <button
+                  key={finish.id}
+                  type="button"
+                  aria-pressed={(openBot.material ?? "flat") === finish.id}
+                  className="rounded-md border border-border px-2 py-1 text-muted-foreground text-xs aria-pressed:border-ring aria-pressed:bg-muted aria-pressed:text-foreground"
+                  onClick={() => props.onChange(openBotFace(openBotWith({ material: finish.id })))}
+                >
+                  {finish.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground text-xs">Depth</span>
+            <input
+              type="range"
+              aria-label="Depth"
+              className="w-48 accent-primary"
+              min={0}
+              max={TOT_OPEN_BOT_MAX_DEPTH}
+              step={1}
+              value={openBot.depth ?? 6}
+              onChange={(event) =>
+                props.onChange(openBotFace(openBotWith({ depth: Number(event.target.value) })))
+              }
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground text-xs">Eyes</span>
+            <div className="flex items-center gap-1.5" aria-label="Eyes" role="group">
+              {OPEN_BOT_EYE_COLORS.map((choice) => (
+                <button
+                  key={choice.color}
+                  type="button"
+                  aria-label={`${choice.label} eyes`}
+                  aria-pressed={eyeColor === choice.color}
+                  className="size-6 rounded-full border-2 border-muted-foreground/50 aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-ring"
+                  style={{ backgroundColor: choice.color }}
+                  onClick={() =>
+                    props.onChange(openBotFace(openBotWith({ eyeColor: choice.color })))
                   }
                 />
-              )}
+              ))}
+              <label
+                aria-pressed={!OPEN_BOT_EYE_COLORS.some((choice) => choice.color === eyeColor)}
+                className="relative size-6 cursor-pointer rounded-full border-2 border-muted-foreground/50 aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-ring"
+                style={{
+                  background: `radial-gradient(circle, ${eyeColor} 0 38%, transparent 40%), conic-gradient(#ef4444, #eab308, #22c55e, #06b6d4, #6366f1, #d946ef, #ef4444)`,
+                }}
+              >
+                <input
+                  type="color"
+                  aria-label="Eye color"
+                  className="absolute inset-0 size-full cursor-pointer opacity-0"
+                  value={eyeColor}
+                  onChange={(event) =>
+                    props.onChange(openBotFace(openBotWith({ eyeColor: event.target.value })))
+                  }
+                />
+              </label>
             </div>
-          );
-        })}
-      </div>
-      {props.children}
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground text-xs">Antenna</span>
-        <Switch
-          aria-label="Antenna"
-          checked={antenna}
-          onCheckedChange={(checked) => props.onChange(face({ antenna: checked }))}
-        />
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground text-xs">Skin</span>
-        <Select
-          value={String(skinSeries.series)}
-          onValueChange={(series) =>
-            props.onSkinSeriesChange(
-              TOT_SKIN_SERIES.find((entry) => String(entry.series) === series) ?? skinSeries,
-            )
-          }
-        >
-          <SelectTrigger size="sm" className="w-48" aria-label="Skin series">
-            <SelectValue>{skinSeries.title}</SelectValue>
-          </SelectTrigger>
-          <SelectPopup align="end" alignItemWithTrigger={false}>
-            {TOT_SKIN_SERIES.map((entry) => (
-              <SelectItem key={entry.series} value={String(entry.series)}>
-                {entry.title}
-              </SelectItem>
-            ))}
-          </SelectPopup>
-        </Select>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {[null, ...totSkinsIn(skinSeries)].map((choice) => (
-          <button
-            key={choice ?? "flat"}
-            type="button"
-            aria-label={choice === null ? "No skin" : `Skin ${choice}`}
-            aria-pressed={skin === choice}
-            className="rounded-md border border-transparent p-0.5 aria-pressed:border-ring"
-            onClick={() => props.onChange(face({ skin: choice }))}
-          >
-            <TotFace
-              avatar={totFaceOf(color, choice, shape, antenna, accessories)}
-              state="idle"
-              animation="still"
-              size={28}
-            />
-          </button>
-        ))}
-      </div>
+          </div>
+        </>
+      )}
       {props.error ? <p className="text-destructive-foreground text-xs">{props.error}</p> : null}
     </div>
   );
