@@ -8,11 +8,14 @@ import {
 import { applyTotAntenna, applyTotHeadShape } from "@t3tools/client-runtime/tots/shapes";
 import {
   TOT_FACE_ACTION,
+  totAvatarStyleOf,
   type TotAccessory,
   type TotAvatar as TotAvatarValue,
   type TotFaceState,
 } from "@t3tools/contracts";
 import { useEffect, useRef, useState } from "react";
+
+import { OpenBotFace, useOpenBotKit } from "./OpenBotFace";
 
 interface BoopFaceElement extends HTMLElement {
   play(action: string): unknown;
@@ -34,13 +37,43 @@ const FACE_FRAME = (shape: TotAvatarValue["shape"]): TotAccessoryFrame => ({
   eyeY: 126,
 });
 
-export function TotAvatar(props: {
+interface TotAvatarProps {
   readonly avatar: TotAvatarValue;
   readonly state: TotFaceState;
   readonly animation: TotAnimation;
   readonly size: number;
   readonly hovered?: boolean;
-}) {
+}
+
+/** A Tot's face in its chosen style; BoopFace when open-bot has no figure by that id. */
+export function TotAvatar(props: TotAvatarProps) {
+  const openBot = totAvatarStyleOf(props.avatar) === "open-bot" ? props.avatar.openBot : undefined;
+  const kit = useOpenBotKit(openBot !== undefined);
+  if (openBot === undefined) return <BoopFaceAvatar {...props} />;
+  if (kit === null) {
+    return (
+      <span
+        aria-hidden="true"
+        style={{ display: "inline-block", width: props.size, height: props.size, flexShrink: 0 }}
+      />
+    );
+  }
+  const figure = kit.figures.find((entry) => entry.id === openBot.figure);
+  if (figure === undefined) return <BoopFaceAvatar {...props} />;
+  return (
+    <OpenBotFace
+      kit={kit}
+      figure={figure}
+      look={openBot}
+      color={props.avatar.color}
+      state={props.state}
+      moving={props.animation === "full" || (props.animation === "hover" && props.hovered === true)}
+      size={props.size}
+    />
+  );
+}
+
+function BoopFaceAvatar(props: TotAvatarProps) {
   const ref = useRef<BoopFaceElement | null>(null);
   const [defined, setDefined] = useState(isDefined);
   const moving =
