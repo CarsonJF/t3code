@@ -43,6 +43,7 @@ import {
   OrchestrationV2TurnItemStatus,
 } from "./orchestrationV2.ts";
 import { ProviderOptionSelection, ProviderOptionSelectionValue } from "./model.ts";
+import { ModelSelection } from "./modelSelection.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 
 const OrchestratorMcpPrompt = TrimmedNonEmptyString.check(Schema.isMaxLength(120_000));
@@ -757,6 +758,12 @@ export const OrchestratorMcpScheduleTaskInput = Schema.Struct({
         "Runs share one thread but each starts a fresh session. Unbound: the first run makes the thread.",
     }),
   ),
+  modelSelection: Schema.optional(
+    ModelSelection.annotate({
+      description:
+        "Model for every run, bound or not. Default: this thread's model, which bound runs then follow as it changes.",
+    }),
+  ),
   clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
 });
 export type OrchestratorMcpScheduleTaskInput = typeof OrchestratorMcpScheduleTaskInput.Type;
@@ -779,6 +786,7 @@ export const OrchestratorMcpScheduledTask = Schema.Struct({
   projectId: ProjectId,
   boundThreadId: Schema.NullOr(ThreadId),
   freshSession: Schema.Boolean,
+  modelSelection: ModelSelection,
   schedule: ScheduledTaskSchedule,
   nextRunAt: Schema.NullOr(IsoDateTime),
   lastRunStatus: ScheduledTaskRunStatus,
@@ -800,7 +808,8 @@ export const OrchestratorMcpListScheduledTasksInput = Schema.Struct({
   environmentId: OrchestratorMcpEnvironmentTarget,
   projectId: Schema.optional(
     ProjectId.annotate({
-      description: "Default: your thread's project, or all outside a thread.",
+      description:
+        "Default: your thread's project, or all outside a thread. A Tot also gets the projects it owns.",
     }),
   ),
   scheduledTaskId: Schema.optional(ScheduledTaskId),
@@ -810,6 +819,8 @@ export type OrchestratorMcpListScheduledTasksInput =
 
 export const OrchestratorMcpListScheduledTasksResult = Schema.Struct({
   tasks: Schema.Array(OrchestratorMcpScheduledTask),
+  /** Why a default listing may not be everything, such as projects it did not cover. */
+  note: Schema.optional(Schema.String),
 });
 export type OrchestratorMcpListScheduledTasksResult =
   typeof OrchestratorMcpListScheduledTasksResult.Type;
@@ -823,6 +834,7 @@ export const OrchestratorMcpUpdateScheduledTaskInput = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   bindToCurrentThread: Schema.optional(Schema.Boolean),
   freshSession: Schema.optional(Schema.Boolean),
+  modelSelection: Schema.optional(ModelSelection),
 });
 export type OrchestratorMcpUpdateScheduledTaskInput =
   typeof OrchestratorMcpUpdateScheduledTaskInput.Type;

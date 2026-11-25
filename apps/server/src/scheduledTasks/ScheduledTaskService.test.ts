@@ -5,6 +5,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it, vi } from "@effect/vitest";
 import {
   CommandId,
+  type ModelSelection,
   ProjectId,
   ProviderInstanceId,
   ScheduledTaskError,
@@ -984,6 +985,69 @@ it.effect("remembers the Tot that created a task across later edits", () =>
         title: "Made by a person",
       });
       assert.isUndefined(personMade.task.createdByTotId);
+    }).pipe(Effect.provide(layer));
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
+);
+
+it.effect("a bound run sends the model only when the task pins it, and edits keep the pin", () =>
+  Effect.gen(function* () {
+    const project = ProjectId.make("project:pinned");
+    const sent = yield* Ref.make<Array<ModelSelection | undefined>>([]);
+    const layer = ScheduledTaskService.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          ManagedPolicy.layerTest(),
+          Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
+          Layer.mock(ThreadManagementService.ThreadManagementService)({
+            sendToThread: (input) =>
+              Ref.update(sent, (all) => [...all, input.modelSelection]).pipe(
+                Effect.as({} as never),
+              ),
+            getThreadShell: () => Effect.succeed(threadShell(project)),
+          }),
+          Layer.mock(SecretRequests.SecretRequests)({}),
+          Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
+            namedProjectsRoot: "/projects",
+            isScratchProject: () => Effect.succeed(false),
+          }),
+          NodeCrypto.layer,
+          Layer.succeed(Scheduler.Scheduler, { register: () => Effect.void }),
+        ),
+      ),
+    );
+    yield* Effect.gen(function* () {
+      const service = yield* ScheduledTaskService.ScheduledTaskService;
+      const flash = { instanceId: ProviderInstanceId.make("opencode"), model: "glm-5.3-flash" };
+      const base = {
+        title: "Check in",
+        prompt: "Check progress",
+        enabled: true,
+        schedule: { type: "interval", everyMs: 60_000 } as const,
+        projectId: project,
+        threadId: ThreadId.make("thread:pinned"),
+        workspaceStrategy: { type: "root" } as const,
+        modelSelection: flash,
+        runtimeMode: "full-access" as const,
+        interactionMode: "default" as const,
+      };
+      const pinned = yield* service.upsert({
+        ...base,
+        id: ScheduledTaskId.make("task:pinned"),
+        modelPinned: true,
+      });
+      const following = yield* service.upsert({
+        ...base,
+        id: ScheduledTaskId.make("task:following"),
+      });
+      // A client save that does not know the pin keeps it.
+      yield* service.upsert({ ...base, id: pinned.task.id, title: "Check in, edited" });
+      const stored = (yield* service.list()).tasks.find((task) => task.id === pinned.task.id);
+      assert.equal(stored?.modelPinned, true);
+      assert.isUndefined(following.task.modelPinned);
+
+      yield* service.runNow({ id: pinned.task.id });
+      yield* service.runNow({ id: following.task.id });
+      assert.deepEqual(yield* Ref.get(sent), [flash, undefined]);
     }).pipe(Effect.provide(layer));
   }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );

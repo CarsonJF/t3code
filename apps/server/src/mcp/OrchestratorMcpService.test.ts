@@ -4355,6 +4355,43 @@ describe("OrchestratorMcpService provider resolution", () => {
       }),
     );
 
+    it.effect("lists a Tot's unattributed tasks in the projects it owns", () =>
+      Effect.gen(function* () {
+        const upserted = yield* Ref.make(0);
+        const owned = task({});
+        const elsewhere = ProjectId.make("project:elsewhere");
+        const authored = task({
+          id: ScheduledTaskId.make("scheduled-task:authored"),
+          projectId: elsewhere,
+          createdByTotId: TotId.make("t3bot"),
+        });
+        const unowned = task({
+          id: ScheduledTaskId.make("scheduled-task:unowned"),
+          projectId: elsewhere,
+        });
+        const mcp = yield* OrchestratorMcpService.OrchestratorMcpService.pipe(
+          Effect.provide(service([owned, authored, unowned], null, upserted)),
+        );
+        const tot = { totId: TotId.make("t3bot"), projects: new Set([projectId]), hasGroups: true };
+        const listed = yield* mcp.listScheduledTasks(supervisedClient, {}, tot);
+        assert.deepEqual(
+          listed.tasks.map((summary) => summary.scheduledTaskId),
+          [owned.id, authored.id],
+        );
+        assert.match(listed.note ?? "", /sidebar groups/);
+        const named = yield* mcp.listScheduledTasks(
+          supervisedClient,
+          { projectId: elsewhere },
+          tot,
+        );
+        assert.deepEqual(
+          named.tasks.map((summary) => summary.scheduledTaskId),
+          [authored.id, unowned.id],
+        );
+        assert.isUndefined(named.note);
+      }),
+    );
+
     it.effect("returns a webhook URL when creating a task, not when updating it", () =>
       Effect.gen(function* () {
         const upserted = yield* Ref.make(0);
@@ -4661,6 +4698,66 @@ describe("OrchestratorMcpService provider resolution", () => {
           [environmentDefault],
         );
       }),
+    );
+
+    it.effect(
+      "pins a model the caller names, on create and update, and refuses the banned one",
+      () =>
+        Effect.gen(function* () {
+          const flash = {
+            instanceId: ProviderInstanceId.make("opencode"),
+            model: "opencode-go/glm-5.3-flash",
+          };
+          const inputs = yield* Ref.make<ReadonlyArray<ScheduledTaskUpsertInput>>([]);
+          const mcp = yield* OrchestratorMcpService.OrchestratorMcpService.pipe(
+            Effect.provide(
+              service(
+                masterRepository,
+                yield* Ref.make<ReadonlyArray<ScheduledTask["workspaceStrategy"]>>([]),
+                existing,
+                inputs,
+              ),
+            ),
+          );
+          yield* mcp.scheduleTask(client, {
+            projectId,
+            prompt: "Check the build",
+            schedule,
+            modelSelection: flash,
+          });
+          yield* mcp.scheduleTask(client, { projectId, prompt: "Check the build", schedule });
+          yield* mcp.updateScheduledTask(client, {
+            scheduledTaskId: existing.id,
+            modelSelection: flash,
+          });
+          yield* mcp.updateScheduledTask(client, { scheduledTaskId: existing.id, prompt: "Again" });
+          assert.deepEqual(
+            (yield* Ref.get(inputs)).map((input) => [
+              input.modelSelection.model,
+              input.modelPinned,
+            ]),
+            [
+              [flash.model, true],
+              [existing.modelSelection.model, undefined],
+              [flash.model, true],
+              [existing.modelSelection.model, undefined],
+            ],
+          );
+          const banned = { ...flash, model: "opencode-go/glm-5.3" };
+          const created = yield* mcp
+            .scheduleTask(client, {
+              projectId,
+              prompt: "Check the build",
+              schedule,
+              modelSelection: banned,
+            })
+            .pipe(Effect.flip);
+          const updated = yield* mcp
+            .updateScheduledTask(client, { scheduledTaskId: existing.id, modelSelection: banned })
+            .pipe(Effect.flip);
+          assert.deepEqual([created.code, updated.code], ["invalid_request", "invalid_request"]);
+          assert.equal((yield* Ref.get(inputs)).length, 4);
+        }),
     );
 
     it.effect.each([
