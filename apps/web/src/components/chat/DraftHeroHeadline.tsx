@@ -173,7 +173,8 @@ export function DraftHeroHeadline({
           ? null
           : (projectSortOrder === "updated_at"
               ? menuGroups
-              : sortLogicalProjectsForSidebar(menuGroups, threads, "updated_at"))[0]!.projectKey,
+              : sortLogicalProjectsForSidebar(menuGroups, threads, "updated_at")
+            )[0]!.projectKey,
     },
     pickerOpen,
   );
