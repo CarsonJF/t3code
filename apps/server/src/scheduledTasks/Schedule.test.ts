@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 
-import { isSameSchedule, nextScheduledRunAt } from "./Schedule.ts";
+import { isPastMissedRunGrace, isSameSchedule, nextScheduledRunAt } from "./Schedule.ts";
 
 describe("scheduled task schedule calculation", () => {
   it("skips to the next matching fixed-time weekday", () => {
@@ -81,5 +81,29 @@ describe("scheduled task schedule calculation", () => {
         { type: "fixed_time", timeOfDay: "09:00" },
       ),
     ).toBe(false);
+  });
+});
+
+describe("isPastMissedRunGrace", () => {
+  const dueAt = DateTime.makeUnsafe("2026-09-09T12:00:00.000Z");
+  const after = (minutes: number) => DateTime.add(dueAt, { minutes });
+  const interval = { type: "interval", everyMs: 3_600_000 } as const;
+
+  it("skips a run later than the grace and runs one inside it", () => {
+    expect(isPastMissedRunGrace(interval, 30, dueAt, after(31))).toBe(true);
+    expect(isPastMissedRunGrace(interval, 30, dueAt, after(29))).toBe(false);
+  });
+
+  it("treats a minute of lateness as poll latency even with no grace", () => {
+    expect(isPastMissedRunGrace(interval, 0, dueAt, DateTime.add(dueAt, { seconds: 30 }))).toBe(
+      false,
+    );
+    expect(isPastMissedRunGrace(interval, 0, dueAt, after(2))).toBe(true);
+  });
+
+  it("never expires a webhook delivery", () => {
+    expect(isPastMissedRunGrace({ type: "webhook", signature: null }, 0, dueAt, after(600))).toBe(
+      false,
+    );
   });
 });

@@ -26,6 +26,7 @@ export interface TotSettingsDraft {
   readonly autoSettle: boolean;
   /** Null follows the environment's Tot setting. */
   readonly idleCompaction: boolean | null;
+  readonly memoryTidy: boolean;
 }
 
 export type TotSettingsDraftErrors = Partial<
@@ -42,6 +43,7 @@ export function totSettingsDraftFromTot(tot: Tot): TotSettingsDraft {
     watchReports: totWatchReportsOf(tot),
     autoSettle: tot.autoSettle === true,
     idleCompaction: tot.idleCompaction ?? null,
+    memoryTidy: tot.memoryTidy === true,
   };
 }
 
@@ -82,6 +84,7 @@ export function totSettingsDraftKey(draft: TotSettingsDraft): string {
     watchReports: draft.watchReports,
     autoSettle: draft.autoSettle,
     idleCompaction: draft.idleCompaction,
+    memoryTidy: draft.memoryTidy,
   });
 }
 
@@ -120,6 +123,7 @@ export function totSettingsDraftUpdate(draft: TotSettingsDraft): TotSettingsDraf
     watchReports: draft.watchReports,
     autoSettle: draft.autoSettle,
     idleCompaction: draft.idleCompaction,
+    memoryTidy: draft.memoryTidy,
   };
 }
 

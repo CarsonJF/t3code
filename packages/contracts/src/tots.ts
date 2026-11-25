@@ -210,6 +210,8 @@ export const Tot = Schema.Struct({
   idleCompaction: Schema.optional(Schema.Boolean),
   /** Replaces the environment's `totStallMinutes` for threads this Tot watches; 0 turns stall reports off. */
   stallMinutes: Schema.optional(TotStallMinutes),
+  /** Opt-in nightly memory tidy-up. Absent or false: off. New Tots start with it on. */
+  memoryTidy: Schema.optional(Schema.Boolean),
 });
 export type Tot = typeof Tot.Type;
 
@@ -337,6 +339,10 @@ export const TotCreateInput = Schema.Struct({
   scope: TotScope,
   instructions: Tot.fields.instructions,
   modelSelection: ModelSelection,
+  /** A built-in template whose suggested scheduled tasks are created, paused. */
+  template: Schema.optional(TrimmedNonEmptyString),
+  /** Default true. */
+  memoryTidy: Schema.optional(Schema.Boolean),
 });
 export type TotCreateInput = typeof TotCreateInput.Type;
 
@@ -356,6 +362,7 @@ export const TotUpdateInput = Schema.Struct({
   idleCompaction: Schema.optional(Schema.NullOr(Schema.Boolean)),
   /** Null drops the override, so the Tot follows the environment's setting again. */
   stallMinutes: Schema.optional(Schema.NullOr(TotStallMinutes)),
+  memoryTidy: Schema.optional(Schema.Boolean),
 });
 export type TotUpdateInput = typeof TotUpdateInput.Type;
 
@@ -399,6 +406,10 @@ export const TotMemoryWriteInput = Schema.Struct({
   files: Schema.Array(TotMemoryFile).check(Schema.isMaxLength(TOT_MEMORY_MAX_FILES)),
 });
 export type TotMemoryWriteInput = typeof TotMemoryWriteInput.Type;
+
+/** Removes the last memory tidy-up: restores the copy of `MEMORY.md` it saved. */
+export const TotMemoryTidyRevertInput = Schema.Struct({ id: TotId });
+export type TotMemoryTidyRevertInput = typeof TotMemoryTidyRevertInput.Type;
 
 export class TotError extends Schema.TaggedError<TotError>()("TotError", {
   message: Schema.String,

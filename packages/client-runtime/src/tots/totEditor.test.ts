@@ -1,7 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
 import { EnvironmentId, ProjectId, ProviderInstanceId, TotId } from "@t3tools/contracts";
 
-import { validateTotDraft, type TotDraft } from "./totEditor.ts";
+import { findTotTemplate } from "@t3tools/shared/totTemplates";
+
+import { applyTotTemplate, validateTotDraft, type TotDraft } from "./totEditor.ts";
 
 const draft = (overrides: Partial<TotDraft>): TotDraft => ({
   name: "Yui",
@@ -97,5 +99,43 @@ describe("validateTotDraft", () => {
     // Switched back to BoopFace: the open-bot look stays stored for the next switch.
     const back = validateTotDraft(draft({ style: "boopface", openBot }), [], null);
     expect(back.ok && back.value.avatar).toEqual({ color: "#0A7EA4", openBot });
+  });
+});
+
+describe("Tot templates", () => {
+  const ci = findTotTemplate("ci-babysitter")!;
+  const stack = findTotTemplate("home-stack-watcher")!;
+  const blank = findTotTemplate("blank")!;
+
+  it("sends the template and memory tidy-up with a new Tot", () => {
+    const checked = validateTotDraft(
+      draft({ template: "ci-babysitter", memoryTidy: true }),
+      [],
+      null,
+    );
+    expect(checked).toMatchObject({
+      ok: true,
+      value: { template: "ci-babysitter", memoryTidy: true },
+    });
+    const plain = validateTotDraft(draft({}), [], null);
+    expect(plain.ok && "template" in plain.value).toBe(false);
+  });
+
+  it("fills an empty name and replaces the previous template's name, but keeps a typed one", () => {
+    const filled = applyTotTemplate(draft({ name: "" }), ci, undefined);
+    expect(filled).toMatchObject({ name: ci.name, instructions: ci.instructions, template: ci.id });
+    expect(applyTotTemplate(filled, stack, ci).name).toBe(stack.name);
+    expect(applyTotTemplate(draft({ name: "Yui" }), stack, ci).name).toBe("Yui");
+    expect(applyTotTemplate(filled, blank, ci)).toMatchObject({ name: "", instructions: "" });
+  });
+
+  it("suggests the template's scope type", () => {
+    expect(applyTotTemplate(draft({ scope: "all" }), ci, undefined).scope).toEqual({
+      projects: [],
+      groups: [],
+    });
+    const picked = { projects: [], groups: ["Infra"] };
+    expect(applyTotTemplate(draft({ scope: picked }), ci, undefined).scope).toBe(picked);
+    expect(applyTotTemplate(draft({ scope: picked }), stack, undefined).scope).toBe("all");
   });
 });

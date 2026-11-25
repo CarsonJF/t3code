@@ -2109,6 +2109,12 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
+    revertTotMemoryTidy: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:revert-memory-tidy",
+      tag: WS_METHODS.totsRevertMemoryTidy,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
     createGuestShare: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:guest-share:create",
       tag: WS_METHODS.guestShareCreate,

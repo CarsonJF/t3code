@@ -40,6 +40,11 @@ import {
   type WebhookFilterDraft,
 } from "@t3tools/client-runtime/scheduled-task-webhook";
 import { scheduledTaskWorktreeBaseRef } from "@t3tools/client-runtime/scheduled-task-worktree";
+import {
+  lastSkipLabel,
+  scheduledTaskGateFields,
+  visibleLastSkip,
+} from "@t3tools/client-runtime/scheduled-task-gate";
 import { scheduleTimeZoneLabel } from "@t3tools/client-runtime/scheduled-task-time-zone";
 import type { MessageResolver } from "../../i18n/messages";
 import { useRef, useState, type ReactNode } from "react";
@@ -194,6 +199,19 @@ function repeatLabel(
     DAYS.filter((day) => days.has(day.index))
       .map((day) => weekdayLabel(day.index, locale))
       .join(", ") || resolve(msg("Choose days"))
+  );
+}
+
+function ScheduledTaskSkipLine(props: { readonly task: ScheduledTask }) {
+  const gt = useGT();
+  const m = useMessages();
+  const skip = visibleLastSkip(props.task);
+  if (skip === null) return null;
+  const label = lastSkipLabel(skip.reason, m);
+  return (
+    <Text className="text-sm text-foreground-muted" numberOfLines={2}>
+      {skip.detail ? gt("{label}: {detail}", { label, detail: skip.detail }) : label}
+    </Text>
   );
 }
 
@@ -800,6 +818,9 @@ function TaskForm({
     config?.environment.capabilities.oneTimeSchedules === true ||
     draft.task?.schedule.type === "once";
   const offersThreadModes = config?.environment.capabilities.scheduledTaskThreadModes === true;
+  const precheckAllowed =
+    (clampManagedRuntimeMode(config?.managedPolicy, draft.runtimeMode) ?? draft.runtimeMode) ===
+    "full-access";
   const save = async () => {
     const current = readEditor();
     if (!current || current.environmentId !== environmentId) return;
@@ -875,6 +896,11 @@ function TaskForm({
       Dialog.alert(gt("Project unavailable"), gt("Choose a project in this environment."));
       return;
     }
+    const gate = scheduledTaskGateFields(draft, m);
+    if (!gate.ok) {
+      Dialog.alert(gate.title, gate.description);
+      return;
+    }
     const input: ScheduledTaskUpsertInput = {
       ...(draft.task ? { id: draft.task.id, requireExisting: true } : {}),
       title: draft.title.trim(),
@@ -901,6 +927,7 @@ function TaskForm({
         clampManagedRuntimeMode(config?.managedPolicy, draft.runtimeMode) ?? draft.runtimeMode,
       interactionMode: draft.task?.interactionMode ?? "default",
       creationSource: draft.task?.creationSource ?? "mobile",
+      ...gate.fields,
     };
     submissionPending.current = true;
     setSaving(true);
@@ -1454,6 +1481,37 @@ function TaskForm({
               ) : null}
             </>
           )}
+          {draft.schedule.mode === "webhook" ? null : (
+            <>
+              <FormField
+                label={gt("Precheck command")}
+                value={draft.precheck}
+                placeholder={
+                  precheckAllowed ? gt("Optional shell command") : gt("Needs a full-access task")
+                }
+                disabled={saving || !precheckAllowed}
+                borderTop
+                onChange={(precheck) => setDraft((current) => ({ ...current, precheck }))}
+              />
+              <Text className="px-4 pb-3 text-sm text-foreground-muted">
+                <T>
+                  Runs in the project folder before each scheduled run, for up to 60 seconds. A
+                  non-zero exit skips the run without starting an agent.
+                </T>
+              </Text>
+              <FormField
+                label={gt("Missed-run grace (minutes)")}
+                value={draft.missedRunGraceMinutes}
+                placeholder={gt("Default")}
+                keyboardType="number-pad"
+                disabled={saving}
+                borderTop
+                onChange={(missedRunGraceMinutes) =>
+                  setDraft((current) => ({ ...current, missedRunGraceMinutes }))
+                }
+              />
+            </>
+          )}
           <View className="min-h-14 flex-row items-center gap-3 border-t border-border-subtle px-4 py-3">
             <Text textRole="body" className="min-w-0 flex-1 text-foreground">
               {gt("Enabled", { $context: "switch label, whether the task runs" })}
@@ -1712,6 +1770,7 @@ function EnvironmentTasks({
                   {task.blockedByPolicy}
                 </Text>
               ) : null}
+              <ScheduledTaskSkipLine task={task} />
               {task.lastRunError ? (
                 <Text className="text-sm text-danger-foreground" numberOfLines={2}>
                   <T>

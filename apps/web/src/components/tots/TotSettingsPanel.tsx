@@ -27,6 +27,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { TOT_THEME_TOKEN_NAMES } from "@t3tools/shared/totThemeTokens";
 import { EyeIcon, Globe2, PlayIcon, Trash2Icon } from "lucide-react";
+import { T, useGT } from "gt-react";
 import { type ReactNode, useState } from "react";
 
 import { useClientSettings, useEnvironmentSettings } from "../../hooks/useSettings";
@@ -396,6 +397,16 @@ function TotSettingsEditor(props: {
 
           <Separator />
 
+          <TotMemoryTidySection
+            environmentId={environmentId}
+            tot={tot}
+            value={draft.memoryTidy}
+            disabled={!canEdit}
+            onChange={(memoryTidy) => setDraft({ ...draft, memoryTidy })}
+          />
+
+          <Separator />
+
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="font-medium text-sm">Auto-settle its thread</p>
@@ -433,6 +444,69 @@ function TotSettingsEditor(props: {
           {saving ? "Saving…" : "Save"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function TotMemoryTidySection(props: {
+  readonly environmentId: EnvironmentId;
+  readonly tot: Tot;
+  readonly value: boolean;
+  readonly disabled: boolean;
+  readonly onChange: (value: boolean) => void;
+}) {
+  const gt = useGT();
+  const revert = useAtomCommand(serverEnvironment.revertTotMemoryTidy, { reportFailure: false });
+  const [reverting, setReverting] = useState(false);
+  const revertLast = async () => {
+    setReverting(true);
+    const result = await revert({
+      environmentId: props.environmentId,
+      input: { id: props.tot.id },
+    });
+    setReverting(false);
+    if (result._tag === "Failure") {
+      if (!isAtomCommandInterrupted(result)) {
+        reportFailure(gt("Could not revert the tidy-up"), squashAtomCommandFailure(result));
+      }
+      return;
+    }
+    toastManager.add({ type: "success", title: gt("Last memory tidy-up reverted") });
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-medium text-sm">
+            <T>Nightly memory tidy-up</T>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {gt(
+              "Around 03:30 a cheap model dedupes and condenses its {memory}, keeping lines you deleted out. The previous copy is kept as {backup} and the diff in {diff}.",
+              {
+                memory: "MEMORY.md",
+                backup: "MEMORY.md.pre-tidy",
+                diff: "memory/tidy/last.diff",
+              },
+            )}
+          </p>
+        </div>
+        <Switch
+          checked={props.value}
+          disabled={props.disabled}
+          aria-label={gt("Nightly memory tidy-up for {name}", { name: props.tot.name })}
+          onCheckedChange={props.onChange}
+        />
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        className="self-start"
+        disabled={props.disabled || reverting}
+        onClick={() => void revertLast()}
+      >
+        {reverting ? gt("Reverting…") : gt("Revert last tidy-up")}
+      </Button>
     </div>
   );
 }

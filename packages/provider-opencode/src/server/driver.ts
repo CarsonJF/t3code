@@ -241,6 +241,11 @@ function selectOpenCodeRuntimeTextGeneration(
         v1: v1.generateAvatarFigure(input),
         v2: v2.generateAvatarFigure(input),
       }),
+    generateMemoryTidy: (input) =>
+      byOpenCodeRuntime(resolve, {
+        v1: v1.generateMemoryTidy(input),
+        v2: v2.generateMemoryTidy(input),
+      }),
   };
 }
 

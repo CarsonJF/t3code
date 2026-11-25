@@ -112,6 +112,21 @@ Webhook tasks only run when their URL is called, so they can't be run
 immediately.
 Leaving an edited form asks before discarding unsaved changes.
 
+### Skip runs with nothing to do
+
+A **Precheck command** runs in the project folder before each scheduled run, for up to
+60 seconds. If it exits with anything but 0, that run is skipped without starting the
+agent, and the task shows **Skipped (precheck)** with the last line the command printed.
+For example, `git fetch -q && test "$(git rev-list HEAD..@{u} --count)" != 0` runs only
+when there are new commits. A precheck is a shell command that runs without asking, so
+only a task in full access can have one. **Run now** skips the precheck.
+
+**Missed-run grace** limits catch-up after the server was off. A run that is due more
+than that many minutes ago is skipped and shown as **Skipped (missed run)**, and the
+task waits for its next time; a run within the grace runs once, however many times it
+was missed. Without a grace, a daily task skips runs more than 10 minutes late and an
+interval task runs once when the server is back.
+
 ## Webhook automations
 
 In **Settings → Scheduled tasks**, choose **On webhook**

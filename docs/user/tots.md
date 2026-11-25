@@ -13,6 +13,8 @@ Open **Settings → Tots** and turn on Home, or create a new Tot with **New Tot*
 - a personality and standing instructions;
 - a model.
 
+Or start from a template under **Start from**: CI sitter, PR reviewer, rebase watch, stack watch for Docker and Compose, inbox triage, or blank. A template fills in instructions, a suggested scope and a face, and adds its suggested scheduled tasks paused, so nothing runs until you turn them on in **Settings → Scheduled tasks**. Change anything before you save.
+
 A new Tot starts right away. Its face shows what it is doing: working, needing you, done, failed, or off. Open Home from anywhere with its keyboard shortcut.
 
 Tots always run in full access, and they can approve requests in your other threads. Choose a model you trust with that.
@@ -55,6 +57,15 @@ A Tot is one conversation. Its project holds only its own thread, so Tots never 
 Each Tot remembers in its own folder. `MEMORY.md` holds short lines about you, your machines and projects, your preferences, decisions and work in flight; longer notes go in a `memory` folder beside it. The Tot reads it when a new thread starts and keeps it up to date as it learns. Ask a Tot what it remembers, or tell it to forget something. Home can read every Tot's memory.
 
 Open a Tot's memory from **Settings → Tots → Memory**, or right-click it in the sidebar. You can edit its files there. **Shared memory** shows what every Tot knows about you; it is read-only there.
+
+### Nightly tidy-up
+
+A Tot's memory grows. With **Nightly memory tidy-up** on, in the Tot's panel, T3 Code tidies its `MEMORY.md` around 03:30 (or soon after the server next runs): a model with no tools merges duplicate lines, drops stale ones and moves detail into dated logs in `memory/log/`, keeping the file under 6 KB. New Tots have it on; turn it on for older ones in the same panel.
+
+- A line you deleted stays deleted: the tidy-up never adds it back.
+- Each tidy-up writes one line to `memory/journal/`, the diff to `memory/tidy/last.diff`, and the previous file to `MEMORY.md.pre-tidy`. **Revert last tidy-up** puts that copy back.
+- It uses the text-generation model unless you pick another under **Settings → Tots → Tidy-up model**, where you can also change the size cap. It follows the usage-limit fallback, and never uses full `opencode-go/glm-5.3`.
+- Tots treat their memory as notes, not instructions: they check a line still holds before acting on it.
 
 ## Moving a Tot
 

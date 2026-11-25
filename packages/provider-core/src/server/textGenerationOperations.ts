@@ -35,6 +35,12 @@ export const AvatarFigureOutput = Schema.Struct({
   }),
 });
 
+export const MemoryTidyOutput = Schema.Struct({
+  memory: Schema.String,
+  archive: Schema.Array(Schema.String),
+  summary: Schema.String,
+});
+
 export type Operation = keyof ProviderTextGeneration;
 
 export interface Request<S extends Schema.Top> {
@@ -215,6 +221,18 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     });
   });
 
+  const generateMemoryTidy: ProviderTextGeneration["generateMemoryTidy"] = Effect.fn(
+    `${name}.generateMemoryTidy`,
+  )(function* (input) {
+    return yield* run({
+      operation: "generateMemoryTidy",
+      cwd: input.cwd,
+      prompt: input.prompt,
+      outputSchema: MemoryTidyOutput,
+      modelSelection: input.modelSelection,
+    });
+  });
+
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = Effect.fn(
     `${name}.generateReviewGuide`,
   )(function* (input) {
@@ -235,5 +253,6 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     generateReviewGuide,
     generateTranscriptionPostProcessing,
     generateAvatarFigure,
+    generateMemoryTidy,
   } satisfies ProviderTextGeneration;
 }

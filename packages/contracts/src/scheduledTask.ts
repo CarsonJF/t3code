@@ -280,6 +280,29 @@ export const ScheduledTaskUpsertSchedule = Schema.Union([
 ]);
 export type ScheduledTaskUpsertSchedule = typeof ScheduledTaskUpsertSchedule.Type;
 
+const SCHEDULED_TASK_PRECHECK_MAX_LENGTH = 2_000;
+export const SCHEDULED_TASK_PRECHECK_TIMEOUT_MS = 60_000;
+export const MAX_MISSED_RUN_GRACE_MINUTES = 7 * 24 * 60;
+
+/** A shell gate run in the project folder before each scheduled run; non-zero exit skips it. */
+export const ScheduledTaskPrecheck = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(SCHEDULED_TASK_PRECHECK_MAX_LENGTH),
+).annotate({
+  description:
+    "Shell command run in the project folder before each scheduled run, 60 s timeout. Non-zero exit skips the run. Full-access only.",
+});
+
+export const ScheduledTaskMissedRunGraceMinutes = Schema.Int.check(
+  Schema.isBetween({ minimum: 0, maximum: MAX_MISSED_RUN_GRACE_MINUTES }),
+).annotate({
+  description:
+    "After downtime, run one late occurrence at most this many minutes late; older ones are skipped.",
+});
+
+/** Why the last due run did not start an agent turn. */
+export const ScheduledTaskSkipReason = Schema.Literals(["precheck", "missed"]);
+export type ScheduledTaskSkipReason = typeof ScheduledTaskSkipReason.Type;
+
 export const ScheduledTaskRunStatus = Schema.Literals(["never", "running", "succeeded", "failed"]);
 export type ScheduledTaskRunStatus = typeof ScheduledTaskRunStatus.Type;
 
@@ -331,6 +354,17 @@ export const ScheduledTask = Schema.Struct({
   lastRunError: Schema.NullOr(Schema.String),
   runCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   webhook: Schema.optional(ScheduledTaskWebhookEndpoint),
+  precheck: Schema.optional(ScheduledTaskPrecheck),
+  missedRunGraceMinutes: Schema.optional(ScheduledTaskMissedRunGraceMinutes),
+  /** The last due run that was skipped. Kept apart from `lastRunStatus` so older clients decode it. */
+  lastSkip: Schema.optional(
+    Schema.Struct({
+      at: IsoDateTime,
+      // Any string, so a reason added later doesn't break a client's whole list.
+      reason: Schema.Union([ScheduledTaskSkipReason, Schema.String]),
+      detail: Schema.NullOr(Schema.String),
+    }),
+  ),
   /** Why the task cannot run regardless of `enabled`, such as a managed policy refusing webhooks. */
   blockedByPolicy: Schema.optionalKey(Schema.String),
 });
@@ -374,6 +408,10 @@ export const ScheduledTaskUpsertInput = Schema.Struct({
   creationSource: Schema.optional(OrchestrationV2CreationSource),
   /** Set by the Tot MCP toolkit; a web or client save leaves it absent. */
   createdByTotId: Schema.optional(TotId),
+  /** Omitted: keep the stored precheck. Null clears it. Needs `runtimeMode: "full-access"`. */
+  precheck: Schema.optional(Schema.NullOr(ScheduledTaskPrecheck)),
+  /** Omitted: keep the stored grace. Null clears it. */
+  missedRunGraceMinutes: Schema.optional(Schema.NullOr(ScheduledTaskMissedRunGraceMinutes)),
 });
 export type ScheduledTaskUpsertInput = typeof ScheduledTaskUpsertInput.Type;
 
