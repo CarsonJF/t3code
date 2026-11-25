@@ -167,6 +167,16 @@ Pick a face's color, shape and skin when you create or edit a Tot. The antenna i
 
 A face has two styles. **BoopFace** is the default described above. **Open Bot** draws the Tot as an object with eyes, such as a mug, a rocket or a cat, in the Tot's color, with a finish (flat, fluffy, glass or soft), more or less depth, and dark or light eyes. A finish the device can't draw shows flat. Switching style keeps the other style's choices, so you can switch back. Open Bot faces show on web and desktop; the mobile app and the Discord avatar still show the Tot's BoopFace.
 
+### Your own figures and face themes
+
+Each machine keeps an avatar library in its T3 home folder (`avatars/figures` and `avatars/themes`). A **figure** is an Open Bot outline with eyes; a **face theme** is a named face (style, figure, colors, finish, depth, eyes and mood) you can put on any Tot in one click. Both appear in the face editor next to the built-in ones, with a dashed border. A Tot whose figure is later deleted shows the default figure instead.
+
+You don't draw figures by hand: ask any agent. For example: _"Make a small lighthouse figure for the avatar library, and a face theme called Beacon that uses it in orange with a glass finish. Then apply Beacon to T3Bot."_ The agent saves the figure with the `t3_avatar_library` tool, looks at the preview it gets back, and adjusts it until it reads well at sidebar size.
+
+To move an item to another machine, ask the agent to **export** it to a JSON file and **import** that file on the other machine; nothing syncs on its own. To ship a favorite with every build, add its JSON to the `gallery/` folder of the open-bot-avatar mirror (`CarsonJF/open-bot-avatar-fork`), tag a release there, and update the vendored copy.
+
+Finishes such as glass and soft are shader code, not library data. A new finish is a pull request to that mirror, not something an agent adds while T3 Code runs.
+
 Faces move in a Tot's own thread, in the Tots tab, and when you hover them in the sidebar. To keep them still, turn off **Animate Tot avatars** in Appearance settings, on each device.
 
 ## Themes

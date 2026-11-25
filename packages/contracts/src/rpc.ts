@@ -503,6 +503,7 @@ import {
   TotThreadResult,
   TotUpdateInput,
 } from "./tots.ts";
+import { AvatarLibrary } from "./avatarLibrary.ts";
 import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
@@ -638,6 +639,7 @@ export const WS_METHODS = {
   totsDisable: "tots.disable",
   totsStartFresh: "tots.startFresh",
   totsReadMemory: "tots.readMemory",
+  totsAvatarLibrary: "tots.avatarLibrary",
   totsDesignAvatar: "tots.designAvatar",
   groupChatsCreate: "groupChats.create",
   groupChatsUpdate: "groupChats.update",
@@ -1113,6 +1115,11 @@ const WsTotsDesignAvatarRpc = Rpc.make(WS_METHODS.totsDesignAvatar, {
 const WsTotsReadMemoryRpc = Rpc.make(WS_METHODS.totsReadMemory, {
   payload: TotMemoryReadInput,
   success: TotMemory,
+  error: totError,
+});
+const WsTotsAvatarLibraryRpc = Rpc.make(WS_METHODS.totsAvatarLibrary, {
+  payload: Schema.Struct({}),
+  success: AvatarLibrary,
   error: totError,
 });
 const WsTotsWriteMemoryRpc = Rpc.make(WS_METHODS.totsWriteMemory, {
@@ -2624,6 +2631,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsTotsDisableRpc,
   WsTotsStartFreshRpc,
   WsTotsReadMemoryRpc,
+  WsTotsAvatarLibraryRpc,
   WsTotsDesignAvatarRpc,
   WsGroupChatsCreateRpc,
   WsGroupChatsUpdateRpc,
