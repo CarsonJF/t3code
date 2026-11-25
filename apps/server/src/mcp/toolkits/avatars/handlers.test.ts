@@ -134,6 +134,14 @@ it.effect("saves a figure and answers with a PNG of it", () =>
   }),
 );
 
+it.effect("hands out the vendored design prompt", () =>
+  Effect.gen(function* () {
+    const { call } = harness();
+    const result = yield* call({ action: "design_prompt" });
+    expect(result).toMatchObject({ prompt: expect.stringContaining("# Avatar geometry designer") });
+  }),
+);
+
 it.effect("passes the store's refusal back to the agent", () =>
   Effect.gen(function* () {
     const { call, figures } = harness();
