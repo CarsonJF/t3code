@@ -1419,6 +1419,9 @@ export const CloudSpeechCredentials = Schema.Struct({
   openrouter: CloudSpeechCredential,
 });
 
+/** Full GLM 5.3 on OpenCode Go is banned here; its Flash variants are separate ids and stay allowed. */
+export const ALWAYS_DENIED_FALLBACK_MODELS: ReadonlyArray<string> = ["opencode-go/glm-5.3"];
+
 export const ServerSettings = Schema.Struct({
   // Null means unmigrated; empty is authoritative and must not resurrect cleared preferences.
   favorites: Schema.NullOr(ModelFavorites).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
@@ -1525,6 +1528,17 @@ export const ServerSettings = Schema.Struct({
   idleCompaction: Schema.optionalKey(IdleCompactionMode),
   snoozeLimitedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   autoResumeLimitedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /**
+   * Tried in order, once, when scheduled or Tot-launched work fails on a usage limit. A Tot's own
+   * list replaces this one. Denied models are skipped.
+   */
+  usageLimitFallbackModels: Schema.Array(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  /** Model ids never used as a usage-limit fallback, on top of `ALWAYS_DENIED_FALLBACK_MODELS`. */
+  usageLimitFallbackDeniedModels: Schema.Array(Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed([...ALWAYS_DENIED_FALLBACK_MODELS])),
+  ),
   snoozePresets: SnoozePresetSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SNOOZE_PRESETS)),
   ),
@@ -1986,6 +2000,8 @@ export const ServerSettingsPatch = Schema.Struct({
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   autoResumeLimitedThreads: Schema.optionalKey(Schema.Boolean),
   snoozeLimitedThreads: Schema.optionalKey(Schema.Boolean),
+  usageLimitFallbackModels: Schema.optionalKey(Schema.Array(ModelSelection)),
+  usageLimitFallbackDeniedModels: Schema.optionalKey(Schema.Array(Schema.String)),
   snoozePresets: Schema.optionalKey(SnoozePresetSettings),
   hiddenThreadTags: Schema.optionalKey(Schema.Array(Schema.String)),
   hideTaggedThreads: Schema.optionalKey(Schema.Boolean),
