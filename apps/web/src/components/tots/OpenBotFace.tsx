@@ -50,6 +50,16 @@ export function useOpenBotKit(wanted: boolean): OpenBotKit | null {
 
 export const DEFAULT_OPEN_BOT: TotOpenBotAvatar = { figure: "chat" };
 
+/** A figure by id from the built-ins, then the library; the default figure when neither has it. */
+export const openBotFigure = (
+  kit: OpenBotKit,
+  library: ReadonlyArray<AvatarDefinition>,
+  id: string,
+): AvatarDefinition =>
+  kit.figures.find((figure) => figure.id === id) ??
+  library.find((figure) => figure.id === id) ??
+  (kit.figures.find((figure) => figure.id === DEFAULT_OPEN_BOT.figure) as AvatarDefinition);
+
 const OPEN_BOT_STATE: Record<TotFaceState, { state: AvatarState; mood: AvatarMood }> = {
   idle: { state: "idle", mood: "neutral" },
   working: { state: "working", mood: "neutral" },
@@ -70,7 +80,8 @@ export function OpenBotFace(props: {
 }) {
   const host = useRef<HTMLDivElement | null>(null);
   const [mounted, setMounted] = useState<MountedAvatar | null>(null);
-  const { state, mood } = OPEN_BOT_STATE[props.state];
+  const { state, mood: stateMood } = OPEN_BOT_STATE[props.state];
+  const mood = stateMood === "neutral" ? (props.look.mood ?? "neutral") : stateMood;
   const { color, moving } = props;
   const { eyeColor, material, depth } = props.look;
 

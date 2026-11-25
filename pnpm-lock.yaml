@@ -982,6 +982,9 @@ importers:
       node-pty:
         specifier: 1.2.0-beta.15
         version: 1.2.0-beta.15(patch_hash=ff8117509663fe1d5a07ef2648c324e80a9349b7d90401a00a591702615b8b30)
+      open-bot-avatar:
+        specifier: workspace:*
+        version: link:../../packages/open-bot-avatar
       playwright-core:
         specifier: 1.64.1
         version: 1.64.1
