@@ -147,14 +147,17 @@ it.effect("lists library themes with the built-in looks, and deletes one", () =>
   Effect.gen(function* () {
     const { call } = harness();
     yield* call({ action: "save_theme", theme: beacon });
-    const listed = (yield* call({ action: "list" })) as { themes: Array<{ id: string }> };
-    expect(listed.themes.map((theme) => theme.id)).toEqual(
-      expect.arrayContaining(["beacon", "classic", "chatterbox"]),
-    );
-    const after = (yield* call({ action: "delete", kind: "theme", id: "beacon" })) as {
-      themes: Array<{ id: string }>;
-    };
-    expect(after.themes.map((theme) => theme.id)).not.toContain("beacon");
+    expect(yield* call({ action: "list" })).toMatchObject({
+      themes: expect.arrayContaining([
+        { id: "beacon", name: "Beacon" },
+        { id: "classic", name: "Classic" },
+        { id: "chatterbox", name: "Chatterbox" },
+      ]),
+    });
+    const after = yield* call({ action: "delete", kind: "theme", id: "beacon" });
+    expect(after).toMatchObject({
+      themes: expect.not.arrayContaining([{ id: "beacon", name: "Beacon" }]),
+    });
   }),
 );
 
