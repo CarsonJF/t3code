@@ -749,6 +749,8 @@ const SPLIT_WS_RPC_PREFIXES = [
   "issueTrackers",
   "provider",
   "orchestration",
+  "tots",
+  "groupChats",
 ] as const;
 type SplitWsRpc = Extract<
   ServerWsRpc,
@@ -2861,11 +2863,7 @@ export const layerWsRpc = (
         [WS_METHODS.totsStartFresh]: (input) => tots.startFresh(input.id),
         [WS_METHODS.totsReadMemory]: (input) => tots.readMemory(input.id),
         [WS_METHODS.totsAvatarLibrary]: () => tots.avatarLibrary,
-        [WS_METHODS.totsAvatarLibrarySave]: (input) =>
-          (input.kind === "figure"
-            ? tots.saveFigure(input.figure)
-            : tots.saveTheme(input.theme)
-          ).pipe(Effect.andThen(tots.avatarLibrary)),
+        [WS_METHODS.totsAvatarLibrarySave]: (input) => tots.saveLibraryItem(input),
         [WS_METHODS.totsAvatarLibraryRemove]: (input) =>
           tots.removeLibraryItem(input.kind, input.id).pipe(Effect.andThen(tots.avatarLibrary)),
         [WS_METHODS.totsDescribeAvatarFigure]: (input) =>
@@ -3919,9 +3917,11 @@ export const layer = Layer.unwrap(
               ),
               Layer.provide(Layer.succeed(NpmRelease.NpmRelease, npmRelease)),
               Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
-              Layer.provide(Layer.succeed(TotService.TotService, totService)),
               Layer.provide(
-                Layer.succeed(AvatarFigureDesigner.AvatarFigureDesigner, avatarDesigner),
+                Layer.mergeAll(
+                  Layer.succeed(TotService.TotService, totService),
+                  Layer.succeed(AvatarFigureDesigner.AvatarFigureDesigner, avatarDesigner),
+                ),
               ),
               Layer.provide(Layer.succeed(GroupChatService.GroupChatService, groupChatService)),
               // Share server-lifetime PR caches so WS mutations invalidate every client's HTTP diffs.

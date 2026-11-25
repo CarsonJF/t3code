@@ -1,13 +1,9 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
-import {
-  ProviderInstanceId,
-  TextGenerationError,
-  type ModelSelection,
-  type ServerSettings as ServerSettingsValue,
-} from "@t3tools/contracts";
+import { ProviderInstanceId, TextGenerationError, type ModelSelection } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -26,9 +22,14 @@ const fairy = {
 /** Eyes on the canvas edge: the renderer refuses it. */
 const offCanvas = { ...fairy, eyes: { ...fairy.eyes, x: 2, y: 2 } };
 
+const isTextGenerationError = Schema.is(TextGenerationError);
+
 const cheap: ModelSelection = { instanceId: ProviderInstanceId.make("codex"), model: "gpt-6-luna" };
 
-const harness = (replies: ReadonlyArray<unknown>, settings: Partial<ServerSettingsValue> = {}) => {
+const harness = (
+  replies: ReadonlyArray<unknown>,
+  settings: Parameters<typeof ServerSettings.layerTest>[0] = {},
+) => {
   const prompts: string[] = [];
   const models: ModelSelection[] = [];
   const layer = AvatarFigureDesigner.layer.pipe(
@@ -39,9 +40,7 @@ const harness = (replies: ReadonlyArray<unknown>, settings: Partial<ServerSettin
             prompts.push(input.prompt);
             models.push(input.modelSelection);
             const reply = replies[prompts.length - 1];
-            return reply instanceof TextGenerationError
-              ? Effect.fail(reply)
-              : Effect.succeed(reply);
+            return isTextGenerationError(reply) ? Effect.fail(reply) : Effect.succeed(reply);
           }),
       } as unknown as TextGeneration.TextGeneration["Service"]),
     ),
