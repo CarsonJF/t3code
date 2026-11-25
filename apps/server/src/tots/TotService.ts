@@ -397,14 +397,23 @@ const make = Effect.gen(function* () {
       const problem = totThemeProblem(input.theme);
       if (problem !== null) return yield* fail(problem);
     }
-    const { usageLimitFallbackModels: storedFallbacks, ...rest } = tot;
+    const {
+      usageLimitFallbackModels: storedFallbacks,
+      idleCompaction: storedIdleCompaction,
+      ...rest
+    } = tot;
     const fallbacks =
       input.usageLimitFallbackModels === undefined
         ? storedFallbacks
         : (input.usageLimitFallbackModels ?? undefined);
+    const idleCompaction =
+      input.idleCompaction === undefined
+        ? storedIdleCompaction
+        : (input.idleCompaction ?? undefined);
     const base: Tot = {
       ...rest,
       ...(fallbacks === undefined ? {} : { usageLimitFallbackModels: fallbacks }),
+      ...(idleCompaction === undefined ? {} : { idleCompaction }),
       ...(input.name === undefined ? {} : { name: input.name }),
       ...(input.avatar === undefined ? {} : { avatar: input.avatar }),
       ...(input.scope === undefined ? {} : { scope: input.scope }),
