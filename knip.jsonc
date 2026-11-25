@@ -162,6 +162,10 @@
       // These workspace packages are private to this monorepo.
       "includeEntryExports": true,
     },
+    "packages/open-bot-avatar": {
+      // A vendored upstream build, kept whole; see its README.
+      "ignore": ["**"],
+    },
     "packages/effect-acp": {
       "includeEntryExports": true,
       "entry": ["test/fixtures/*.ts"],
