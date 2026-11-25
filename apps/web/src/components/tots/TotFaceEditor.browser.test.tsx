@@ -5,6 +5,9 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
 import { render } from "../../../test/render";
+import { EnvironmentId } from "@t3tools/contracts";
+
+import { setAvatarLibrary } from "./avatarLibraryStore";
 import { loadOpenBot } from "./OpenBotFace";
 import { TotFaceEditor } from "./TotFaceEditor";
 
@@ -98,5 +101,49 @@ describe("TotFaceEditor styles", () => {
       openBot: { figure: "mug", eyeColor: "#f8fafc" },
     });
     await expect.element(screen.getByRole("button", { name: "Shape flower" })).toBeVisible();
+  });
+});
+
+describe("TotFaceEditor library", () => {
+  it("lists library figures and themes next to the built-in ones, marked custom", async () => {
+    await loadOpenBot();
+    const beacon = {
+      id: "beacon",
+      name: "Beacon",
+      avatar: {
+        color: "#EA580C",
+        style: "open-bot",
+        openBot: { figure: "lighthouse", mood: "happy" },
+      },
+    } as const;
+    setAvatarLibrary(EnvironmentId.make("environment:editor-library"), {
+      figures: [
+        {
+          version: 1,
+          id: "lighthouse",
+          name: "Lighthouse",
+          body: { path: "M38 30 L62 30 L68 88 L32 88 Z M42 14 L58 14 L60 30 L40 30 Z" },
+          eyes: { x: 50, y: 56, spacing: 14, scale: 1 },
+        },
+      ],
+      themes: [beacon],
+    });
+    const onChange = vi.fn();
+    await using screen = await render(
+      <Harness
+        initial={{ color: "#0A7EA4", style: "open-bot", openBot: { figure: "chat" } }}
+        onChange={onChange}
+      />,
+      { router: false /* the editor is a lone form, no routes */ },
+    );
+
+    await expect
+      .element(screen.getByRole("button", { name: "Figure Lighthouse (custom)" }))
+      .toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Figure Mug" })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: "Face theme Classic" })).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "Face theme Beacon (custom)" }));
+    expect(onChange).toHaveBeenLastCalledWith(beacon.avatar);
   });
 });
