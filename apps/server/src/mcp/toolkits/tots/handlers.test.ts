@@ -53,8 +53,10 @@ const asTot = (input: TotCreateInput): Tot => ({
   threadId: ThreadId.make(`tot:${input.name.toLowerCase()}:new`),
 });
 
-const harness = (callerThread: ThreadId) => {
+/** A thread caller, or the user at a full-access client outside any thread. */
+const harness = (callerThread: ThreadId | "person") => {
   const watches: Array<TotWatch> = [];
+  const instructions = new Map<TotId, string>();
   const created: Array<TotCreateInput> = [];
   const removed: Array<string> = [];
   const themes = new Map<TotId, TotTheme>();
@@ -65,7 +67,9 @@ const harness = (callerThread: ThreadId) => {
   const home: Tot = { ...DEFAULT_HOME_TOT, threadId: homeThread, modelSelection: model };
   const stored = (tot: Tot): Tot => {
     const theme = themes.get(tot.id);
-    return theme === undefined ? tot : { ...tot, theme };
+    const text = instructions.get(tot.id);
+    const withText = text === undefined ? tot : { ...tot, instructions: text };
+    return theme === undefined ? withText : { ...withText, theme };
   };
   const saveTheme = (id: TotId, patch: TotThemePatch): Tot => {
     themePatches.push({ id, patch });
@@ -85,12 +89,18 @@ const harness = (callerThread: ThreadId) => {
     Layer.succeed(McpInvocationContext.McpInvocationContext, {
       environmentId,
       requestNamespace: "thread:tots",
-      thread: {
-        threadId: callerThread,
-        providerSessionId: "session",
-        providerInstanceId: ProviderInstanceId.make("codex"),
-      },
-      client: undefined,
+      thread:
+        callerThread === "person"
+          ? undefined
+          : {
+              threadId: callerThread,
+              providerSessionId: "session",
+              providerInstanceId: ProviderInstanceId.make("codex"),
+            },
+      client:
+        callerThread === "person"
+          ? { sessionId: "session", label: "Claude Code", access: "full-access" as const }
+          : undefined,
       issuedAt: 0,
       capabilities: new Set(["orchestration" as const]),
     }),
@@ -106,6 +116,11 @@ const harness = (callerThread: ThreadId) => {
               : Option.none(),
         ),
       setTheme: (id, patch) => Effect.sync(() => saveTheme(id, patch)),
+      update: (input) =>
+        Effect.sync(() => {
+          if (input.instructions !== undefined) instructions.set(input.id, input.instructions);
+          return stored([home, scopedYui].find((tot) => tot.id === input.id)!);
+        }),
       create: (input) =>
         created.some((tot) => tot.name === input.name) || input.name === "Yui"
           ? Effect.fail(new TotError({ message: "A Tot named like this already exists." }))
@@ -169,7 +184,8 @@ const harness = (callerThread: ThreadId) => {
       | "t3_tot_create"
       | "t3_tot_webhook_listener"
       | "t3_tot_theme_set"
-      | "t3_tot_theme_read",
+      | "t3_tot_theme_read"
+      | "t3_tot_instructions",
     params: Record<string, unknown>,
   ) =>
     Effect.gen(function* () {
@@ -183,7 +199,7 @@ const harness = (callerThread: ThreadId) => {
         .pipe(Stream.unwrap, Stream.runCollect, Effect.provide(dependencies));
       return result.at(-1)?.result;
     });
-  return { watches, created, removed, listeners, themePatches, call };
+  return { watches, created, removed, listeners, themePatches, instructions, call };
 };
 
 it.effect("lists the Tots with a link to each one's thread", () =>
@@ -383,5 +399,59 @@ it.effect("only a Tot can read or set a theme", () => {
     });
     expect(yield* call("t3_tot_theme_read", {})).toMatchObject({ code: "capability_denied" });
     expect(themePatches).toHaveLength(0);
+  });
+});
+
+it.effect("a Tot reads and replaces its own instructions, but not another's", () => {
+  const { call, instructions } = harness(scopedThread);
+  return Effect.gen(function* () {
+    expect(yield* call("t3_tot_instructions", {})).toMatchObject({
+      totId: "yui",
+      instructions: "",
+      updated: false,
+    });
+    expect(yield* call("t3_tot_instructions", { instructions: "Be brief." })).toMatchObject({
+      totId: "yui",
+      instructions: "Be brief.",
+      updated: true,
+    });
+    expect(yield* call("t3_tot_instructions", { tot: "home", instructions: "x" })).toMatchObject({
+      code: "capability_denied",
+    });
+    expect(yield* call("t3_tot_instructions", { tot: "home" })).toMatchObject({
+      code: "capability_denied",
+    });
+    expect([...instructions]).toEqual([["yui", "Be brief."]]);
+  });
+});
+
+it.effect("Home and the user can change any Tot's instructions; other agents cannot", () =>
+  Effect.gen(function* () {
+    const home = harness(homeThread);
+    expect(
+      yield* home.call("t3_tot_instructions", { tot: "yui", instructions: "From Home." }),
+    ).toMatchObject({ totId: "yui", updated: true });
+    const person = harness("person");
+    expect(
+      yield* person.call("t3_tot_instructions", { tot: "yui", instructions: "From the user." }),
+    ).toMatchObject({ totId: "yui", instructions: "From the user." });
+    expect(yield* person.call("t3_tot_instructions", {})).toMatchObject({
+      code: "invalid_request",
+    });
+    const agent = harness(ThreadId.make("thread:ordinary"));
+    expect(
+      yield* agent.call("t3_tot_instructions", { tot: "yui", instructions: "Hijack." }),
+    ).toMatchObject({ code: "capability_denied" });
+    expect(agent.instructions.size).toBe(0);
+  }),
+);
+
+it.effect("refuses instructions over the cap", () => {
+  const { call, instructions } = harness(scopedThread);
+  return Effect.gen(function* () {
+    // The schema refuses it before the handler runs.
+    const refused = yield* call("t3_tot_instructions", { instructions: "a".repeat(20_001) });
+    expect(refused).toMatchObject({ reason: { _tag: "ToolParameterValidationError" } });
+    expect(instructions.size).toBe(0);
   });
 });
