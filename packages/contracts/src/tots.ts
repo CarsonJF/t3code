@@ -177,6 +177,10 @@ export const TotThemePatch = Schema.Struct({
 });
 export type TotThemePatch = typeof TotThemePatch.Type;
 
+export const DEFAULT_TOT_STALL_MINUTES = 10;
+/** Minutes a watched run may go quiet, or keep retrying, before its Tot hears it stalled; 0 is off. */
+export const TotStallMinutes = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 240 }));
+
 export const Tot = Schema.Struct({
   id: TotId,
   name: TrimmedNonEmptyString.check(Schema.isMaxLength(40)),
@@ -204,6 +208,8 @@ export const Tot = Schema.Struct({
    * environment's `totIdleCompaction`.
    */
   idleCompaction: Schema.optional(Schema.Boolean),
+  /** Replaces the environment's `totStallMinutes` for threads this Tot watches; 0 turns stall reports off. */
+  stallMinutes: Schema.optional(TotStallMinutes),
 });
 export type Tot = typeof Tot.Type;
 
@@ -348,6 +354,8 @@ export const TotUpdateInput = Schema.Struct({
   usageLimitFallbackModels: Schema.optional(Schema.NullOr(Schema.Array(ModelSelection))),
   /** Null drops the override, so the Tot follows the environment's setting again. */
   idleCompaction: Schema.optional(Schema.NullOr(Schema.Boolean)),
+  /** Null drops the override, so the Tot follows the environment's setting again. */
+  stallMinutes: Schema.optional(Schema.NullOr(TotStallMinutes)),
 });
 export type TotUpdateInput = typeof TotUpdateInput.Type;
 
