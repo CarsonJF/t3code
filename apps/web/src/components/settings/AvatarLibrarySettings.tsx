@@ -32,7 +32,8 @@ import { useTextGenerationTargets } from "../../textGenerators";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { TraitsPicker } from "../chat/TraitsPicker";
 import { useEnvironmentAvatarLibrary, setAvatarLibrary } from "../tots/avatarLibraryStore";
-import { OpenBotFace, useOpenBotKit } from "../tots/OpenBotFace";
+import { useOpenBotKit } from "../tots/OpenBotFace";
+import { StillFigure } from "../tots/StillFigure";
 import { TotAvatar as TotFace } from "../tots/TotAvatar";
 import { TOT_FACE_COLORS } from "../tots/TotFaceEditor";
 import { useAvatarLibrarySync } from "../tots/useAvatarLibrarySync";
@@ -49,6 +50,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
+import { Dialog, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "../ui/dialog";
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
@@ -121,10 +123,45 @@ function ConnectedAvatarLibrary(props: { readonly environmentId: EnvironmentId }
   );
 }
 
+/**
+ * The library in a dialog over the Tot editor, so "Manage shapes…" keeps the face being edited: shapes saved
+ * here show in its figure list as soon as they are saved.
+ */
+export function AvatarLibraryDialog(props: {
+  readonly environmentId: EnvironmentId;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  /** The face being edited, so tiles preview in its color. */
+  readonly color?: string | undefined;
+}) {
+  const canWrite = useAtomValue(
+    serverEnvironment.saveAvatarLibraryItem.permissionAtom(props.environmentId),
+  );
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogPopup className="max-w-5xl">
+        <DialogHeader className="sr-only">
+          <DialogTitle>
+            <T>Avatar library</T>
+          </DialogTitle>
+        </DialogHeader>
+        <DialogPanel>
+          <AvatarLibraryPage
+            environmentId={props.environmentId}
+            canWrite={canWrite}
+            initialColor={props.color}
+          />
+        </DialogPanel>
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
 /** The figures and themes tabs; `canWrite` follows the client's operate scope. */
 export function AvatarLibraryPage(props: {
   readonly environmentId: EnvironmentId;
   readonly canWrite: boolean;
+  readonly initialColor?: string | undefined;
 }) {
   const { environmentId, canWrite } = props;
   const gt = useGT();
@@ -134,7 +171,7 @@ export function AvatarLibraryPage(props: {
   const library = useEnvironmentAvatarLibrary(environmentId);
   const kit = useOpenBotKit(true);
   const [tab, setTab] = useState<Tab>("figures");
-  const [color, setColor] = useState(TOT_FACE_COLORS[0]!);
+  const [color, setColor] = useState(props.initialColor ?? TOT_FACE_COLORS[0]!);
   const [finish, setFinish] = useState<TotOpenBotMaterial>("flat");
   const save = useAtomCommand(serverEnvironment.saveAvatarLibraryItem, { reportFailure: false });
   const remove = useAtomCommand(serverEnvironment.removeAvatarLibraryItem, {
@@ -400,34 +437,13 @@ function FigureTile(props: {
       mine={props.mine}
       actions={props.actions}
       preview={
-        <FigurePreview
+        <StillFigure
           figure={props.figure}
           color={props.color}
           finish={props.finish}
           size={props.size ?? 88}
         />
       }
-    />
-  );
-}
-
-function FigurePreview(props: {
-  readonly figure: AvatarDefinition;
-  readonly color: string;
-  readonly finish: TotOpenBotMaterial;
-  readonly size: number;
-}) {
-  const kit = useOpenBotKit(true);
-  if (kit === null) return <span style={{ width: props.size, height: props.size }} />;
-  return (
-    <OpenBotFace
-      kit={kit}
-      figure={props.figure}
-      look={{ figure: props.figure.id, material: props.finish }}
-      color={props.color}
-      state="idle"
-      moving={false}
-      size={props.size}
     />
   );
 }
@@ -649,7 +665,7 @@ function DescribeShape(props: {
           >
             {FINISHES.map((entry) => (
               <div key={entry.id} className="flex flex-col items-center gap-1">
-                <FigurePreview figure={draft} color={props.color} finish={entry.id} size={104} />
+                <StillFigure figure={draft} color={props.color} finish={entry.id} size={104} />
                 <span className="text-muted-foreground text-xs">{m(entry.label)}</span>
               </div>
             ))}

@@ -111,7 +111,7 @@ describe("AvatarLibraryPage", () => {
     ]);
     const generated = screen.getByLabelText("Generated shape");
     await expect.element(generated).toBeVisible();
-    expect(generated.element().querySelectorAll('[data-open-bot-figure="fairy"]')).toHaveLength(4);
+    expect(generated.element().querySelectorAll("[data-figure-finish]")).toHaveLength(4);
 
     await userEvent.fill(screen.getByRole("textbox", { name: "Shape name" }), "Pink Fairy");
     await userEvent.click(screen.getByRole("button", { name: "Save to library" }));

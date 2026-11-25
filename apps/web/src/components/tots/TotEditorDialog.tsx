@@ -29,6 +29,7 @@ import { useTotHosts, useTots } from "~/state/tots";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
+import { AvatarLibraryDialog } from "../settings/AvatarLibrarySettings";
 import { ScopedThemeSelect } from "../settings/ScopedThemeSelect";
 import { SETTINGS_PICKER_TRIGGER_CLASSNAME } from "../settings/settingsLayout";
 import { Button } from "../ui/button";
@@ -65,6 +66,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const { target } = props;
   const editing = target.mode === "edit" ? target.tot : null;
   const [chosenHost, setChosenHost] = useState(target.environmentId);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const environmentId = chosenHost;
   const moving = editing !== null && chosenHost !== target.environmentId;
   const hosts = useTotHosts();
@@ -364,13 +366,7 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                   skinSeries={skinSeries}
                   onSkinSeriesChange={setSkinSeries}
                   error={errors.color}
-                  onManageShapes={() => {
-                    closeTotEditor();
-                    void navigate({
-                      to: "/settings/avatar-library",
-                      search: { machine: environmentId },
-                    });
-                  }}
+                  onManageShapes={() => setLibraryOpen(true)}
                 >
                   {editing === null ? null : (
                     <div className="flex flex-col gap-1.5">
@@ -432,6 +428,12 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                     </div>
                   )}
                 </TotFaceEditor>
+                <AvatarLibraryDialog
+                  environmentId={environmentId}
+                  open={libraryOpen}
+                  onOpenChange={setLibraryOpen}
+                  color={color}
+                />
               </fieldset>
 
               <fieldset className="flex flex-col gap-1.5">
