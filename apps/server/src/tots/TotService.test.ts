@@ -17,6 +17,7 @@ import {
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as TestClock from "effect/testing/TestClock";
@@ -491,5 +492,92 @@ it.effect("moving a sent watch onto a run that already has one keeps a single en
       RunId.make("r2"),
     );
     expect((yield* tots.list)[0]!.watches).toEqual([sent("r2")]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect(
+  "a template's routines are created paused in the Tot's folder, and tidy-ups start on",
+  () => {
+    const { layer, savedRoutines } = makeTots();
+    return Effect.gen(function* () {
+      const tots = yield* TotService.TotService;
+      const created = yield* tots.create({
+        name: "Reviewer",
+        avatar,
+        scope: "all",
+        instructions: "Review.",
+        modelSelection,
+        template: "pr-reviewer",
+      });
+      expect(created.memoryTidy).toBe(true);
+      expect(savedRoutines).toEqual([
+        expect.objectContaining({
+          title: "Review new pull requests",
+          enabled: false,
+          projectId: totProjectId,
+          threadId: null,
+          threadMode: "continue",
+          runtimeMode: "full-access",
+          createdByTotId: "reviewer",
+        }),
+      ]);
+
+      const unknown = yield* Effect.flip(
+        tots.create({
+          name: "Other",
+          avatar,
+          scope: "all",
+          instructions: "",
+          modelSelection,
+          template: "nope",
+        }),
+      );
+      expect(unknown.message).toBe('There is no Tot template "nope".');
+      const off = yield* tots.create({
+        name: "Quiet",
+        avatar,
+        scope: "all",
+        instructions: "",
+        modelSelection,
+        memoryTidy: false,
+      });
+      expect(off.memoryTidy).toBe(false);
+      expect((yield* tots.update({ id: off.id, memoryTidy: true })).memoryTidy).toBe(true);
+    }).pipe(Effect.provide(layer));
+  },
+);
+
+it.effect("a Tot's first thread picks up the routines its template made", () => {
+  const templated = {
+    ...routine("templated", null),
+    threadMode: "continue",
+    createdByTotId: HOME_TOT_ID,
+  } as ScheduledTask;
+  const { layer, savedRoutines } = makeTots(undefined, [templated, routine("unbound", null)]);
+  return Effect.gen(function* () {
+    const { threadId } = yield* (yield* TotService.TotService).enable(HOME_TOT_ID, modelSelection);
+    expect(savedRoutines).toEqual([expect.objectContaining({ id: "templated", threadId })]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("reverting a tidy-up restores the saved MEMORY.md once and logs it", () => {
+  const { layer } = makeTots({ tots: [{ ...DEFAULT_HOME_TOT, projectId: totProjectId }] });
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    const config = yield* ServerConfig.ServerConfig;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const folder = `${config.baseDir}/tots/home`;
+    const nothing = yield* Effect.flip(tots.revertMemoryTidy(HOME_TOT_ID));
+    expect(nothing.message).toBe("There is no memory tidy-up to revert.");
+
+    yield* tots.writeMemory(HOME_TOT_ID, [{ path: "MEMORY.md", content: "- tidied\n" }]);
+    yield* fileSystem.writeFileString(`${folder}/MEMORY.md.pre-tidy`, "- before\n- kept\n");
+    yield* tots.revertMemoryTidy(HOME_TOT_ID);
+    expect(yield* fileSystem.readFileString(`${folder}/MEMORY.md`)).toBe("- before\n- kept\n");
+    expect(yield* fileSystem.exists(`${folder}/MEMORY.md.pre-tidy`)).toBe(false);
+    const journal = (yield* tots.readMemory(HOME_TOT_ID)).files.find((file) =>
+      file.path.startsWith("memory/journal/"),
+    );
+    expect(journal?.content).toContain("memory tidy-up reverted.");
   }).pipe(Effect.provide(layer));
 });

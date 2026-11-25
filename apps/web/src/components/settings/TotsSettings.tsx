@@ -20,6 +20,7 @@ import { useTotActions } from "../tots/useTotActions";
 import { Button } from "../ui/button";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSearchableSetting } from "./settingsSearch";
+import { TotMemoryTidySettings } from "./TotMemoryTidySettings";
 
 const TOTS_DESCRIPTION =
   "Agents you talk to in one thread each. A Tot starts, watches and answers threads in its scope, on every machine it can reach.";
@@ -73,6 +74,7 @@ export function TotsSettings() {
           </>
         )}
       </SettingsSection>
+      <TotMemoryTidySettings />
       <GroupChatsSection environmentId={environmentId} />
     </SettingsPageContainer>
   );

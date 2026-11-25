@@ -5728,5 +5728,22 @@
   "c89f9a3e9e89efc0": "Idle",
   "267bd2982a153996": "Deleted group",
   "f68ebd9661469c87": "Tell it what you want done. It starts, watches and answers the threads in its scope for you.",
-  "c900815e1a139742": "Tots"
+  "c900815e1a139742": "Tots",
+  "5781cb3bcb8fedb8": "Délai de rattrapage non valide",
+  "c460b71d67ca48af": "Saisissez un nombre entier de minutes entre 0 et {max}, ou laissez vide.",
+  "8ca0ed2936c6f7bb": "Ignorée (vérification préalable)",
+  "08a88c17c1b27751": "Ignorée (exécution manquée)",
+  "61f41d071cbfb786": "Ignorée",
+  "2db247c57d9f0085": "{label} : {detail}",
+  "f9454e5383f18094": "Commande de vérification préalable",
+  "f1d077b23b6f98cc": "Commande shell facultative",
+  "43fe3696205a7dcd": "Nécessite une tâche en accès complet",
+  "21e2cabc339e6ee1": "Délai de rattrapage (minutes)",
+  "e40e6d4ec89b5365": "Par défaut",
+  "c0e9384b86cdbf37": "S'exécute dans le dossier du projet avant chaque exécution planifiée, pendant 60 secondes au plus. Un code de sortie non nul ignore l'exécution sans démarrer d'agent.",
+  "03732d87be62dd2a": "Partir de",
+  "25bdaed653d3d2c3": "Les routines suggérées d'un modèle sont créées en pause.",
+  "fc72809a59128290": "Vide",
+  "6eb33caef72a98a1": "Vers 03:30, un modèle peu coûteux dédoublonne et condense son {memory}. La copie précédente est conservée dans {backup}.",
+  "4b3694d90784a5be": "Rangement nocturne de la mémoire"
 }

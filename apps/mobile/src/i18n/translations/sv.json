@@ -5734,5 +5734,22 @@
   "c89f9a3e9e89efc0": "Idle",
   "267bd2982a153996": "Deleted group",
   "f68ebd9661469c87": "Tell it what you want done. It starts, watches and answers the threads in its scope for you.",
-  "c900815e1a139742": "Tots"
+  "c900815e1a139742": "Tots",
+  "5781cb3bcb8fedb8": "Ogiltig respittid för missade körningar",
+  "c460b71d67ca48af": "Ange hela minuter från 0 till {max}, eller lämna tomt.",
+  "8ca0ed2936c6f7bb": "Hoppades över (förkontroll)",
+  "08a88c17c1b27751": "Hoppades över (missad körning)",
+  "61f41d071cbfb786": "Hoppades över",
+  "2db247c57d9f0085": "{label}: {detail}",
+  "f9454e5383f18094": "Förkontrollkommando",
+  "f1d077b23b6f98cc": "Valfritt skalkommando",
+  "43fe3696205a7dcd": "Kräver en uppgift med full åtkomst",
+  "21e2cabc339e6ee1": "Respittid för missade körningar (minuter)",
+  "e40e6d4ec89b5365": "Standard",
+  "c0e9384b86cdbf37": "Körs i projektmappen före varje schemalagd körning, i högst 60 sekunder. En nollskild avslutningskod hoppar över körningen utan att starta en agent.",
+  "03732d87be62dd2a": "Utgå från",
+  "25bdaed653d3d2c3": "En malls föreslagna rutiner skapas pausade.",
+  "fc72809a59128290": "Tom",
+  "6eb33caef72a98a1": "Runt 03:30 tar en billig modell bort dubbletter i {memory} och kortar den. Den förra kopian sparas som {backup}.",
+  "4b3694d90784a5be": "Nattlig minnesstädning"
 }
