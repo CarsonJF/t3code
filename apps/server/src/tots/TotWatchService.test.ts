@@ -77,6 +77,8 @@ interface RunRecord {
   readonly neverStarted?: boolean;
   /** The active run that Send now moved this run's message into. */
   readonly absorbedBy?: RunId;
+  /** A person sent this run's prompt, rather than the Tot. */
+  readonly byPerson?: boolean;
 }
 
 const asRun = (run: RunRecord) => ({
@@ -89,7 +91,7 @@ const asPrompt = (run: RunRecord) => ({
   id: `message-${String(run.id)}`,
   runId: run.absorbedBy ?? run.id,
   role: "user",
-  createdBy: run.wake === undefined ? "user" : "system",
+  createdBy: run.wake !== undefined ? "system" : run.byPerson === true ? "user" : "agent",
   text: "",
   ...(run.wake === undefined
     ? {}
@@ -115,6 +117,7 @@ const layerEventFeed = Layer.effect(
 
 const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
   const state = { tots: [...initial] };
+  const settings = { totReportBatchSeconds: 180 };
   const shells = new Map<ThreadId, OrchestrationV2ThreadShell>();
   const reports: Array<{
     totId: string;
@@ -328,7 +331,12 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
               notListed: "",
             } as never),
         }),
-        Layer.mock(ServerSettings.ServerSettingsService)({ streamChanges: Stream.never }),
+        Layer.mock(ServerSettings.ServerSettingsService)({
+          streamChanges: Stream.never,
+          getSettings: Effect.sync(
+            () => ({ totReportBatchSeconds: settings.totReportBatchSeconds }) as never,
+          ),
+        }),
         Layer.succeed(TotWatchService.TotFollowPause, remote?.pause ?? Effect.never),
         Layer.succeed(RemoteDelegation.FollowRetrySchedule, remote?.retry ?? Schedule.forever),
       ),
@@ -355,6 +363,9 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
       }
     });
   const flush = TotWatchService.TotWatchService.pipe(Effect.flatMap((service) => service.flush));
+  const flushDue = TotWatchService.TotWatchService.pipe(
+    Effect.flatMap((service) => service.flushDue),
+  );
   const syncFollowers = TotWatchService.TotWatchService.pipe(
     Effect.flatMap((service) => service.syncFollowers),
   );
@@ -365,6 +376,7 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
   shells.set(ThreadId.make("tot:home:fresh"), shell(ThreadId.make("tot:home:fresh"), "running"));
   return {
     state,
+    settings,
     reports,
     removed,
     shells,
@@ -372,6 +384,7 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
     step,
     emit,
     flush,
+    flushDue,
     syncFollowers,
     recoverSentWatches,
     ownStops,
@@ -2112,6 +2125,204 @@ it.effect("a remote sent watch follows the run that continues it to its real end
       ]);
       expect(removed).toEqual([remoteThread]);
       expect(state.tots[0]!.watches).toHaveLength(0);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+const lines = (reports: ReadonlyArray<{ readonly lines: ReadonlyArray<string> }>) =>
+  reports.flatMap((report) => report.lines);
+
+it.effect("routine Finished reports wait out the batch window and arrive as one wake", () => {
+  const first = ThreadId.make("tot-launched:home:batch1");
+  const second = ThreadId.make("tot-launched:home:batch2");
+  const { reports, layer, step, flushDue } = makeHarness([
+    home({ watches: [watch(first, "launched"), watch(second, "launched")] }),
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(first, "running"));
+    yield* step(shell(second, "running"));
+    yield* step(shell(first, "completed"));
+    yield* flushDue;
+    expect(reports).toHaveLength(0);
+    yield* TestClock.adjust("2 minutes");
+    yield* step(shell(second, "completed"));
+    yield* flushDue;
+    expect(reports).toHaveLength(0);
+    yield* TestClock.adjust("1 minute");
+    yield* flushDue;
+    expect(reports).toHaveLength(1);
+    expect(reports[0]!.lines).toEqual([
+      expect.stringContaining(`- Finished: [`),
+      expect.stringContaining(`- Finished: [`),
+    ]);
+    expect(reports[0]!.sources).toEqual([
+      { environmentId, threadId: first },
+      { environmentId, threadId: second },
+    ]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("urgent news is sent at once and carries the waiting Finished reports with it", () => {
+  const done = ThreadId.make("tot-launched:home:done");
+  const broken = ThreadId.make("tot-launched:home:broken");
+  const { reports, layer, step, flushDue } = makeHarness([
+    home({ watches: [watch(done, "launched"), watch(broken, "launched")] }),
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(done, "running"));
+    yield* step(shell(broken, "running"));
+    yield* step(shell(done, "completed"));
+    yield* flushDue;
+    expect(reports).toHaveLength(0);
+    yield* step(shell(broken, "failed"));
+    yield* flushDue;
+    expect(reports).toHaveLength(1);
+    expect(reports[0]!.lines).toEqual([
+      expect.stringContaining("- Finished: "),
+      expect.stringContaining("- Failed: "),
+    ]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a zero batch window sends Finished reports at the next look", () => {
+  const launched = ThreadId.make("tot-launched:home:nowait");
+  const { reports, settings, layer, step, flushDue } = makeHarness([
+    home({ watches: [watch(launched, "launched")] }),
+  ]);
+  settings.totReportBatchSeconds = 0;
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running"));
+    yield* step(shell(launched, "completed"));
+    yield* flushDue;
+    expect(lines(reports)).toEqual([expect.stringContaining("- Finished: ")]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a Tot's batched report on another Tot still names its source for the loop guard", () => {
+  const { reports, layer, step, flushDue } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r1")] }),
+    yui,
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(yuiThread, "running", "r1"));
+    yield* step(shell(yuiThread, "completed", "r1"));
+    yield* TestClock.adjust("3 minutes");
+    yield* flushDue;
+    expect(reports).toHaveLength(1);
+    expect(reports[0]!.sources).toEqual([{ environmentId, threadId: yuiThread }]);
+  }).pipe(Effect.provide(layer));
+});
+
+const personMessage = (threadId: ThreadId, id: string, text: string, createdBy = "user") =>
+  domainEvent("message.updated", threadId, { id, role: "user", createdBy, text });
+
+it.effect(
+  "the user's message in a launched thread rides with the next report, with no wake",
+  () => {
+    const launched = ThreadId.make("tot-launched:home:steered");
+    const { reports, shells, layer, emit, flush } = makeHarness([
+      home({ watches: [watch(launched, "launched")] }),
+    ]);
+    return Effect.gen(function* () {
+      yield* (yield* TotWatchService.TotWatchService).start;
+      shells.set(launched, shell(launched, "running"));
+      yield* emit(runUpdated(launched, "run-1", "running"));
+      yield* emit(
+        personMessage(launched, "m-person", "Use the staging database instead"),
+        personMessage(launched, "m-person", "Use the staging database instead"),
+        personMessage(launched, "m-tot", "Not a person", "agent"),
+      );
+      yield* flush;
+      expect(reports).toHaveLength(0);
+      shells.set(launched, shell(launched, "completed"));
+      yield* emit(runUpdated(launched, "run-1", "completed"));
+      yield* flush;
+      expect(lines(reports)).toEqual([
+        expect.stringContaining("- Finished: "),
+        "  - The user wrote here (untrusted thread text): `Use the staging database instead`",
+      ]);
+    }).pipe(Effect.provide(layer), Effect.scoped);
+  },
+);
+
+it.effect("a run the user started in a launched thread is noted, not reported as the Tot's", () => {
+  const launched = ThreadId.make("tot-launched:home:userrun");
+  const { reports, layer, step, flush, setRun } = makeHarness([
+    home({ watches: [watch(launched, "launched")] }),
+  ]);
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running", "run-1"));
+    yield* step(shell(launched, "completed", "run-1"));
+    yield* flush;
+    expect(lines(reports)).toEqual([expect.stringContaining("- Finished: ")]);
+    setRun(launched, "run-2", { byPerson: true });
+    yield* step(shell(launched, "running", "run-2"));
+    yield* step(shell(launched, "completed", "run-2"));
+    yield* flush;
+    // The user's own run wakes no one; it waits for the Tot's next report on this thread.
+    expect(reports).toHaveLength(1);
+    setRun(launched, "run-3", {});
+    yield* step(shell(launched, "running", "run-3"));
+    yield* step(shell(launched, "failed", "run-3"));
+    yield* flush;
+    expect(lines(reports).slice(1)).toEqual([
+      expect.stringContaining("- Failed: "),
+      "  - The user started runs here themselves, not you: Finished.",
+    ]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a remote launched thread notes the user's messages and runs the same way", () =>
+  Effect.gen(function* () {
+    const looked = yield* Queue.unbounded<void>();
+    let wait = 0;
+    const userItem = (runId: string, messageId: string, createdBy: string, text: string) => ({
+      type: "user_message",
+      runId: RunId.make(runId),
+      messageId,
+      createdBy,
+      text,
+      updatedAt: "1970-01-01T00:00:01.000Z",
+    });
+    const { reports, layer, flush, syncFollowers } = makeHarness(
+      [
+        home({
+          watches: [remoteWatch("launched"), remoteWatch("requested")],
+          watchReports: "explicit",
+        }),
+      ],
+      {
+        waitForThread: () =>
+          Effect.sync(() => {
+            wait++;
+            return { ...remoteCompleted, runId: RunId.make(wait === 1 ? "run-1" : "run-2") };
+          }),
+        readThread: () =>
+          Effect.succeed({
+            thread: { activeRunId: null, pendingBackgroundTasks: [] },
+            recentRuns: [],
+            items: [
+              userItem("run-1", "m1", "user", "Try the other port"),
+              { type: "assistant_message", runId: RunId.make("run-1"), text: "On it." },
+              userItem("run-2", "m2", "agent", "Tot's follow-up"),
+              { type: "assistant_message", runId: RunId.make("run-2"), text: "Done." },
+            ],
+            nextPosition: null,
+            hasMore: false,
+          } as never),
+        pause: Queue.offer(looked, undefined).pipe(Effect.asVoid),
+      },
+    );
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      // The user's own run-1 is not reported; the Tot's run-2 carries the note.
+      yield* Queue.take(looked);
+      yield* flush;
+      expect(lines(reports)).toEqual([
+        expect.stringContaining("`Done.`"),
+        "  - The user wrote here (untrusted thread text): `Try the other port`",
+        "  - The user started runs here themselves, not you: Finished.",
+      ]);
     }).pipe(Effect.provide(layer));
   }),
 );

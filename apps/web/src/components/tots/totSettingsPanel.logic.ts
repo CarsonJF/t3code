@@ -24,6 +24,8 @@ export interface TotSettingsDraft {
   readonly theme: TotThemeDraft;
   readonly watchReports: TotWatchReports;
   readonly autoSettle: boolean;
+  /** Null follows the environment's Tot setting. */
+  readonly idleCompaction: boolean | null;
 }
 
 export type TotSettingsDraftErrors = Partial<
@@ -39,6 +41,7 @@ export function totSettingsDraftFromTot(tot: Tot): TotSettingsDraft {
     theme: { css: tot.theme?.css ?? "", effect: tot.theme?.effect ?? "" },
     watchReports: totWatchReportsOf(tot),
     autoSettle: tot.autoSettle === true,
+    idleCompaction: tot.idleCompaction ?? null,
   };
 }
 
@@ -78,6 +81,7 @@ export function totSettingsDraftKey(draft: TotSettingsDraft): string {
     theme: draft.theme,
     watchReports: draft.watchReports,
     autoSettle: draft.autoSettle,
+    idleCompaction: draft.idleCompaction,
   });
 }
 
@@ -115,8 +119,36 @@ export function totSettingsDraftUpdate(draft: TotSettingsDraft): TotSettingsDraf
     theme: { css: draft.theme.css, effect: draft.theme.effect },
     watchReports: draft.watchReports,
     autoSettle: draft.autoSettle,
+    idleCompaction: draft.idleCompaction,
   };
 }
+
+export type TotIdleCompactionChoice = "default" | "on" | "off";
+
+export const totIdleCompactionChoice = (value: boolean | null): TotIdleCompactionChoice =>
+  value === null ? "default" : value ? "on" : "off";
+
+export const totIdleCompactionValue = (choice: TotIdleCompactionChoice): boolean | null =>
+  choice === "default" ? null : choice === "on";
+
+/** The idle compaction choices: label in the select, and the one-line help shown under it. */
+export const TOT_IDLE_COMPACTION: Record<
+  TotIdleCompactionChoice,
+  { readonly label: string; readonly help: string }
+> = {
+  default: {
+    label: "Default",
+    help: "Follows this environment's Tot setting, which compacts unless it was turned off.",
+  },
+  on: {
+    label: "Before the cache expires",
+    help: "Saves its working state to memory, then compacts just before its prompt cache expires.",
+  },
+  off: {
+    label: "Like other threads",
+    help: "Follows the idle compaction setting every thread uses.",
+  },
+};
 
 /** The watch-reports choices: label in the select, and the one-line help shown under it. */
 export const WATCH_REPORTS: Record<

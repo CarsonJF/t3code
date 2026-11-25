@@ -20,6 +20,7 @@ import {
   resolveIdleCompaction,
   resolveProjectProviderInstanceEnabled,
   resolveProviderInstanceEnabled,
+  resolveThreadIdleCompaction,
   ServerSettings,
   ServerSettingsPatch,
   withIdleCompaction,
@@ -269,6 +270,47 @@ describe("custom model settings", () => {
       "bare-slug",
       { slug: "named", name: "Named", capabilities },
     ]);
+  });
+});
+
+describe("resolveThreadIdleCompaction", () => {
+  const instance = ProviderInstanceId.make("claudeAgent");
+  const tots = [
+    { id: "home", name: "Home", avatar: { color: "#0A7EA4" }, scope: "all" },
+    { id: "yui", name: "Yui", avatar: { color: "#0A7EA4" }, scope: "all", idleCompaction: false },
+    {
+      id: "kirito",
+      name: "Kirito",
+      avatar: { color: "#0A7EA4" },
+      scope: "all",
+      idleCompaction: true,
+    },
+  ].map((tot) => ({
+    instructions: "",
+    projectId: null,
+    threadId: null,
+    modelSelection: null,
+    watchAll: false,
+    watches: [],
+    ...tot,
+  }));
+
+  it("compacts Tot threads before the cache expires by default and leaves coding threads alone", () => {
+    const settings = decodeServerSettings({ idleCompaction: "onReturn", tots });
+    expect(settings.totIdleCompaction).toBe(true);
+    expect(resolveThreadIdleCompaction(settings, "tot:home:a", instance)).toBe(
+      "beforeCacheExpires",
+    );
+    expect(resolveThreadIdleCompaction(settings, "coding-thread", instance)).toBe("onReturn");
+    expect(resolveThreadIdleCompaction(settings, "tot-launched:home:a", instance)).toBe("onReturn");
+  });
+
+  it("lets each Tot override the environment's Tot setting", () => {
+    const on = decodeServerSettings({ idleCompaction: "onReturn", tots });
+    expect(resolveThreadIdleCompaction(on, "tot:yui:a", instance)).toBe("onReturn");
+    const off = decodeServerSettings({ idleCompaction: "off", totIdleCompaction: false, tots });
+    expect(resolveThreadIdleCompaction(off, "tot:home:a", instance)).toBe("off");
+    expect(resolveThreadIdleCompaction(off, "tot:kirito:a", instance)).toBe("beforeCacheExpires");
   });
 });
 
