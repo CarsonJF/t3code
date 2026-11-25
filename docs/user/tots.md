@@ -24,6 +24,11 @@ Tots always run in full access, and they can approve requests in your other thre
 - A Tot whose scope is all, such as Home, can create and turn on new Tots when you ask, here or on a linked environment. A new Tot cannot be given more scope than its creator has.
 - Home can hand work to another Tot and hears back when that work ends.
 - Tots never delete threads or projects. They archive or settle them.
+- A scheduled task that fails tells the Tot that created it, or Home, with the task, the error and a link to the run.
+
+### Usage-limit fallback
+
+When a thread a Tot started, or a scheduled task, stops on a provider's usage limit, T3 Code can run it again once on another model. List the models in order as `usageLimitFallbackModels` in the server's `settings.json`; a Tot's own `usageLimitFallbackModels` replaces that list for its work, and an empty list turns the fallback off for it. The thread says when this happened. Models in `usageLimitFallbackDeniedModels` are never used, and full `opencode-go/glm-5.3` is never used whatever that list says. A one-time task that still fails is turned off and shown as failed.
 
 **Watch reports**, in a Tot's panel on its own thread, chooses what it hears about: **Launched threads only** (the default) reports threads the Tot started and the answer to anything it sends with a message, **Every watch** also reports threads it asked to watch, and **Off** stops reports without deleting the watches, so turning them back on resumes them.
 
