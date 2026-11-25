@@ -191,6 +191,26 @@ const TotCreateTool = Tool.make("t3_tot_create", {
   }),
 }).annotate(Tool.Destructive, false);
 
+const TotInstructionsTool = Tool.make("t3_tot_instructions", {
+  ...shared,
+  description:
+    "Read a Tot's personality and instructions, or replace them by passing `instructions`. They render into its AGENTS.md, so edit them here, not by hand. A Tot reaches only its own, unless it is Home.",
+  parameters: Schema.Struct({
+    tot: Schema.optional(TotId).annotate({ description: "Default: you." }),
+    instructions: Schema.optional(
+      Tot.fields.instructions.annotate({
+        description: "The whole new text, in Markdown, up to 20,000 characters. Omit to read.",
+      }),
+    ),
+  }),
+  success: Schema.Struct({
+    totId: TotId,
+    name: Schema.String,
+    instructions: Schema.String,
+    updated: Schema.Boolean,
+  }),
+}).annotate(Tool.Destructive, false);
+
 export const TotToolkit = Toolkit.make(
   TotListTool,
   TotWatchTool,
@@ -200,4 +220,5 @@ export const TotToolkit = Toolkit.make(
   TotThemeReadTool,
   TotWebhookListenerTool,
   TotCreateTool,
+  TotInstructionsTool,
 );

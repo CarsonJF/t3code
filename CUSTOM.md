@@ -82,10 +82,11 @@ so renumbering a migration that already shipped breaks every existing database. 
 the `.4941` custom build failed: it moved `ScheduledTaskCreatedByTot` from 99 to 101, and
 every database that had recorded 99 refused to start.
 
-- 99 is `ScheduledTaskCreatedByTot`. Upstream's migrations from its 99 on sit one id higher
-  here (upstream 099 is our 100, and so on). When a rebase brings a new upstream migration,
-  rename its file and manifest entry to upstream id + 1, append it after ours, and update any
-  test that names its id.
+- 99 is `ScheduledTaskCreatedByTot` and 113 is `ScheduledTaskModelPinned`. Upstream's
+  migrations 99 to 111 sit one id higher here (upstream 099 is our 100, and so on); from
+  upstream 112 on they sit two higher. When a rebase brings a new upstream migration, rename
+  its file and manifest entry to its id here, append it after ours, and update any test that
+  names its id.
 - Every migration from 99 on must be idempotent (`IF NOT EXISTS`, a column check, or a
   drop and rebuild). Startup and the update preflight rewind a history recorded in another
   order (stock upstream, or the `.4941` custom build) and replay it in ours; see

@@ -59,3 +59,7 @@ A Tot stores its own theme on its record: `theme?: { css?: string; effect?: stri
 - `css` is applied like an environment theme, not as one: the server refuses what [`themeCssLoadsRemoteFiles`](../../packages/shared/src/themeCss.ts) catches, and [`totThemeCss.ts`](../../apps/web/src/components/tots/totThemeCss.ts) parses it into its own constructed sheet, runs the same `stripFetches` guard, and rewrites each selector to start at `[data-tot-id="<totId>"]`. Bare `:root`, `html` and `body` steps become the scope; a qualified step such as `:root.dark` stays as ancestor context so appearance rules still work. `@keyframes` and `@font-face` stay global on purpose. The sheet exists only while that Tot's thread is open, and it never touches the app's own theme sheet.
 - `effect` is opaque text. T3 Code stores and returns it, and the client's effect layer reads it; nothing here parses, runs, or renders it.
 - The conversation root carries `data-tot-id` and `data-thread-id` ([`totThreadScope.ts`](../../apps/web/src/components/tots/totThreadScope.ts)), whether or not the thread has messages, so CSS never needs `:has()`.
+
+## Instructions
+
+Instructions follow a looser rule because Home looks after the others: `t3_tot_instructions` lets a Tot read and replace its own, Home any Tot's, and a person at a client outside any thread any Tot's. Other agent threads are refused. The write goes through `TotService.update`, which re-renders `AGENTS.md`, so hand edits to the instructions block never stick.
