@@ -95,8 +95,9 @@ export const runItem = (shell: OrchestrationV2ThreadShell): NeedsYouItem | null 
   if (shell.lineage.relationshipToParent === "subagent" || shell.lineage.workflowStep === true)
     return null;
   if (shell.archivedAt !== null || shell.deletedAt !== null) return null;
-  const completed = millis(shell.latestRunCompletedAt);
-  if (completed === null || shell.latestRunId === null) return null;
+  const completedAt = shell.latestRunCompletedAt;
+  if (completedAt == null || shell.latestRunId === null) return null;
+  const completed = DateTime.toEpochMillis(completedAt);
   const visited = millis(shell.lastVisitedAt);
   if (visited !== null && visited >= completed) return null;
   const failed = shell.status === "failed";
@@ -105,7 +106,7 @@ export const runItem = (shell: OrchestrationV2ThreadShell): NeedsYouItem | null 
     kind: failed ? "failed_run" : "stopped_run",
     threadId: shell.id,
     title: shell.title,
-    at: new Date(completed).toISOString(),
+    at: DateTime.formatIso(completedAt),
     totId: threadTotId(shell.id),
     summary: failed ? oneLine(`Failed: ${shell.lastError ?? "no error recorded"}`) : "Stopped",
   };

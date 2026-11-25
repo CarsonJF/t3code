@@ -17,6 +17,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -247,7 +248,7 @@ const run = <A, E>(
 const keys = (inbox: NeedsYouInbox, environmentId: string) =>
   inbox.environments
     .find((entry) => entry.environmentId === environmentId)
-    ?.items.map((item) => item.key);
+    ?.items.map((item) => item.key) ?? [];
 
 describe("NeedsYou", () => {
   it.effect(
@@ -303,6 +304,7 @@ describe("NeedsYou", () => {
   it.effect("dismisses, snoozes and restores items, here and in a linked environment", () =>
     run((service) =>
       Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse("2026-11-25T12:00:00.000Z"));
         const approvalKey = `request:${approvalThread}:req-a`;
         yield* service.hide({ environmentId: here, key: approvalKey, until: null });
         yield* service.hide({

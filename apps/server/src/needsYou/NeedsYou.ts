@@ -15,6 +15,7 @@ import {
 } from "@t3tools/contracts";
 import { resolveReplySuggestionModelSelection } from "@t3tools/shared/serverSettings";
 import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
@@ -90,6 +91,7 @@ const HiddenFile = Schema.Array(
 const decodeHidden = Schema.decodeUnknownOption(Schema.fromJsonString(HiddenFile));
 
 const fail = (message: string) => new NeedsYouError({ message });
+const isNeedsYouError = Schema.is(NeedsYouError);
 
 const touchesInbox = (event: OrchestrationV2DomainEvent) => {
   switch (event.type) {
@@ -140,7 +142,13 @@ const make = Effect.gen(function* () {
   const saveHidden = (next: ReadonlyArray<HiddenEntry>) =>
     Ref.set(hiddenRef, next).pipe(
       Effect.andThen(
-        writeFileStringAtomically({ filePath: hiddenPath, contents: `${JSON.stringify(next)}\n` }),
+        writeFileStringAtomically({
+          filePath: hiddenPath,
+          contents: `${JSON.stringify(next)}\n`,
+        }).pipe(
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
+        ),
       ),
       Effect.mapError(() => fail("Could not save what Needs you hides.")),
     );
@@ -246,7 +254,7 @@ const make = Effect.gen(function* () {
       const local = yield* localEnvironment();
       const linked = input.linked === false ? [] : yield* linkedEnvironments();
       const environments = [local, ...linked];
-      const now = Date.now();
+      const now = yield* Clock.currentTimeMillis;
       const hidden = yield* Ref.get(hiddenRef);
       const read = new Map(
         environments
@@ -281,7 +289,7 @@ const make = Effect.gen(function* () {
       };
     },
     Effect.mapError((cause) =>
-      cause instanceof NeedsYouError ? cause : fail("Needs you could not be read here."),
+      isNeedsYouError(cause) ? cause : fail("Needs you could not be read here."),
     ),
   );
 
@@ -289,8 +297,12 @@ const make = Effect.gen(function* () {
     const triggers = Stream.mergeAll(
       [
         Stream.succeed(undefined),
-        threads.streamDomainEvents.pipe(Stream.filter(touchesInbox), Stream.ignoreCause),
-        scheduled.subscribeList().pipe(Stream.ignoreCause),
+        threads.streamDomainEvents.pipe(
+          Stream.filter(touchesInbox),
+          Stream.as(undefined),
+          Stream.ignoreCause,
+        ),
+        scheduled.subscribeList().pipe(Stream.as(undefined), Stream.ignoreCause),
         Stream.fromPubSub(hiddenChanged),
         Stream.tick(POLL_INTERVAL),
       ],
@@ -378,7 +390,7 @@ const make = Effect.gen(function* () {
     },
     Effect.scoped,
     Effect.mapError((cause) =>
-      cause instanceof NeedsYouError
+      isNeedsYouError(cause)
         ? cause
         : fail(
             "detail" in cause && typeof cause.detail === "string"
@@ -421,7 +433,7 @@ const make = Effect.gen(function* () {
         .pipe(Effect.mapError((error) => fail(error.message)));
     },
     Effect.mapError((cause) =>
-      cause instanceof NeedsYouError ? cause : fail("The answer could not be sent."),
+      isNeedsYouError(cause) ? cause : fail("The answer could not be sent."),
     ),
   );
 
