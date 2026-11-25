@@ -1,10 +1,20 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { render } from "../../../test/render";
+import { EnvironmentId, type AvatarFigure } from "@t3tools/contracts";
+
+import { setAvatarLibrary } from "./avatarLibraryStore";
 import { loadOpenBot } from "./OpenBotFace";
 import { TotAvatar } from "./TotAvatar";
 
 const avatar = { color: "#0A7EA4" };
+const lighthouse: AvatarFigure = {
+  version: 1,
+  id: "lighthouse",
+  name: "Lighthouse",
+  body: { path: "M38 30 L62 30 L68 88 L32 88 Z M42 14 L58 14 L60 30 L40 30 Z" },
+  eyes: { x: 50, y: 56, spacing: 14, scale: 1 },
+};
 
 describe("TotAvatar accessories", () => {
   const face = (container: HTMLElement) => container.querySelector("boop-face") as HTMLElement;
@@ -178,7 +188,7 @@ describe("TotAvatar styles", () => {
     }
   });
 
-  it("falls back to BoopFace for a figure this build does not know", async () => {
+  it("draws the default figure for a name neither the build nor the library has", async () => {
     await loadOpenBot();
     await using screen = await render(
       <TotAvatar
@@ -190,8 +200,28 @@ describe("TotAvatar styles", () => {
       { router: false /* a lone avatar, no routes */ },
     );
 
-    await vi.waitFor(() => expect(screen.container.querySelector("boop-face")).not.toBeNull());
-    expect(openBot(screen.container)).toBeNull();
+    await vi.waitFor(() => expect(openBot(screen.container)).not.toBeNull());
+    expect(openBot(screen.container)!.getAttribute("data-open-bot-figure")).toBe("chat");
+  });
+
+  it("draws a figure from the avatar library by name", async () => {
+    await loadOpenBot();
+    setAvatarLibrary(EnvironmentId.make("environment:library-test"), {
+      figures: [lighthouse],
+      themes: [],
+    });
+    await using screen = await render(
+      <TotAvatar
+        avatar={{ ...avatar, style: "open-bot", openBot: { figure: "lighthouse" } }}
+        state="idle"
+        animation="still"
+        size={64}
+      />,
+      { router: false /* a lone avatar, no routes */ },
+    );
+
+    await vi.waitFor(() => expect(openBot(screen.container)).not.toBeNull());
+    expect(openBot(screen.container)!.getAttribute("data-open-bot-figure")).toBe("lighthouse");
   });
 
   it("stays BoopFace when the open-bot look is only stored", async () => {
