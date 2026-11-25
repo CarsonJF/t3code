@@ -18,7 +18,7 @@ const LibraryEntry = Schema.Struct({ id: Schema.String, name: Schema.String });
 
 export const AvatarLibraryTool = Tool.make("t3_avatar_library", {
   description:
-    "Avatar library every Tot here shares: open-bot figures (SVG outline + eyes) and themes (named faces). save_* upserts by id and returns a PNG; check it and save again until it reads small. apply puts a theme on a Tot.",
+    "How to make new open-bot figures (SVG outline + eyes) and face themes (named faces), shared by every Tot here. save_* upserts by id and returns a PNG; preview returns one too. Check it and save again until it reads small. list shows library items; apply puts a theme on a Tot.",
   parameters: Schema.Struct({
     environmentId: OrchestratorMcpEnvironmentTarget,
     action: Schema.Literals([
