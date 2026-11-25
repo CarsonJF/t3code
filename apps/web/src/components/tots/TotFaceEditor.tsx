@@ -22,7 +22,11 @@ import {
 } from "@t3tools/contracts";
 import { useEffect, useState, type ReactNode } from "react";
 
+import type { AvatarDefinition } from "open-bot-avatar";
+
+import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { useAvatarLibrary } from "./avatarLibraryStore";
@@ -75,6 +79,8 @@ export function TotFaceEditor(props: {
   readonly skinSeries: TotSkinSeries;
   readonly onSkinSeriesChange: (series: TotSkinSeries) => void;
   readonly error?: string | undefined;
+  /** Opens Settings → Avatar library, where shapes are made and managed. */
+  readonly onManageShapes?: (() => void) | undefined;
   readonly children?: ReactNode;
 }) {
   const { value, skinSeries } = props;
@@ -284,36 +290,30 @@ export function TotFaceEditor(props: {
         </>
       ) : (
         <>
-          <div
-            className="flex max-h-32 flex-wrap items-center gap-1.5 overflow-y-auto"
-            aria-label="Figure"
-            role="group"
-          >
-            {[
-              ...(kit?.figures ?? []).map((figure) => ({ figure, custom: false })),
-              ...library.figures.map((figure) => ({ figure, custom: true })),
-            ].map(({ figure, custom }) => (
-              <button
-                key={figure.id}
-                type="button"
-                aria-label={`Figure ${figure.name}${custom ? " (custom)" : ""}`}
-                aria-pressed={openBot.figure === figure.id}
-                data-custom-figure={custom ? "" : undefined}
-                className="relative rounded-md border border-transparent p-0.5 aria-pressed:border-ring data-[custom-figure]:border-dashed data-[custom-figure]:border-muted-foreground/40 data-[custom-figure]:aria-pressed:border-ring"
-                onClick={() => props.onChange(openBotFace(openBotWith({ figure: figure.id })))}
-              >
-                <TotFace
-                  avatar={totFaceOf(color, null, "round", false, [], {
-                    style: "open-bot",
-                    // Thumbnails stay flat: a fluffy coat is a WebGL render per figure.
-                    openBot: { figure: figure.id },
-                  })}
-                  state="idle"
-                  animation="still"
-                  size={28}
-                />
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            <div className="flex size-20 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/30">
+              <TotFace avatar={value} state="idle" animation="still" size={72} />
+            </div>
+            <div className="flex min-w-0 flex-col items-start gap-1">
+              <FigurePicker
+                color={color}
+                selected={openBot.figure}
+                figures={[
+                  ...(kit?.figures ?? []).map((figure) => ({ figure, custom: false })),
+                  ...library.figures.map((figure) => ({ figure, custom: true })),
+                ]}
+                onPick={(figure) => props.onChange(openBotFace(openBotWith({ figure })))}
+              />
+              {props.onManageShapes === undefined ? null : (
+                <button
+                  type="button"
+                  className="text-muted-foreground text-xs underline-offset-2 hover:text-foreground hover:underline"
+                  onClick={props.onManageShapes}
+                >
+                  Manage shapes…
+                </button>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -442,5 +442,93 @@ export function TotFaceEditor(props: {
       )}
       {props.error ? <p className="text-destructive-foreground text-xs">{props.error}</p> : null}
     </div>
+  );
+}
+
+/** A searchable list of every figure, each drawn small and flat in the face's color. */
+function FigurePicker(props: {
+  readonly color: string;
+  readonly selected: string;
+  readonly figures: ReadonlyArray<{ readonly figure: AvatarDefinition; readonly custom: boolean }>;
+  readonly onPick: (figure: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const current = props.figures.find((entry) => entry.figure.id === props.selected)?.figure;
+  const close = () => {
+    setOpen(false);
+    setQuery("");
+  };
+  const needle = query.trim().toLowerCase();
+  const shown = props.figures.filter(
+    ({ figure }) =>
+      needle === "" || figure.name.toLowerCase().includes(needle) || figure.id.includes(needle),
+  );
+  return (
+    <Popover open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
+      <PopoverTrigger
+        render={
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label={`Figure: ${current?.name ?? props.selected}`}
+          />
+        }
+      >
+        {current?.name ?? props.selected}
+        <span aria-hidden="true" className="text-muted-foreground">
+          ▾
+        </span>
+      </PopoverTrigger>
+      <PopoverPopup align="start" className="w-64">
+        <Input
+          aria-label="Search figures"
+          placeholder="Search figures"
+          size="sm"
+          autoFocus
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && shown[0] !== undefined) {
+              props.onPick(shown[0].figure.id);
+              close();
+            }
+          }}
+        />
+        <div
+          className="mt-1.5 flex max-h-64 flex-col overflow-y-auto"
+          role="listbox"
+          aria-label="Figures"
+        >
+          {shown.length === 0 ? (
+            <p className="px-2 py-1.5 text-muted-foreground text-xs">No figure matches.</p>
+          ) : (
+            shown.map(({ figure, custom }) => (
+              <button
+                key={`${custom ? "mine" : "built-in"}:${figure.id}`}
+                type="button"
+                role="option"
+                aria-selected={figure.id === props.selected}
+                aria-label={`Figure ${figure.name}${custom ? " (mine)" : ""}`}
+                className="flex items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm hover:bg-accent aria-selected:bg-muted"
+                onClick={() => {
+                  props.onPick(figure.id);
+                  close();
+                }}
+              >
+                <TotFace
+                  avatar={{ color: props.color, style: "open-bot", openBot: { figure: figure.id } }}
+                  state="idle"
+                  animation="still"
+                  size={24}
+                />
+                <span className="min-w-0 flex-1 truncate">{figure.name}</span>
+                {custom ? <span className="text-muted-foreground text-xs">Mine</span> : null}
+              </button>
+            ))
+          )}
+        </div>
+      </PopoverPopup>
+    </Popover>
   );
 }
