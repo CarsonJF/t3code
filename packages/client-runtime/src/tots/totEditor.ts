@@ -2,8 +2,10 @@ import {
   type ModelSelection,
   type TotAccessory,
   type TotAvatar,
+  type TotAvatarStyle,
   type TotCreateInput,
   type TotId,
+  type TotOpenBotAvatar,
   type TotScope,
   type TotShape,
   totSlug,
@@ -17,6 +19,8 @@ export interface TotDraft {
   readonly shape?: TotShape;
   readonly antenna?: boolean;
   readonly accessories?: ReadonlyArray<TotAccessory>;
+  readonly style?: TotAvatarStyle | undefined;
+  readonly openBot?: TotOpenBotAvatar | undefined;
   readonly scope: TotScope;
   readonly instructions: string;
   readonly modelSelection: ModelSelection;
@@ -58,6 +62,8 @@ export function validateTotDraft(
     ...(draft.accessories === undefined || draft.accessories.length === 0
       ? {}
       : { accessories: draft.accessories }),
+    ...(draft.style === "open-bot" ? { style: draft.style } : {}),
+    ...(draft.openBot === undefined ? {} : { openBot: draft.openBot }),
   };
   return {
     ok: true,
