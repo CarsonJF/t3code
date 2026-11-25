@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
+  DEFAULT_HOME_TOT,
   DEFAULT_SERVER_SETTINGS,
   EventId,
   MessageId,
@@ -28,8 +29,11 @@ import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 
 import {
+  IDLE_COMPACTION_SAVE_MESSAGE_ID_PREFIX,
+  idleCompactionStep,
   idleCompactionWindow,
   isIdleCompactionDriver,
+  TOT_PRE_COMPACTION_NOTE,
   PROVIDER_PROMPT_CACHE_TTL_MS,
   type IdleCompactionRecords,
 } from "./IdleCompaction.ts";
@@ -518,4 +522,117 @@ describe("IdleCompactionService", () => {
       expect(dispatched).toEqual(["server:idle-compact:idle-thread:run-2"]);
     }),
   );
+
+  it.effect.each([
+    { name: "a Tot saves first under When you return", tot: true, saved: false, expected: "save" },
+    { name: "the save turn's end compacts at once", tot: true, saved: true, expected: "compact" },
+    { name: "the environment's Tot setting off", tot: false, saved: false, expected: null },
+    { name: "a Tot that opted out", tot: true, override: false, saved: false, expected: null },
+    { name: "a Tot that opted in", tot: false, override: true, saved: false, expected: "save" },
+  ] as const)("Tot threads compact before the cache expires: $name", (test) =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(NOW_MS);
+      const totThread = ThreadId.make("tot:home:current");
+      const base = records({ cacheExpiresInMs: 2 * MINUTE_MS });
+      const messageId = test.saved
+        ? MessageId.make(`${IDLE_COMPACTION_SAVE_MESSAGE_ID_PREFIX}${totThread}:run-0`)
+        : base.messages[0]!.id;
+      const data: OrchestrationV2ThreadProjection = {
+        ...base,
+        thread: { ...base.thread, id: totThread },
+        runs: base.runs.map((run) => ({ ...run, threadId: totThread, userMessageId: messageId })),
+        messages: base.messages.map((message) => ({
+          ...message,
+          id: messageId,
+          threadId: totThread,
+          ...(test.saved ? { text: TOT_PRE_COMPACTION_NOTE, createdBy: "system" as const } : {}),
+        })),
+        attempts: [],
+        nodes: [],
+        subagents: [],
+        providerSessions: [],
+        plans: [],
+        checkpointScopes: [],
+        checkpoints: [],
+        contextHandoffs: [],
+        visibleTurnItems: [],
+        updatedAt: at(),
+      };
+      const dispatched: Array<{ commandId: string; text: string }> = [];
+      const streamDone = yield* Deferred.make<void>();
+      const dependencies = Layer.mergeAll(
+        Layer.mock(Orchestrator.OrchestratorV2)({
+          streamDomainEvents: Stream.make({
+            id: EventId.make("tot-completed"),
+            type: "run.updated" as const,
+            threadId: totThread,
+            runId,
+            occurredAt: at(),
+            payload: data.runs[0]!,
+          }).pipe(Stream.ensuring(Deferred.succeed(streamDone, undefined))),
+          dispatch: (command) =>
+            Effect.sync(() => {
+              if (command.type === "message.dispatch") {
+                dispatched.push({ commandId: command.commandId, text: command.text });
+              }
+              return { sequence: 1, storedEvents: [] };
+            }),
+        }),
+        Layer.mock(ProjectionStore.ProjectionStoreV2)({
+          getThread: () => Effect.succeed(data.thread),
+          getThreadRecords: () => Effect.succeed(data),
+        }),
+        Layer.mock(ServerSettings.ServerSettingsService)({
+          getSettings: Effect.succeed({
+            ...DEFAULT_SERVER_SETTINGS,
+            idleCompaction: "onReturn",
+            totIdleCompaction: test.tot,
+            tots: [
+              {
+                ...DEFAULT_HOME_TOT,
+                threadId: totThread,
+                ...("override" in test ? { idleCompaction: test.override } : {}),
+              },
+            ],
+          }),
+        }),
+      );
+      yield* Effect.gen(function* () {
+        const service = yield* IdleCompactionService.make;
+        yield* service.start();
+        yield* Deferred.await(streamDone);
+        yield* TestClock.adjust(MINUTE_MS);
+      }).pipe(Effect.provide(dependencies));
+      if (test.expected === null) {
+        expect(dispatched).toEqual([]);
+      } else if (test.expected === "save") {
+        expect(dispatched).toEqual([
+          {
+            commandId: `server:${IDLE_COMPACTION_SAVE_MESSAGE_ID_PREFIX}${totThread}:run-1`,
+            text: TOT_PRE_COMPACTION_NOTE,
+          },
+        ]);
+      } else {
+        expect(dispatched).toEqual([
+          { commandId: `server:idle-compact:${totThread}:run-1`, text: "/compact" },
+        ]);
+      }
+    }),
+  );
+});
+
+describe("idleCompactionStep", () => {
+  const window = { startMs: NOW_MS };
+  it("waits for the window, then compacts a coding thread and asks a Tot to save first", () => {
+    const step = (totThread: boolean, nowMs: number, latestUserMessageId = "message-1") =>
+      idleCompactionStep({ totThread, latestUserMessageId, window, nowMs });
+    expect(step(false, NOW_MS - 1)).toBe("wait");
+    expect(step(true, NOW_MS - 1)).toBe("wait");
+    expect(step(false, NOW_MS)).toBe("compact");
+    expect(step(true, NOW_MS)).toBe("save");
+    // The save turn refreshed the cache, so its end compacts without waiting out the new window.
+    expect(step(true, NOW_MS - 1, `${IDLE_COMPACTION_SAVE_MESSAGE_ID_PREFIX}t:run-1`)).toBe(
+      "compact",
+    );
+  });
 });

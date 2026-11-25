@@ -271,6 +271,20 @@ it.effect("sets, keeps and clears a Tot's own usage-limit fallback list", () => 
   }).pipe(Effect.provide(layer));
 });
 
+it.effect("sets a Tot's idle compaction override and clears it with null", () => {
+  const { layer } = makeTots();
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    expect((yield* tots.update({ id: HOME_TOT_ID, idleCompaction: false })).idleCompaction).toBe(
+      false,
+    );
+    expect((yield* tots.update({ id: HOME_TOT_ID, name: "Hearth" })).idleCompaction).toBe(false);
+    const cleared = yield* tots.update({ id: HOME_TOT_ID, idleCompaction: null });
+    expect("idleCompaction" in cleared).toBe(false);
+    expect("idleCompaction" in (yield* tots.list)[0]!).toBe(false);
+  }).pipe(Effect.provide(layer));
+});
+
 it.effect("a report for a Tot thread that was replaced wakes no one", () => {
   const { layer, sent } = makeTots();
   return Effect.gen(function* () {
