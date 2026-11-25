@@ -249,6 +249,18 @@ describe("one-time scheduled tasks", () => {
   });
 });
 
+describe("scheduled task precheck and missed-run grace", () => {
+  it("loads both into the draft", () => {
+    const draft = taskToDraft({
+      ...legacyTask,
+      precheck: "test -f ready",
+      missedRunGraceMinutes: 30,
+    });
+    expect(draft).toMatchObject({ precheck: "test -f ready", missedRunGraceMinutes: "30" });
+    expect(taskToDraft(legacyTask)).toMatchObject({ precheck: "", missedRunGraceMinutes: "" });
+  });
+});
+
 describe("webhook scheduled tasks", () => {
   const signature = { header: "x-signature", encoding: "base64", prefix: "" } as const;
   const webhookTask: ScheduledTask = {

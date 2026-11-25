@@ -3,7 +3,11 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { isTotProject } from "@t3tools/client-runtime/tots";
-import { validateTotDraft, type TotDraftErrors } from "@t3tools/client-runtime/tots/editor";
+import {
+  applyTotTemplate,
+  validateTotDraft,
+  type TotDraftErrors,
+} from "@t3tools/client-runtime/tots/editor";
 import { totSkinSeriesOf } from "@t3tools/client-runtime/tots/skins";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
@@ -14,7 +18,10 @@ import {
   type TotAvatar as TotAvatarValue,
   type TotScope,
   type TotShape,
+  type TotTemplate,
 } from "@t3tools/contracts";
+import { findTotTemplate, TOT_TEMPLATES } from "@t3tools/shared/totTemplates";
+import { T, useGT } from "gt-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
@@ -137,6 +144,22 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const [skinSeries, setSkinSeries] = useState(() => totSkinSeriesOf(skin));
   const [scope, setScope] = useState<TotScope>(editing?.scope ?? "all");
   const [instructions, setInstructions] = useState(editing?.instructions ?? "");
+  const [template, setTemplate] = useState<TotTemplate | undefined>(undefined);
+  const gt = useGT();
+  const pickTemplate = (id: string) => {
+    const next = findTotTemplate(id);
+    if (next === undefined) return;
+    const filled = applyTotTemplate(
+      { name, instructions, scope, template: template?.id },
+      next,
+      template,
+    );
+    setName(filled.name);
+    setInstructions(filled.instructions);
+    setScope(filled.scope);
+    setTemplate(next);
+    applyFace(next.avatar);
+  };
   const [errors, setErrors] = useState<TotDraftErrors>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -185,6 +208,11 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
         scope,
         instructions,
         modelSelection: model.selection,
+        ...(editing === null
+          ? { memoryTidy: true, ...(template === undefined ? {} : { template: template.id }) }
+          : moving
+            ? { memoryTidy: editing.memoryTidy === true }
+            : {}),
       },
       environmentTots.map((tot) => tot.id),
       moving ? null : (editing?.id ?? null),
@@ -304,6 +332,43 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
           </DialogHeader>
           <DialogPanel>
             <div className="flex flex-col gap-4">
+              {editing === null ? (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="tot-template">
+                    <T>Start from</T>
+                  </Label>
+                  <Select
+                    value={template?.id ?? ""}
+                    onValueChange={(value) => {
+                      if (typeof value === "string") pickTemplate(value);
+                    }}
+                  >
+                    <SelectTrigger size="sm" id="tot-template">
+                      <SelectValue>{template?.name ?? gt("Choose a template")}</SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup alignItemWithTrigger={false}>
+                      {TOT_TEMPLATES.map((entry) => (
+                        <SelectItem key={entry.id} value={entry.id}>
+                          <span className="flex flex-col">
+                            <span>{entry.id === "blank" ? gt("Blank") : entry.name}</span>
+                            <span className="text-muted-foreground text-xs">
+                              {entry.description}
+                            </span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                  {template !== undefined && template.scheduledTasks.length > 0 ? (
+                    <p className="text-muted-foreground text-xs">
+                      {gt(
+                        "Adds {count, plural, =1 {a suggested routine} other {{count} suggested routines}}, paused. Turn them on in Settings → Scheduled tasks.",
+                        { count: template.scheduledTasks.length },
+                      )}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex items-center gap-3">
                 <TotAvatar
                   avatar={totFaceOf(color, skin, shape, antenna, accessories, look)}

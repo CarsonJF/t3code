@@ -55,6 +55,8 @@ Create and manage scheduled tasks in **Settings → Scheduled tasks** (web, desk
 - **Schedules**: Recurring fixed-time schedules use the target environment's time zone. **Once** uses your local time zone (runs on reconnect if offline).
 - **Destination**: Choose **New thread each run**, **One thread (continue conversation)**, or **One thread (fresh session each run)**. Deleting a target thread deletes tasks bound to it; archiving a target thread causes runs to fail (settle it instead).
 - **Controls**: Edit, pause, resume, run now (except webhook tasks), or delete from the list.
+- **Precheck command**: Runs in the project folder for up to 60 seconds before each scheduled run; a non-zero exit skips the run without starting the agent (shown as **Skipped (precheck)** with the command's last line). Full access only; **Run now** skips it. Example: `git fetch -q && test "$(git rev-list HEAD..@{u} --count)" != 0`.
+- **Missed-run grace**: After the server was off, a run due more than that many minutes ago is skipped (**Skipped (missed run)**); one within the grace runs once. Without a grace, a daily task skips runs more than 10 minutes late and an interval task runs once when the server is back.
 
 ### Webhook automations
 

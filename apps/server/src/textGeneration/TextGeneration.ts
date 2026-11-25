@@ -50,7 +50,8 @@ type TextGenerationOp =
   | "generateThreadTitle"
   | "generateReviewGuide"
   | "generateTranscriptionPostProcessing"
-  | "generateAvatarFigure";
+  | "generateAvatarFigure"
+  | "generateMemoryTidy";
 
 const resolveInstance = (
   registry: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"],
@@ -226,6 +227,11 @@ export const make = Effect.gen(function* () {
         input.modelSelection,
         null,
         (service, modelSelection) => service.generateAvatarFigure({ ...input, modelSelection }),
+      );
+    }),
+    generateMemoryTidy: Effect.fn("TextGeneration.generateMemoryTidy")(function (input) {
+      return generate("generateMemoryTidy", input.modelSelection, null, (service, modelSelection) =>
+        service.generateMemoryTidy({ ...input, modelSelection }),
       );
     }),
     generateThreadTitle: Effect.fn("TextGeneration.generateThreadTitle")(function (input) {

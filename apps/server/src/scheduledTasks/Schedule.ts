@@ -71,6 +71,23 @@ export function isSameSchedule(a: ScheduledTaskSchedule, b: ScheduledTaskSchedul
 }
 
 const MISSED_FIXED_TIME_GRACE_MS = 10 * MINUTE_MS;
+/** A due run this late is ordinary poll latency, not downtime, whatever the grace says. */
+const MISSED_RUN_TOLERANCE_MS = MINUTE_MS;
+
+/**
+ * Whether a due run is too late to start. Without a grace, only fixed-time runs expire, after
+ * ten minutes. With one, any time schedule does; the single stored next run is the one catch-up.
+ */
+export function isPastMissedRunGrace(
+  schedule: ScheduledTaskSchedule,
+  graceMinutes: number,
+  dueAt: DateTime.DateTime,
+  now: DateTime.DateTime,
+): boolean {
+  if (schedule.type === "webhook") return false;
+  const late = DateTime.toEpochMillis(now) - DateTime.toEpochMillis(dueAt);
+  return late > Math.max(graceMinutes * MINUTE_MS, MISSED_RUN_TOLERANCE_MS);
+}
 
 export function isMissedFixedTimeRun(
   schedule: ScheduledTaskSchedule,
