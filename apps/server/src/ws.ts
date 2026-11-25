@@ -3818,6 +3818,7 @@ export const layer = Layer.unwrap(
     const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
     const npmRelease = yield* NpmRelease.NpmRelease;
     const totService = yield* TotService.TotService;
+    const avatarDesigner = yield* AvatarFigureDesigner.AvatarFigureDesigner;
     const groupChatService = yield* GroupChatService.GroupChatService;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const issues = yield* IssueService.IssueService;
@@ -3919,6 +3920,9 @@ export const layer = Layer.unwrap(
               Layer.provide(Layer.succeed(NpmRelease.NpmRelease, npmRelease)),
               Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
               Layer.provide(Layer.succeed(TotService.TotService, totService)),
+              Layer.provide(
+                Layer.succeed(AvatarFigureDesigner.AvatarFigureDesigner, avatarDesigner),
+              ),
               Layer.provide(Layer.succeed(GroupChatService.GroupChatService, groupChatService)),
               // Share server-lifetime PR caches so WS mutations invalidate every client's HTTP diffs.
               Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),
