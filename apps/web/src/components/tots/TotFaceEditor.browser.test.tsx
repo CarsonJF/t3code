@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
 import { render } from "../../../test/render";
+import { loadOpenBot } from "./OpenBotFace";
 import { TotFaceEditor } from "./TotFaceEditor";
 
 function Harness(props: {
@@ -49,5 +50,53 @@ describe("TotFaceEditor accessories", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Remove Top hat" }));
     expect(onChange).toHaveBeenLastCalledWith({ color: "#0A7EA4" });
+  });
+});
+
+describe("TotFaceEditor styles", () => {
+  it("switches to open-bot with its controls, and back without losing either look", async () => {
+    await loadOpenBot();
+    const onChange = vi.fn();
+    await using screen = await render(
+      <Harness initial={{ color: "#0A7EA4", shape: "flower" }} onChange={onChange} />,
+      { router: false /* the editor is a lone form, no routes */ },
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Open Bot" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      color: "#0A7EA4",
+      shape: "flower",
+      style: "open-bot",
+      openBot: { figure: "chat" },
+    });
+    await expect
+      .element(screen.getByRole("button", { name: "Shape flower" }))
+      .not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Figure Mug" }));
+    await userEvent.click(screen.getByRole("button", { name: "Glass" }));
+    await userEvent.click(screen.getByRole("button", { name: "Light eyes" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      color: "#0A7EA4",
+      shape: "flower",
+      style: "open-bot",
+      openBot: { figure: "mug", material: "glass", eyeColor: "#f8fafc" },
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Flat" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      color: "#0A7EA4",
+      shape: "flower",
+      style: "open-bot",
+      openBot: { figure: "mug", eyeColor: "#f8fafc" },
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "BoopFace" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      color: "#0A7EA4",
+      shape: "flower",
+      openBot: { figure: "mug", eyeColor: "#f8fafc" },
+    });
+    await expect.element(screen.getByRole("button", { name: "Shape flower" })).toBeVisible();
   });
 });

@@ -85,4 +85,17 @@ describe("validateTotDraft", () => {
     const bare = validateTotDraft(draft({ accessories: [] }), [], null);
     expect(bare.ok && bare.value.avatar).toEqual({ color: "#0A7EA4" });
   });
+
+  it("keeps the open-bot look, and stores no style for BoopFace", () => {
+    const openBot = { figure: "mug", depth: 3 };
+    const chosen = validateTotDraft(draft({ style: "open-bot", openBot }), [], null);
+    expect(chosen.ok && chosen.value.avatar).toEqual({
+      color: "#0A7EA4",
+      style: "open-bot",
+      openBot,
+    });
+    // Switched back to BoopFace: the open-bot look stays stored for the next switch.
+    const back = validateTotDraft(draft({ style: "boopface", openBot }), [], null);
+    expect(back.ok && back.value.avatar).toEqual({ color: "#0A7EA4", openBot });
+  });
 });
