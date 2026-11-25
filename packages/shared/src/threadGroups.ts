@@ -1,4 +1,5 @@
 import type {
+  ProjectId,
   ThreadGroupOp,
   ThreadGroupProjectDefault,
   ThreadGroupsState,
@@ -80,6 +81,30 @@ function applyThreadGroupOp(state: ThreadGroupsState, op: ThreadGroupOp): Thread
       return hasGroup(state, op.groupId)
         ? { ...state, threadOverrides: { ...state.threadOverrides, [op.threadId]: op.groupId } }
         : state;
+    case "restoreGroup": {
+      if (hasGroup(state, op.group.id)) return state;
+      const groups = [...state.groups];
+      groups.splice(Math.min(op.index, groups.length), 0, op.group);
+      const projectDefaults = { ...state.projectDefaults };
+      for (const [projectId, sinces] of Object.entries(op.projectDefaults) as Array<
+        [ProjectId, ReadonlyArray<string>]
+      >) {
+        let entries = projectDefaults[projectId] ?? [];
+        for (const since of sinces) {
+          const index = entries.findIndex((entry) => entry.since === since);
+          if (index === -1) entries = insertBySince(entries, { groupId: op.group.id, since });
+          else if (entries[index]!.groupId === null) {
+            entries = entries.with(index, { groupId: op.group.id, since });
+          }
+        }
+        projectDefaults[projectId] = entries;
+      }
+      const threadOverrides = { ...state.threadOverrides };
+      for (const threadId of op.threadIds) {
+        if ((threadOverrides[threadId] ?? null) === null) threadOverrides[threadId] = op.group.id;
+      }
+      return { groups, projectDefaults, threadOverrides };
+    }
     case "import": {
       const groups = [
         ...state.groups,
@@ -115,3 +140,28 @@ export const applyThreadGroupOps = (
   state: ThreadGroupsState,
   ops: ReadonlyArray<ThreadGroupOp>,
 ): ThreadGroupsState => ops.reduce(applyThreadGroupOp, state);
+
+export type ThreadGroupRestoreOp = Extract<ThreadGroupOp, { type: "restoreGroup" }>;
+
+/** The op that undoes deleting `groupId` from `state`, taken before the delete; null if absent. */
+export function threadGroupRestoreOp(
+  state: ThreadGroupsState,
+  groupId: string,
+): ThreadGroupRestoreOp | null {
+  const index = state.groups.findIndex((group) => group.id === groupId);
+  if (index === -1) return null;
+  const projectDefaults: Record<ProjectId, string[]> = {};
+  for (const [projectId, entries] of Object.entries(state.projectDefaults)) {
+    const sinces = entries.filter((entry) => entry.groupId === groupId).map((entry) => entry.since);
+    if (sinces.length > 0) projectDefaults[projectId as ProjectId] = sinces;
+  }
+  return {
+    type: "restoreGroup",
+    group: state.groups[index]!,
+    index,
+    projectDefaults,
+    threadIds: Object.entries(state.threadOverrides)
+      .filter(([, override]) => override === groupId)
+      .map(([threadId]) => threadId as ThreadGroupRestoreOp["threadIds"][number]),
+  };
+}
