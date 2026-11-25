@@ -123,12 +123,13 @@ import Migration0109 from "./Migrations/109_AgentFeedback.ts";
 import Migration0110 from "./Migrations/110_IssueTrackerAccounts.ts";
 import Migration0111 from "./Migrations/111_Workflows.ts";
 import Migration0112 from "./Migrations/112_SupersededRunAttemptIndex.ts";
-import Migration0113 from "./Migrations/113_LayoutCommandApprovals.ts";
-import Migration0114 from "./Migrations/114_WorkflowSkippedRuns.ts";
-import Migration0115 from "./Migrations/115_WorkflowRunIndexes.ts";
-import Migration0116 from "./Migrations/116_WorkflowRunTags.ts";
-import Migration0117 from "./Migrations/117_ForkHistoryMembership.ts";
-import Migration0118 from "./Migrations/118_WorkflowMailSender.ts";
+import Migration0113 from "./Migrations/113_ScheduledTaskModelPinned.ts";
+import Migration0114 from "./Migrations/114_LayoutCommandApprovals.ts";
+import Migration0115 from "./Migrations/115_WorkflowSkippedRuns.ts";
+import Migration0116 from "./Migrations/116_WorkflowRunIndexes.ts";
+import Migration0117 from "./Migrations/117_WorkflowRunTags.ts";
+import Migration0118 from "./Migrations/118_ForkHistoryMembership.ts";
+import Migration0119 from "./Migrations/119_WorkflowMailSender.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -246,12 +247,13 @@ const migrationEntries = [
   [110, "IssueTrackerAccounts", Migration0110],
   [111, "Workflows", Migration0111],
   [112, "SupersededRunAttemptIndex", Migration0112],
-  [113, "LayoutCommandApprovals", Migration0113],
-  [114, "WorkflowSkippedRuns", Migration0114],
-  [115, "WorkflowRunIndexes", Migration0115],
-  [116, "WorkflowRunTags", Migration0116],
-  [117, "ForkHistoryMembership", Migration0117],
-  [118, "WorkflowMailSender", Migration0118],
+  [113, "ScheduledTaskModelPinned", Migration0113],
+  [114, "LayoutCommandApprovals", Migration0114],
+  [115, "WorkflowSkippedRuns", Migration0115],
+  [116, "WorkflowRunIndexes", Migration0116],
+  [117, "WorkflowRunTags", Migration0117],
+  [118, "ForkHistoryMembership", Migration0118],
+  [119, "WorkflowMailSender", Migration0119],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

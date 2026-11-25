@@ -12,8 +12,8 @@ import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 
 import WorkflowsMigration from "../../apps/server/src/persistence/Migrations/111_Workflows.ts";
-import WorkflowRunTagsMigration from "../../apps/server/src/persistence/Migrations/116_WorkflowRunTags.ts";
-import WorkflowMailSenderMigration from "../../apps/server/src/persistence/Migrations/118_WorkflowMailSender.ts";
+import WorkflowRunTagsMigration from "../../apps/server/src/persistence/Migrations/117_WorkflowRunTags.ts";
+import WorkflowMailSenderMigration from "../../apps/server/src/persistence/Migrations/119_WorkflowMailSender.ts";
 import type { WorkflowDefinition } from "../../apps/server/src/workflows/workflow.ts";
 import {
   type AgentResult,
