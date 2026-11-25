@@ -16,6 +16,7 @@ import {
   TotId,
   totLaunchedThreadId,
   totSlug,
+  totAvatarStyleOf,
   totThreadId,
   totWatchReportsOf,
   type Tot as TotRecord,
@@ -165,6 +166,52 @@ describe("Tot accessories", () => {
     expect(() =>
       decodeAvatar({ color: "#0A7EA4", accessories: [{ kind: "cardinal.halo", color: "gold" }] }),
     ).toThrow();
+  });
+});
+
+describe("Tot avatar styles", () => {
+  const decodeAvatar = Schema.decodeUnknownSync(TotAvatar);
+
+  it("decodes a face saved before styles unchanged, and draws it as BoopFace", () => {
+    const saved = { color: "#0A7EA4", shape: "flower", antenna: true } as const;
+    expect(decodeAvatar(saved)).toEqual(saved);
+    expect(totAvatarStyleOf(decodeAvatar(saved))).toBe("boopface");
+  });
+
+  it("carries the open-bot look with its own parameters", () => {
+    const face = {
+      color: "#16A34A",
+      skin: 301,
+      style: "open-bot",
+      openBot: { figure: "watering-can", material: "fluffy", depth: 9, eyeColor: "#f8fafc" },
+    } as const;
+    expect(decodeAvatar(face)).toEqual(face);
+    expect(totAvatarStyleOf(face)).toBe("open-bot");
+  });
+
+  it("takes every open-bot finish", () => {
+    for (const material of ["flat", "fluffy", "glass", "soft"] as const) {
+      const face = { color: "#0A7EA4", style: "open-bot", openBot: { figure: "mug", material } };
+      expect(decodeAvatar(face)).toEqual(face);
+    }
+  });
+
+  it("falls back to BoopFace when open-bot is chosen without a figure, or only stored", () => {
+    expect(totAvatarStyleOf({ color: "#0A7EA4", style: "open-bot" })).toBe("boopface");
+    expect(totAvatarStyleOf({ color: "#0A7EA4", openBot: { figure: "mug" } })).toBe("boopface");
+  });
+
+  it("refuses an unknown style, a depth out of range, a bad figure id or eye color", () => {
+    for (const face of [
+      { color: "#0A7EA4", style: "pixel" },
+      { color: "#0A7EA4", openBot: { figure: "mug", depth: 15 } },
+      { color: "#0A7EA4", openBot: { figure: "mug", depth: 2.5 } },
+      { color: "#0A7EA4", openBot: { figure: "Mug Cup" } },
+      { color: "#0A7EA4", openBot: { figure: "mug", material: "metal" } },
+      { color: "#0A7EA4", openBot: { figure: "mug", eyeColor: "black" } },
+    ]) {
+      expect(() => decodeAvatar(face)).toThrow();
+    }
   });
 });
 
