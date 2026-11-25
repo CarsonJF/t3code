@@ -181,6 +181,14 @@ type TerminalTaskStatus = Extract<
   "completed" | "failed" | "cancelled" | "interrupted"
 >;
 
+export interface ScheduledTaskListTot {
+  readonly totId: TotId;
+  /** Projects here the Tot owns; `all` owns every one. */
+  readonly projects: "all" | ReadonlySet<ProjectId>;
+  /** Sidebar groups in its scope, which this server cannot resolve to projects. */
+  readonly hasGroups: boolean;
+}
+
 export interface OrchestratorMcpServiceShape {
   readonly capabilities: (
     scope: McpInvocationScope,
@@ -211,6 +219,8 @@ export interface OrchestratorMcpServiceShape {
   readonly listScheduledTasks: (
     scope: McpInvocationScope,
     input: OrchestratorMcpListScheduledTasksInput,
+    /** The Tot that asked: with no `projectId`, its listing covers what it owns. */
+    tot?: ScheduledTaskListTot,
   ) => Effect.Effect<OrchestratorMcpListScheduledTasksResult, OrchestratorMcpFailure>;
   readonly updateScheduledTask: (
     scope: McpInvocationScope,
@@ -295,6 +305,19 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// The user's own ban on this deployment; its flash variants stay allowed.
+const BANNED_SCHEDULED_MODELS: ReadonlySet<string> = new Set(["opencode-go/glm-5.3"]);
+
+const bannedScheduledModel = (selection: ModelSelection | undefined) =>
+  selection !== undefined && BANNED_SCHEDULED_MODELS.has(selection.model.trim().toLowerCase())
+    ? Effect.fail(
+        failure(
+          "invalid_request",
+          `${selection.model} is not allowed for scheduled tasks. Pick another model, such as a flash variant.`,
+        ),
+      )
+    : Effect.void;
+
 function scheduledTaskSummary(task: ScheduledTask, mayRun: boolean): OrchestratorMcpScheduledTask {
   return {
     scheduledTaskId: task.id,
@@ -304,6 +327,7 @@ function scheduledTaskSummary(task: ScheduledTask, mayRun: boolean): Orchestrato
     projectId: task.projectId,
     boundThreadId: task.threadId,
     freshSession: scheduledTaskThreadMode(task) === "fresh_session",
+    modelSelection: task.modelSelection,
     schedule: task.schedule,
     nextRunAt: task.nextRunAt,
     lastRunStatus: task.lastRunStatus,
@@ -2486,8 +2510,11 @@ const make = Effect.gen(function* () {
             : "bindToCurrentThread binds to this thread, which belongs to a different project.",
         );
       }
+      yield* bannedScheduledModel(input.modelSelection);
       const modelSelection =
-        parent?.thread.modelSelection ?? (yield* projectDefaultModelSelection(project));
+        input.modelSelection ??
+        parent?.thread.modelSelection ??
+        (yield* projectDefaultModelSelection(project));
       // Never end on a lone high surrogate, which renders as a broken character.
       const derivedTitle = (input.prompt.split("\n")[0]?.trim() ?? "")
         .slice(0, 80)
@@ -2517,6 +2544,7 @@ const make = Effect.gen(function* () {
             : "new_thread",
         workspaceStrategy: yield* scheduledTaskWorkspaceStrategy(bindToCurrentThread, projectId),
         modelSelection,
+        ...(input.modelSelection === undefined ? {} : { modelPinned: true }),
         runtimeMode: limits.runtimeMode,
         interactionMode: limits.interactionMode,
         createdBy: "agent",
@@ -2548,9 +2576,18 @@ const make = Effect.gen(function* () {
       return yield* summarizeScheduledTask(scope, { parent, limits }, task);
     }),
     listScheduledTasks: Effect.fn("OrchestratorMcpService.listScheduledTasks")(
-      function* (scope, input) {
+      function* (scope, input, tot) {
         const { parent } = yield* loadCaller(scope, []);
         const projectId = input.projectId ?? parent?.thread.projectId;
+        // A Tot's thread lives in its own folder; its routines live in the projects it owns.
+        const totListing = input.projectId === undefined ? tot : undefined;
+        const inScope = (task: ScheduledTask) =>
+          totListing === undefined
+            ? projectId === undefined || task.projectId === projectId
+            : task.projectId === projectId ||
+              task.createdByTotId === totListing.totId ||
+              totListing.projects === "all" ||
+              totListing.projects.has(task.projectId);
         const { tasks } = yield* scheduledTasks
           .list()
           .pipe(
@@ -2562,10 +2599,15 @@ const make = Effect.gen(function* () {
           tasks: tasks
             .filter(
               (task) =>
-                (projectId === undefined || task.projectId === projectId) &&
+                inScope(task) &&
                 (input.scheduledTaskId === undefined || task.id === input.scheduledTaskId),
             )
             .map((task) => scheduledTaskSummary(task, false)),
+          ...(totListing?.hasGroups === true
+            ? {
+                note: "Projects in your sidebar groups are not covered by this default listing. Pass their projectId to list them.",
+              }
+            : {}),
         };
       },
     ),
@@ -2574,6 +2616,7 @@ const make = Effect.gen(function* () {
         const { parent, limits } = yield* loadCaller(scope, ["runs"]);
         const existing = yield* loadScheduledTask(input.scheduledTaskId, limits);
         yield* assertLiveCallerForOtherProject(scope, parent, existing.projectId);
+        yield* bannedScheduledModel(input.modelSelection);
         if (
           input.bindToCurrentThread === true &&
           (parent === undefined || parent.thread.projectId !== existing.projectId)
@@ -2630,7 +2673,8 @@ const make = Effect.gen(function* () {
                   ? "new_thread"
                   : "continue",
           workspaceStrategy,
-          modelSelection: existing.modelSelection,
+          modelSelection: input.modelSelection ?? existing.modelSelection,
+          ...(input.modelSelection === undefined ? {} : { modelPinned: true }),
           runtimeMode: existing.runtimeMode,
           interactionMode: existing.interactionMode,
           createdBy: existing.createdBy,
