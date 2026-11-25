@@ -169,11 +169,13 @@ A face has two styles. **BoopFace** is the default described above. **Open Bot**
 
 ### Your own figures and face themes
 
-Each machine keeps an avatar library in its T3 home folder (`avatars/figures` and `avatars/themes`). A **figure** is an Open Bot outline with eyes; a **face theme** is a named face (style, figure, colors, finish, depth, eyes and mood) you can put on any Tot in one click. Both appear in the face editor next to the built-in ones, with a dashed border. A Tot whose figure is later deleted shows the default figure instead.
+Each machine keeps an avatar library in its T3 home folder (`avatars/figures` and `avatars/themes`). A **figure** is an Open Bot outline with eyes; a **face theme** is a named face (style, figure, colors, finish, depth, eyes and mood) you can put on any Tot in one click. In the face editor, pick a figure from the searchable list under the preview; library figures are marked **Mine**. A Tot whose figure is later deleted shows the default figure instead.
 
-You don't draw figures by hand: ask any agent. For example: _"Make a small lighthouse figure for the avatar library, and a face theme called Beacon that uses it in orange with a glass finish. Then apply Beacon to T3Bot."_ The agent saves the figure with the `t3_avatar_library` tool, looks at the preview it gets back, and adjusts it until it reads well at sidebar size.
+Make and manage them in **Settings → Avatar library** (or **Manage shapes…** in the face editor), for the machine picked at the top. Type a description under **Describe a shape**, for example _"A pink fairy with butterfly wings"_, and press **Design it**: the shape model draws a figure, shown in every finish, that you can rename, design again, or save. Your own figures and themes can be renamed, applied to a Tot, exported to a file and deleted; **Import…** adds an exported file, here or on another machine, since nothing syncs on its own. **Shape model** on that page picks the model that designs shapes; off, it uses the machine's text generation model.
 
-To move an item to another machine, ask the agent to **export** it to a JSON file and **import** that file on the other machine; nothing syncs on its own. To ship a favorite with every build, add its JSON to the `gallery/` folder of the open-bot-avatar mirror (`CarsonJF/open-bot-avatar-fork`), tag a release there, and update the vendored copy.
+Agents can make them too, with the `t3_avatar_library` tool. For example: _"Make a small lighthouse figure for the avatar library, and a face theme called Beacon that uses it in orange with a glass finish. Then apply Beacon to T3Bot."_ The agent follows the same design prompt, looks at the preview it gets back, and adjusts the figure until it reads well at sidebar size. To ship a favorite with every build, add its JSON to the `gallery/` folder of the open-bot-avatar mirror (`CarsonJF/open-bot-avatar-fork`), tag a release there, and update the vendored copy.
+
+The library page is on web and desktop; the mobile app does not have it yet.
 
 Finishes such as glass and soft are shader code, not library data. A new finish is a pull request to that mirror, not something an agent adds while T3 Code runs.
 

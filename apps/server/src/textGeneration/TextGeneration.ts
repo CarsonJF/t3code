@@ -23,6 +23,8 @@ import * as TextGenerators from "./TextGenerators.ts";
 import * as TextGenerationOperations from "@t3tools/provider-core/server/textGenerationOperations";
 
 export type {
+  AvatarFigureDraft,
+  AvatarFigureGenerationInput,
   BranchNameGenerationInput,
   BranchNameGenerationResult,
   CommitMessageGenerationInput,
@@ -47,7 +49,8 @@ type TextGenerationOp =
   | "generateBranchName"
   | "generateThreadTitle"
   | "generateReviewGuide"
-  | "generateTranscriptionPostProcessing";
+  | "generateTranscriptionPostProcessing"
+  | "generateAvatarFigure";
 
 const resolveInstance = (
   registry: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"],
@@ -215,6 +218,14 @@ export const make = Effect.gen(function* () {
         null,
         (service, modelSelection) =>
           service.generateTranscriptionPostProcessing({ ...input, modelSelection }),
+      );
+    }),
+    generateAvatarFigure: Effect.fn("TextGeneration.generateAvatarFigure")(function (input) {
+      return generate(
+        "generateAvatarFigure",
+        input.modelSelection,
+        null,
+        (service, modelSelection) => service.generateAvatarFigure({ ...input, modelSelection }),
       );
     }),
     generateThreadTitle: Effect.fn("TextGeneration.generateThreadTitle")(function (input) {
