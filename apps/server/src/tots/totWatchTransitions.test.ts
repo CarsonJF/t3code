@@ -1,9 +1,14 @@
 import { expect, it } from "@effect/vitest";
 
 import {
+  EMPTY_STEERING_NOTE,
+  formatSteeringNote,
   formatWatchExcerpt,
   formatWatchLine,
+  isRoutineWatchEvent,
   liveBackgroundTaskCount,
+  noteSteeringMessage,
+  noteSteeringRun,
   runIsOver,
   watchTransition,
   type WatchedThreadState,
@@ -162,4 +167,32 @@ it("bounds an excerpt to its end without splitting a character", () => {
 it("has no excerpt for an empty message", () => {
   expect(formatWatchExcerpt(" \n\t ")).toBeNull();
   expect(formatWatchExcerpt(undefined)).toBeNull();
+});
+
+it("batches only routine news; failures, questions, approvals and stops stay urgent", () => {
+  expect(isRoutineWatchEvent("completed")).toBe(true);
+  expect(isRoutineWatchEvent("still_working")).toBe(true);
+  for (const event of ["failed", "question", "approval", "stopped", "ended_unseen"] as const) {
+    expect(isRoutineWatchEvent(event)).toBe(false);
+  }
+});
+
+it("notes the user's newest messages as untrusted code spans and counts the rest", () => {
+  let note = EMPTY_STEERING_NOTE;
+  for (const text of ["one", "two", "three", "four `ticks`\nand a line", "x".repeat(400)]) {
+    note = noteSteeringMessage(note, text);
+  }
+  note = noteSteeringRun(note, "completed");
+  note = noteSteeringRun(note, "question");
+  const lines = formatSteeringNote(note);
+  expect(lines[0]).toBe("  - The user wrote 2 earlier messages here too.");
+  expect(lines[1]).toBe("  - The user wrote here (untrusted thread text): `three`");
+  expect(lines[2]).toBe(
+    "  - The user wrote here (untrusted thread text): `four 'ticks' and a line`",
+  );
+  expect(lines[3]).toBe(`  - The user wrote here (untrusted thread text): \`${"x".repeat(300)}…\``);
+  expect(lines[4]).toBe(
+    "  - The user started runs here themselves, not you: Finished, Asks a question.",
+  );
+  expect(formatSteeringNote(EMPTY_STEERING_NOTE)).toEqual([]);
 });

@@ -63,6 +63,10 @@ import {
   totSettingsDraftFromTot,
   totSettingsDraftKey,
   totSettingsDraftUpdate,
+  TOT_IDLE_COMPACTION,
+  type TotIdleCompactionChoice,
+  totIdleCompactionChoice,
+  totIdleCompactionValue,
   webhookFilterSummary,
   type TotSettingsDraft,
 } from "./totSettingsPanel.logic";
@@ -369,6 +373,16 @@ function TotSettingsEditor(props: {
             value={draft.watchReports}
             disabled={!canEdit}
             onChange={(watchReports) => setDraft({ ...draft, watchReports })}
+          />
+
+          <Separator />
+
+          <TotIdleCompactionSection
+            value={totIdleCompactionChoice(draft.idleCompaction)}
+            disabled={!canEdit}
+            onChange={(choice) =>
+              setDraft({ ...draft, idleCompaction: totIdleCompactionValue(choice) })
+            }
           />
 
           <Separator />
@@ -802,6 +816,35 @@ function TotWatchReportsSection(props: {
           {TOT_WATCH_REPORTS.map((mode) => (
             <SelectItem key={mode} value={mode}>
               {WATCH_REPORTS[mode].label}
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+    </PanelSection>
+  );
+}
+
+const TOT_IDLE_COMPACTION_CHOICES = ["default", "on", "off"] as const;
+
+function TotIdleCompactionSection(props: {
+  readonly value: TotIdleCompactionChoice;
+  readonly disabled: boolean;
+  readonly onChange: (value: TotIdleCompactionChoice) => void;
+}) {
+  const option = TOT_IDLE_COMPACTION[props.value];
+  return (
+    <PanelSection title="Compact when idle" description={option.help}>
+      <Select
+        value={props.value}
+        onValueChange={(value) => props.onChange(value as TotIdleCompactionChoice)}
+      >
+        <SelectTrigger size="sm" aria-label="Compact when idle" disabled={props.disabled}>
+          <SelectValue>{option.label}</SelectValue>
+        </SelectTrigger>
+        <SelectPopup alignItemWithTrigger={false}>
+          {TOT_IDLE_COMPACTION_CHOICES.map((choice) => (
+            <SelectItem key={choice} value={choice}>
+              {TOT_IDLE_COMPACTION[choice].label}
             </SelectItem>
           ))}
         </SelectPopup>
