@@ -504,6 +504,7 @@ import {
   TotMemory,
   TotMemoryReadInput,
   TotMemoryWriteInput,
+  TotMemoryTidyRevertInput,
   TotThreadResult,
   TotUpdateInput,
 } from "./tots.ts";
@@ -659,6 +660,7 @@ export const WS_METHODS = {
   groupChatsUpdate: "groupChats.update",
   groupChatsRemove: "groupChats.remove",
   totsWriteMemory: "tots.writeMemory",
+  totsRevertMemoryTidy: "tots.revertMemoryTidy",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverCheckSecretSource: "server.checkSecretSource",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
@@ -1164,6 +1166,10 @@ const WsTotsDescribeAvatarFigureRpc = Rpc.make(WS_METHODS.totsDescribeAvatarFigu
 });
 const WsTotsWriteMemoryRpc = Rpc.make(WS_METHODS.totsWriteMemory, {
   payload: TotMemoryWriteInput,
+  error: totError,
+});
+const WsTotsRevertMemoryTidyRpc = Rpc.make(WS_METHODS.totsRevertMemoryTidy, {
+  payload: TotMemoryTidyRevertInput,
   error: totError,
 });
 
@@ -2686,6 +2692,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGroupChatsUpdateRpc,
   WsGroupChatsRemoveRpc,
   WsTotsWriteMemoryRpc,
+  WsTotsRevertMemoryTidyRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerCheckSecretSourceRpc,
   WsServerSearchAcpRegistryRpc,

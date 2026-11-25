@@ -5724,5 +5724,22 @@
   "c89f9a3e9e89efc0": "Idle",
   "267bd2982a153996": "Deleted group",
   "f68ebd9661469c87": "Tell it what you want done. It starts, watches and answers the threads in its scope for you.",
-  "c900815e1a139742": "Tots"
+  "c900815e1a139742": "Tots",
+  "5781cb3bcb8fedb8": "Tolerância de execução perdida inválida",
+  "c460b71d67ca48af": "Insira minutos inteiros de 0 a {max} ou deixe em branco.",
+  "8ca0ed2936c6f7bb": "Ignorada (pré-verificação)",
+  "08a88c17c1b27751": "Ignorada (execução perdida)",
+  "61f41d071cbfb786": "Ignorada",
+  "2db247c57d9f0085": "{label}: {detail}",
+  "f9454e5383f18094": "Comando de pré-verificação",
+  "f1d077b23b6f98cc": "Comando de shell opcional",
+  "43fe3696205a7dcd": "Precisa de uma tarefa com acesso total",
+  "21e2cabc339e6ee1": "Tolerância para execuções perdidas (minutos)",
+  "e40e6d4ec89b5365": "Padrão",
+  "c0e9384b86cdbf37": "É executado na pasta do projeto antes de cada execução agendada, por até 60 segundos. Uma saída diferente de zero ignora a execução sem iniciar um agente.",
+  "03732d87be62dd2a": "Começar de",
+  "25bdaed653d3d2c3": "As rotinas sugeridas de um modelo são criadas em pausa.",
+  "fc72809a59128290": "Em branco",
+  "6eb33caef72a98a1": "Por volta das 03:30, um modelo barato remove duplicatas e condensa o {memory}. A cópia anterior fica em {backup}.",
+  "4b3694d90784a5be": "Organização noturna da memória"
 }

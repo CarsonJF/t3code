@@ -22,6 +22,7 @@ import {
   type ScheduledTaskRunNowInput,
   type ScheduledTaskRunNowResult,
   type ScheduledTaskSetEnabledInput,
+  type ScheduledTaskSkipReason,
   type ScheduledTaskThreadMode,
   type ScheduledTaskUpsertInput,
   managedPolicyDeniedMessage,
@@ -64,7 +65,13 @@ import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as DueHint from "../scheduling/DueHint.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import { latestRootProviderFailure } from "@t3tools/shared/orchestrationV2ThreadError";
-import { isMissedFixedTimeRun, isSameSchedule, nextScheduledRunAt } from "./Schedule.ts";
+import {
+  isMissedFixedTimeRun,
+  isPastMissedRunGrace,
+  isSameSchedule,
+  nextScheduledRunAt,
+} from "./Schedule.ts";
+import { ScheduledTaskPrecheckRunner } from "./precheck.ts";
 import {
   redactHeaders,
   redactQuery,
@@ -269,6 +276,11 @@ interface ScheduledTaskRow {
   readonly run_count: number;
   readonly webhook_token: string | null;
   readonly webhook_secret: string | null;
+  readonly precheck: string | null;
+  readonly missed_run_grace_minutes: number | null;
+  readonly last_skipped_at: string | null;
+  readonly last_skip_reason: string | null;
+  readonly last_skip_detail: string | null;
 }
 
 interface WebhookDeliveryRow {
@@ -461,6 +473,19 @@ const decodeRow = Effect.fnUntraced(
       lastRunError: row.last_run_error,
       runCount: row.run_count,
       ...(webhook === undefined ? {} : { webhook }),
+      ...(row.precheck === null ? {} : { precheck: row.precheck }),
+      ...(row.missed_run_grace_minutes === null
+        ? {}
+        : { missedRunGraceMinutes: row.missed_run_grace_minutes }),
+      ...(row.last_skipped_at === null || row.last_skip_reason === null
+        ? {}
+        : {
+            lastSkip: {
+              at: row.last_skipped_at,
+              reason: row.last_skip_reason,
+              detail: row.last_skip_detail,
+            },
+          }),
     });
   },
   (effect, row, _origin?) =>
@@ -525,6 +550,7 @@ export const layer = Layer.effect(
     const scheduler = yield* Scheduler.Scheduler;
     const readWebhookOrigin = yield* ScheduledTaskWebhookOrigin;
     const managedPolicy = yield* ManagedPolicy.ManagedPolicy;
+    const runPrecheck = yield* ScheduledTaskPrecheckRunner;
     const webhookPolicyOrganization = ManagedPolicy.deniedBy(managedPolicy, "webhookTasks");
     // Existing webhook tasks stay stored but report why they do not run.
     const webhookPolicyBlock =
@@ -592,7 +618,12 @@ export const layer = Layer.effect(
         last_run_error,
         run_count,
         webhook_token,
-        webhook_secret
+        webhook_secret,
+        precheck,
+        missed_run_grace_minutes,
+        last_skipped_at,
+        last_skip_reason,
+        last_skip_detail
       FROM scheduled_tasks
       -- Not updated_at: toggles, runs and edits rewrite it, and clients render
       -- this order as-is, so rows would move under the pointer.
@@ -636,7 +667,12 @@ export const layer = Layer.effect(
         last_run_error,
         run_count,
         webhook_token,
-        webhook_secret
+        webhook_secret,
+        precheck,
+        missed_run_grace_minutes,
+        last_skipped_at,
+        last_skip_reason,
+        last_skip_detail
       FROM scheduled_tasks
       WHERE task_id = ${id}
     `.pipe(NodeSqliteClient.readOnly);
@@ -718,7 +754,9 @@ export const layer = Layer.effect(
           last_run_error,
           run_count,
           webhook_token,
-          webhook_secret
+          webhook_secret,
+          precheck,
+          missed_run_grace_minutes
         )
         SELECT
           ${task.id},
@@ -745,7 +783,9 @@ export const layer = Layer.effect(
           ${task.lastRunError},
           ${task.runCount},
           ${webhook.token},
-          ${webhook.secret}
+          ${webhook.secret},
+          ${task.precheck ?? null},
+          ${task.missedRunGraceMinutes ?? null}
         WHERE ${requireExisting ? 0 : 1} = 1
            OR EXISTS (SELECT 1 FROM scheduled_tasks WHERE task_id = ${task.id})
         ON CONFLICT (task_id)
@@ -793,7 +833,9 @@ export const layer = Layer.effect(
           webhook_secret = CASE
             WHEN ${webhook.secretChanged ? 1 : 0} = 1 THEN excluded.webhook_secret
             ELSE scheduled_tasks.webhook_secret
-          END
+          END,
+          precheck = excluded.precheck,
+          missed_run_grace_minutes = excluded.missed_run_grace_minutes
         RETURNING task_id
       `.pipe(
         Effect.mapError((cause) =>
@@ -1150,6 +1192,17 @@ export const layer = Layer.effect(
                     : null;
           if (reason !== null) return yield* new WebhookDeliverySkipped({ reason });
         }
+        // Run now is the user asking for a run, so only time-scheduled runs pass the gate.
+        if (trigger === "scheduled" && active.precheck !== undefined) {
+          const gate = yield* runPrecheck({
+            command: active.precheck,
+            projectId: active.projectId,
+          });
+          if (!gate.pass) {
+            yield* recordSkippedRun(active, yield* localNow, "precheck", gate.detail);
+            return { task: active, threadId: null, dispatchFailed: false };
+          }
+        }
 
         if (webhook === undefined) yield* markRunning(active.id, startedAtIso);
         else
@@ -1427,6 +1480,41 @@ export const layer = Layer.effect(
       if (updated.length > 0) yield* notifyChanged;
     });
 
+    const recordSkippedRun = Effect.fn("ScheduledTaskService.recordSkippedRun")(function* (
+      task: ScheduledTask,
+      now: DateTime.DateTime,
+      reason: ScheduledTaskSkipReason,
+      detail: string | null,
+    ) {
+      const next = nextRunAt(task, now);
+      yield* Effect.logInfo("Skipping schedule task run", {
+        taskId: task.id,
+        reason,
+        skippedRunAt: task.nextRunAt,
+        rescheduledTo: next,
+      });
+      // Same stale-snapshot guard as rescheduleMissedRun.
+      const updated = yield* sql`
+        UPDATE scheduled_tasks
+        SET next_run_at = ${next},
+            updated_at = ${iso(now)},
+            enabled = CASE WHEN ${next} IS NULL
+              AND json_extract(schedule_json, '$.type') = 'once' THEN 0 ELSE enabled END,
+            last_skipped_at = ${iso(now)},
+            last_skip_reason = ${reason},
+            last_skip_detail = ${detail}
+        WHERE task_id = ${task.id}
+          AND next_run_at IS ${task.nextRunAt}
+          AND last_run_at IS ${task.lastRunAt}
+        RETURNING task_id
+      `.pipe(
+        Effect.mapError((cause) =>
+          taskError("Could not record a skipped schedule task run.", { taskId: task.id, cause }),
+        ),
+      );
+      if (updated.length > 0) yield* notifyChanged;
+    });
+
     const runDueTasks = Effect.fn("ScheduledTaskService.runDueTasks", { attributes: routineSpan })(
       function* () {
         const now = yield* localNow;
@@ -1462,7 +1550,16 @@ export const layer = Layer.effect(
           due,
           ({ task, dueAt }) =>
             Effect.suspend(() =>
-              isMissedFixedTimeRun(task.schedule, dueAt, now)
+            task.missedRunGraceMinutes !== undefined
+              ? isPastMissedRunGrace(task.schedule, task.missedRunGraceMinutes, dueAt, now)
+                ? recordSkippedRun(
+                    task,
+                    now,
+                    "missed",
+                    `Due at ${task.nextRunAt}, past the ${task.missedRunGraceMinutes}-minute grace.`,
+                  )
+                : runTask(task, "scheduled")
+              : isMissedFixedTimeRun(task.schedule, dueAt, now)
                 ? rescheduleMissedRun(
                     task,
                     now,
@@ -1775,6 +1872,19 @@ export const layer = Layer.effect(
         yield* requireFutureOnce({ enabled: input.enabled, schedule }, now, id);
       const createdByTotId = existingTask?.createdByTotId ?? input.createdByTotId;
       const modelPinned = input.modelPinned ?? existingTask?.modelPinned ?? false;
+      const precheck =
+        input.precheck === undefined ? existingTask?.precheck : (input.precheck ?? undefined);
+      const missedRunGraceMinutes =
+        input.missedRunGraceMinutes === undefined
+          ? existingTask?.missedRunGraceMinutes
+          : (input.missedRunGraceMinutes ?? undefined);
+      // A precheck is a shell command the server runs with no approval prompt.
+      if (precheck !== undefined && input.runtimeMode !== "full-access") {
+        return yield* taskError(
+          "A precheck runs a shell command, so only a full-access task can have one.",
+          { taskId: id },
+        );
+      }
       const task: ScheduledTask = {
         id,
         title: input.title,
@@ -1801,6 +1911,8 @@ export const layer = Layer.effect(
         lastRunStatus: existingTask?.lastRunStatus ?? "never",
         lastRunError: existingTask?.lastRunError ?? null,
         runCount: existingTask?.runCount ?? 0,
+        ...(precheck === undefined ? {} : { precheck }),
+        ...(missedRunGraceMinutes === undefined ? {} : { missedRunGraceMinutes }),
       };
       yield* saveTask(
         task,

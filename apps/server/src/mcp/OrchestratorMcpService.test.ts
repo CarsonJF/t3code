@@ -4614,6 +4614,40 @@ describe("OrchestratorMcpService provider resolution", () => {
       }),
     );
 
+    it.effect("passes a missed-run grace through and refuses a precheck below full access", () =>
+      Effect.gen(function* () {
+        const inputs = yield* Ref.make<ReadonlyArray<ScheduledTaskUpsertInput>>([]);
+        const mcp = yield* OrchestratorMcpService.OrchestratorMcpService.pipe(
+          Effect.provide(
+            service(
+              masterRepository,
+              yield* Ref.make<ReadonlyArray<ScheduledTask["workspaceStrategy"]>>([]),
+              existing,
+              inputs,
+            ),
+          ),
+        );
+        yield* mcp.scheduleTask(client, {
+          projectId,
+          prompt: "Check the build",
+          schedule,
+          missedRunGraceMinutes: 20,
+        });
+        assert.equal((yield* Ref.get(inputs))[0]?.missedRunGraceMinutes, 20);
+
+        const refused = yield* Effect.flip(
+          mcp.scheduleTask(client, {
+            projectId,
+            prompt: "Check the build",
+            schedule,
+            precheck: "git fetch -q",
+          }),
+        );
+        assert.equal(refused.code, "capability_denied");
+        assert.lengthOf(yield* Ref.get(inputs), 1);
+      }),
+    );
+
     it.effect("uses the environment's default model when the project inherits it", () =>
       Effect.gen(function* () {
         const environmentDefault = {

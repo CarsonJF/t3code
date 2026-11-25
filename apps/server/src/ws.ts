@@ -2899,6 +2899,7 @@ export const layerWsRpc = (
         [WS_METHODS.groupChatsUpdate]: (input) => groupChats.update(input),
         [WS_METHODS.groupChatsRemove]: (input) => groupChats.remove(input.id),
         [WS_METHODS.totsWriteMemory]: (input) => tots.writeMemory(input.id, input.files),
+        [WS_METHODS.totsRevertMemoryTidy]: (input) => tots.revertMemoryTidy(input.id),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
         [WS_METHODS.serverCheckSecretSource]: (input) => secretCheck.check(input.source),
         [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>

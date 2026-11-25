@@ -188,6 +188,19 @@ export function resolveAvatarDesignModelSelection(
     : settings.textGenerationModelSelection;
 }
 
+/** The model for a Tot's nightly memory tidy-up: its own pick, else the text-generation model. */
+export function resolveTotMemoryTidyModelSelection(
+  settings: ServerSettings,
+  providers?: ReadonlyArray<ServerProvider>,
+): ModelSelection {
+  const selection = settings.totMemoryTidyModelSelection;
+  return selection &&
+    isModelSelectionProviderEnabled(settings, selection) &&
+    isTextGenerationTargetUsable(settings, providers, selection.instanceId)
+    ? selection
+    : settings.textGenerationModelSelection;
+}
+
 export interface PersistedServerObservabilitySettings {
   readonly otlpTracesUrl: string | undefined;
   readonly otlpMetricsUrl: string | undefined;
@@ -629,6 +642,9 @@ export function applyServerSettingsPatch(
       : {}),
     ...(patch.avatarDesignModelSelection !== undefined
       ? { avatarDesignModelSelection: patch.avatarDesignModelSelection }
+      : {}),
+    ...(patch.totMemoryTidyModelSelection !== undefined
+      ? { totMemoryTidyModelSelection: patch.totMemoryTidyModelSelection }
       : {}),
     ...(patch.defaultProjectScripts !== undefined
       ? { defaultProjectScripts: patch.defaultProjectScripts }
