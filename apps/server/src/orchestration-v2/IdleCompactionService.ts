@@ -2,8 +2,9 @@ import {
   CommandId,
   IDLE_COMPACTION_TEXT,
   MessageId,
-  resolveIdleCompaction,
+  parseTotThreadId,
   resolveProjectProviderInstanceEnabled,
+  resolveThreadIdleCompaction,
   type ProviderInstanceId,
   type RunId,
   type ServerSettings as ServerSettingsShape,
@@ -17,7 +18,14 @@ import * as Stream from "effect/Stream";
 
 import { forkParked } from "../serverActivation.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import { idleCompactionWindow, isIdleCompactionDriver } from "./IdleCompaction.ts";
+import {
+  IDLE_COMPACTION_MESSAGE_ID_PREFIX,
+  IDLE_COMPACTION_SAVE_MESSAGE_ID_PREFIX,
+  idleCompactionStep,
+  idleCompactionWindow,
+  isIdleCompactionDriver,
+  TOT_PRE_COMPACTION_NOTE,
+} from "./IdleCompaction.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 
@@ -31,10 +39,9 @@ const driverOf = (
     : instanceId;
 
 /**
- * Beta: when a run completes on a Claude or OpenCode instance set to compact
- * before the cache expires, waits until shortly before its prompt cache expires
- * and sends `/compact` as a visible T3 Code turn. Timers live in memory, so a
- * server restart skips compactions that were still waiting.
+ * Beta: before an eligible idle thread's prompt cache expires, sends `/compact` as a visible
+ * T3 Code turn; a Tot first gets a turn to save its working state. Timers live in memory, so
+ * a server restart skips compactions that were still waiting.
  */
 export const make = Effect.gen(function* () {
   const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -50,7 +57,8 @@ export const make = Effect.gen(function* () {
         const thread = yield* projections.getThread(threadId);
         if (
           !isIdleCompactionDriver(driverOf(current, thread.providerInstanceId)) ||
-          resolveIdleCompaction(current, thread.providerInstanceId) !== "beforeCacheExpires" ||
+          resolveThreadIdleCompaction(current, threadId, thread.providerInstanceId) !==
+            "beforeCacheExpires" ||
           !resolveProjectProviderInstanceEnabled(
             current,
             thread.projectId,
@@ -88,7 +96,7 @@ export const make = Effect.gen(function* () {
         );
         if (
           !isIdleCompactionDriver(driverOf(current, records.thread.providerInstanceId)) ||
-          resolveIdleCompaction(current, records.thread.providerInstanceId) !==
+          resolveThreadIdleCompaction(current, threadId, records.thread.providerInstanceId) !==
             "beforeCacheExpires" ||
           !resolveProjectProviderInstanceEnabled(
             current,
@@ -110,16 +118,43 @@ export const make = Effect.gen(function* () {
         }
         const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
         const window = idleCompactionWindow(records, nowMs);
-        if (window?.runId !== runId) return;
-        if (nowMs < window.startMs) {
+        if (window?.runId !== runId || latestRun === undefined) return;
+        const step = idleCompactionStep({
+          totThread: parseTotThreadId(threadId) !== null,
+          latestUserMessageId: latestRun.userMessageId,
+          window,
+          nowMs,
+        });
+        if (step === "wait") {
           yield* Effect.sleep(Duration.millis(window.startMs - nowMs));
           continue;
+        }
+        if (step === "save") {
+          // Its end is a completed run, which brings this service back to compact.
+          yield* orchestrator.dispatch({
+            type: "message.dispatch",
+            commandId: CommandId.make(
+              `server:${IDLE_COMPACTION_SAVE_MESSAGE_ID_PREFIX}${threadId}:${runId}`,
+            ),
+            messageId: MessageId.make(
+              `${IDLE_COMPACTION_SAVE_MESSAGE_ID_PREFIX}${threadId}:${runId}`,
+            ),
+            threadId,
+            text: TOT_PRE_COMPACTION_NOTE,
+            attachments: [],
+            createdBy: "system",
+            creationSource: "server",
+            dispatchMode: { type: "start_immediately" },
+          });
+          return;
         }
         yield* orchestrator.dispatch({
           type: "message.dispatch",
           // One compaction per completed run, even across duplicate events.
-          commandId: CommandId.make(`server:idle-compact:${threadId}:${runId}`),
-          messageId: MessageId.make(`idle-compact:${threadId}:${runId}`),
+          commandId: CommandId.make(
+            `server:${IDLE_COMPACTION_MESSAGE_ID_PREFIX}${threadId}:${runId}`,
+          ),
+          messageId: MessageId.make(`${IDLE_COMPACTION_MESSAGE_ID_PREFIX}${threadId}:${runId}`),
           threadId,
           text: IDLE_COMPACTION_TEXT,
           attachments: [],

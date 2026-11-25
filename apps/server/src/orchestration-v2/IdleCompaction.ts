@@ -134,3 +134,31 @@ export function idleCompactionWindow(
   if (!Number.isFinite(endMs) || nowMs >= endMs) return null;
   return { runId: latestRun.id, startMs: endMs - LEAD_MS, endMs };
 }
+
+/** The message ids IdleCompactionService gives its own turns: housekeeping, not work. */
+export const IDLE_COMPACTION_MESSAGE_ID_PREFIX = "idle-compact:";
+/** Its turn that asks a Tot to save its working state, the step before a Tot's `/compact`. */
+export const IDLE_COMPACTION_SAVE_MESSAGE_ID_PREFIX = `${IDLE_COMPACTION_MESSAGE_ID_PREFIX}save:`;
+
+export const TOT_PRE_COMPACTION_NOTE =
+  "[T3 Code: this thread compacts in a moment, before its prompt cache expires. Save what you would need to carry on to your `MEMORY.md` now: work in flight, threads you are waiting on, what you promised the user and your next steps. Start no new work. Reply with one short line.]";
+
+/**
+ * What to do for a thread whose compaction window is open: wait for it, ask a Tot to save its
+ * working state first, or compact. The save turn refreshes the cache, so its end compacts at once.
+ */
+export function idleCompactionStep(input: {
+  readonly totThread: boolean;
+  readonly latestUserMessageId: string;
+  readonly window: { readonly startMs: number };
+  readonly nowMs: number;
+}): "wait" | "save" | "compact" {
+  if (
+    input.totThread &&
+    input.latestUserMessageId.startsWith(IDLE_COMPACTION_SAVE_MESSAGE_ID_PREFIX)
+  ) {
+    return "compact";
+  }
+  if (input.nowMs < input.window.startMs) return "wait";
+  return input.totThread ? "save" : "compact";
+}
