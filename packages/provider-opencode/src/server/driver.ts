@@ -240,6 +240,11 @@ function selectOpenCodeRuntimeTextGeneration(
         v1: v1.generateTranscriptionPostProcessing(input),
         v2: v2.generateTranscriptionPostProcessing(input),
       }),
+    generateAvatarFigure: (input) =>
+      byOpenCodeRuntime(resolve, {
+        v1: v1.generateAvatarFigure(input),
+        v2: v2.generateAvatarFigure(input),
+      }),
   };
 }
 

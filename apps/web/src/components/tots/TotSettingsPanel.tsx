@@ -53,6 +53,7 @@ import { Textarea } from "../ui/textarea";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import { TotAvatar } from "./TotAvatar";
+import { AvatarLibraryDialog } from "../settings/AvatarLibrarySettings";
 import { TotFaceEditor } from "./TotFaceEditor";
 import {
   WATCH_REPORTS,
@@ -143,6 +144,7 @@ function TotSettingsEditor(props: {
   readonly tot: Tot;
 }) {
   const { environmentId, tot } = props;
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const animate = useClientSettings((settings) => settings.animateTotAvatars);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const shell = useThreadShell(props.threadRef);
@@ -257,6 +259,7 @@ function TotSettingsEditor(props: {
               skinSeries={skinSeries}
               onSkinSeriesChange={setSkinSeries}
               error={errors.color}
+              onManageShapes={() => setLibraryOpen(true)}
             >
               {tot.designs !== undefined && tot.designs.length > 0 ? (
                 <div
@@ -281,6 +284,12 @@ function TotSettingsEditor(props: {
                 </div>
               ) : null}
             </TotFaceEditor>
+            <AvatarLibraryDialog
+              environmentId={environmentId}
+              open={libraryOpen}
+              onOpenChange={setLibraryOpen}
+              color={draft.avatar.color}
+            />
           </PanelSection>
 
           <Separator />

@@ -8,6 +8,7 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { designPrompt } from "open-bot-avatar/prompt";
 
 import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
 import { avatarPreviewHtml, resolveFigure } from "../../../tots/avatarLibrary.ts";
@@ -74,6 +75,8 @@ export const layer = McpToolAccess.toLayer(AvatarLibraryToolkit, {
         switch (input.action) {
           case "list":
             return listing(library);
+          case "design_prompt":
+            return { prompt: designPrompt };
           case "save_figure": {
             const figure = yield* required(input.figure, "`figure`");
             yield* tots.saveFigure(figure).pipe(Effect.mapError(fromTot));
