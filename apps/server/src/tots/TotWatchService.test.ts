@@ -117,7 +117,7 @@ const layerEventFeed = Layer.effect(
 
 const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
   const state = { tots: [...initial] };
-  const settings = { totReportBatchSeconds: 180 };
+  const settings = { totReportBatchSeconds: 180, totStallMinutes: 0 };
   const shells = new Map<ThreadId, OrchestrationV2ThreadShell>();
   const reports: Array<{
     totId: string;
@@ -334,7 +334,11 @@ const makeHarness = (initial: ReadonlyArray<Tot>, remote?: RemoteOptions) => {
         Layer.mock(ServerSettings.ServerSettingsService)({
           streamChanges: Stream.never,
           getSettings: Effect.sync(
-            () => ({ totReportBatchSeconds: settings.totReportBatchSeconds }) as never,
+            () =>
+              ({
+                totReportBatchSeconds: settings.totReportBatchSeconds,
+                totStallMinutes: settings.totStallMinutes,
+              }) as never,
           ),
         }),
         Layer.succeed(TotWatchService.TotFollowPause, remote?.pause ?? Effect.never),
@@ -435,7 +439,7 @@ it.effect("a thread a Tot launched reports once when it completes", () => {
   }).pipe(Effect.provide(layer));
 });
 
-it.effect("a run that ends while awaited background work remains reports nothing", () => {
+it.effect("a run that ends while awaited background work remains reports it is waiting", () => {
   const launched = ThreadId.make("tot-launched:home:c5");
   const awaited: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]> = [
     { taskId: "shell-1", kind: "command", awaited: true },
@@ -447,7 +451,9 @@ it.effect("a run that ends while awaited background work remains reports nothing
     yield* step(shell(launched, "running"));
     yield* step(shell(launched, "completed", "run-1", awaited));
     yield* flush;
-    expect(reports).toHaveLength(0);
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Waiting (a background task): "),
+    ]);
   }).pipe(Effect.provide(layer));
 });
 
@@ -463,17 +469,18 @@ it.effect("a run that waited on background work reports Completed once it settle
     yield* step(shell(launched, "running"));
     yield* step(shell(launched, "completed", "run-1", awaited));
     yield* flush;
-    expect(reports).toHaveLength(0);
+    expect(reports).toHaveLength(1);
     yield* step(shell(launched, "completed"));
     yield* flush;
-    expect(reports).toHaveLength(0);
+    expect(reports).toHaveLength(1);
     yield* TestClock.adjust("10 seconds");
     yield* flush;
     expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Waiting (a background task): "),
       expect.stringContaining("- Finished: "),
     ]);
     yield* flush;
-    expect(reports).toHaveLength(1);
+    expect(reports).toHaveLength(2);
   }).pipe(Effect.provide(layer));
 });
 
@@ -506,15 +513,18 @@ it.effect("reports Completed when awaited background work ends, from the domain 
     shells.set(launched, shell(launched, "completed", "run-1", awaited));
     yield* emit(runUpdated(launched, "run-1", "completed"));
     yield* flush;
-    expect(reports).toHaveLength(0);
+    expect(reports).toHaveLength(1);
 
     shells.set(launched, shell(launched, "completed"));
     yield* emit(domainEvent("provider-thread.updated", launched, { pendingBackgroundTasks: [] }));
     yield* TestClock.adjust("10 seconds");
     yield* flush;
     const lines = reports.flatMap((report) => report.lines);
-    expect(lines).toEqual([expect.stringContaining("- Finished: ")]);
-    expect(lines[0]).toContain(launched);
+    expect(lines).toEqual([
+      expect.stringContaining("- Waiting (a background task): "),
+      expect.stringContaining("- Finished: "),
+    ]);
+    expect(lines[1]).toContain(launched);
   }).pipe(Effect.provide(layer), Effect.scoped);
 });
 
@@ -542,7 +552,9 @@ it.effect("each kind of work-ended event wakes the watcher", () => {
     }
     yield* TestClock.adjust("10 seconds");
     yield* flush;
-    const lines = reports.flatMap((report) => report.lines);
+    const lines = reports
+      .flatMap((report) => report.lines)
+      .filter((line) => !line.startsWith("- Waiting"));
     expect(lines).toHaveLength(cases.length);
     cases.forEach(([type], index) => {
       expect(lines[index]).toContain("- Finished: ");
@@ -593,15 +605,20 @@ it.effect("a sent run's wake is followed and its real end is reported, not its s
     yield* step(shell(yuiThread, "completed", "run-1", awaited));
     yield* step(wake("running"));
     yield* flush;
-    expect(reports).toHaveLength(0);
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Waiting (a background task): "),
+    ]);
     expect(removed).toEqual([]);
     expect(state.tots[0]!.watches[0]!.runId).toBe("run-2");
     yield* step(wake("completed"));
     yield* TestClock.adjust("10 seconds");
     yield* flush;
     const lines = reports.flatMap((report) => report.lines);
-    expect(lines).toEqual([expect.stringContaining("- Finished: ")]);
-    expect(lines[0]).toContain("`Checks passed.`");
+    expect(lines).toEqual([
+      expect.stringContaining("- Waiting (a background task): "),
+      expect.stringContaining("- Finished: "),
+    ]);
+    expect(lines[1]).toContain("`Checks passed.`");
     expect(removed).toEqual([yuiThread]);
   }).pipe(Effect.provide(layer));
 });
@@ -620,6 +637,7 @@ it.effect("a sent run another message replaces reports still working and ends it
     yield* step(shell(yuiThread, "running", "run-2"));
     yield* flush;
     expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Waiting (a background task): "),
       expect.stringContaining("- Still working (1 background task): "),
     ]);
     expect(removed).toEqual([yuiThread]);
@@ -2323,6 +2341,371 @@ it.effect("a remote launched thread notes the user's messages and runs the same 
         "  - The user wrote here (untrusted thread text): `Try the other port`",
         "  - The user started runs here themselves, not you: Finished.",
       ]);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+const assistantSaid = (threadId: ThreadId, text: string) =>
+  domainEvent("message.updated", threadId, { id: "a1", role: "assistant", text });
+const toolUpdated = (threadId: ThreadId, title: string) =>
+  domainEvent("turn-item.updated", threadId, {
+    id: "item-tool",
+    runId: "run-1",
+    type: "command_execution",
+    status: "running",
+    title,
+  });
+const providerRetry = (threadId: ThreadId, attempt: number) =>
+  domainEvent("turn-item.updated", threadId, {
+    id: "item-retry",
+    runId: "run-1",
+    type: "error",
+    status: "running",
+    title: null,
+    failure: { class: "provider_error", message: "Overloaded", code: null, retryable: true },
+    retry: { attempt, maxAttempts: 10, retryDelayMs: 2_000 },
+  });
+
+/** A started watcher with one launched thread running, stall reports on at 10 minutes. */
+const runningLaunch = (name: string, tot: Partial<Tot> = {}) => {
+  const launched = ThreadId.make(`tot-launched:home:${name}`);
+  const harness = makeHarness([home({ watches: [watch(launched, "launched")], ...tot })]);
+  harness.settings.totStallMinutes = 10;
+  const begin = Effect.gen(function* () {
+    yield* (yield* TotWatchService.TotWatchService).start;
+    harness.shells.set(launched, shell(launched, "running"));
+    yield* harness.emit(runUpdated(launched, "run-1", "running"));
+  });
+  return { ...harness, launched, begin };
+};
+
+it.effect("a run with no new activity for 10 minutes reports a stall at once, once", () => {
+  const { launched, begin, emit, flushDue, reports, layer } = runningLaunch("quiet");
+  return Effect.gen(function* () {
+    yield* begin;
+    yield* emit(assistantSaid(launched, "Running the migration now."));
+    yield* TestClock.adjust("9 minutes");
+    yield* flushDue;
+    expect(reports).toHaveLength(0);
+    yield* TestClock.adjust("1 minute");
+    // Urgent: the 3-minute batch window does not hold it back.
+    yield* flushDue;
+    const lines = reports.flatMap((report) => report.lines);
+    expect(lines).toEqual([expect.stringContaining("- Stalled (no new activity for 10 min): ")]);
+    expect(lines[0]).toContain(
+      "Last activity (untrusted thread text): `Running the migration now.`",
+    );
+    expect(reports[0]!.sources).toEqual([{ environmentId, threadId: launched }]);
+    yield* TestClock.adjust("1 hour");
+    yield* flushDue;
+    expect(reports).toHaveLength(1);
+  }).pipe(Effect.provide(layer), Effect.scoped);
+});
+
+it.effect("activity resuming ends the stall episode, so a later stall reports again", () => {
+  const { launched, begin, emit, flushDue, reports, layer } = runningLaunch("resumes");
+  return Effect.gen(function* () {
+    yield* begin;
+    yield* TestClock.adjust("10 minutes");
+    yield* flushDue;
+    expect(reports).toHaveLength(1);
+    yield* emit(toolUpdated(launched, "vp test"));
+    yield* TestClock.adjust("9 minutes");
+    yield* flushDue;
+    expect(reports).toHaveLength(1);
+    yield* TestClock.adjust("2 minutes");
+    yield* flushDue;
+    const lines = reports.flatMap((report) => report.lines);
+    expect(lines).toHaveLength(2);
+    // The watcher's own 2-second loop caught it as the 10 minutes passed.
+    expect(lines[1]).toContain("- Stalled (no new activity for 10 min): ");
+    expect(lines[1]).toContain("`command execution: vp test`");
+  }).pipe(Effect.provide(layer), Effect.scoped);
+});
+
+it.effect("three provider retries report a stall before the quiet time is up", () => {
+  const { launched, begin, emit, flushDue, reports, layer } = runningLaunch("retries");
+  return Effect.gen(function* () {
+    yield* begin;
+    yield* emit(assistantSaid(launched, "Calling the model."));
+    yield* emit(providerRetry(launched, 1), providerRetry(launched, 1));
+    yield* emit(providerRetry(launched, 2));
+    yield* flushDue;
+    // One attempt updated twice is still one retry.
+    expect(reports).toHaveLength(0);
+    yield* TestClock.adjust("1 minute");
+    yield* emit(providerRetry(launched, 3));
+    yield* flushDue;
+    const lines = reports.flatMap((report) => report.lines);
+    expect(lines).toEqual([
+      expect.stringContaining(
+        "- Stalled (3 provider retries or rate-limit errors, nothing else for 1 min): ",
+      ),
+    ]);
+    expect(lines[0]).toContain("`Calling the model.`");
+    yield* emit(providerRetry(launched, 4));
+    yield* TestClock.adjust("10 minutes");
+    yield* flushDue;
+    expect(reports).toHaveLength(1);
+  }).pipe(Effect.provide(layer), Effect.scoped);
+});
+
+it.effect("a Tot's own stall time replaces the global one, and 0 turns stalls off", () => {
+  const sooner = runningLaunch("sooner", { stallMinutes: 4 });
+  const never = runningLaunch("never", { stallMinutes: 0 });
+  return Effect.gen(function* () {
+    yield* Effect.gen(function* () {
+      yield* sooner.begin;
+      yield* TestClock.adjust("4 minutes");
+      yield* sooner.flushDue;
+      expect(sooner.reports.flatMap((report) => report.lines)).toEqual([
+        expect.stringContaining("- Stalled (no new activity for 4 min): "),
+      ]);
+    }).pipe(Effect.provide(sooner.layer), Effect.scoped);
+    yield* Effect.gen(function* () {
+      yield* never.begin;
+      yield* TestClock.adjust("2 hours");
+      yield* never.flushDue;
+      expect(never.reports).toHaveLength(0);
+    }).pipe(Effect.provide(never.layer), Effect.scoped);
+  });
+});
+
+it.effect("a running thread blocked on a thread wait reports Waiting, not a stall", () => {
+  const { launched, begin, shells, flushDue, reports, layer } = runningLaunch("waits");
+  return Effect.gen(function* () {
+    yield* begin;
+    shells.set(launched, { ...shell(launched, "running"), blockedOnThreadWait: true });
+    yield* TestClock.adjust("10 minutes");
+    yield* flushDue;
+    yield* TestClock.adjust("3 minutes");
+    yield* flushDue;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Waiting (another thread): "),
+    ]);
+  }).pipe(Effect.provide(layer), Effect.scoped);
+});
+
+it.effect("an open question is not a stall", () => {
+  const { launched, begin, shells, emit, flushDue, reports, layer } = runningLaunch("asks");
+  return Effect.gen(function* () {
+    yield* begin;
+    shells.set(launched, {
+      ...shell(launched, "running"),
+      pendingRuntimeRequest: { id: RuntimeRequestId.make("q1"), kind: "user_input" },
+    } as never);
+    yield* emit(domainEvent("runtime-request.updated", launched, {}));
+    yield* TestClock.adjust("1 hour");
+    yield* flushDue;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Asks a question: "),
+    ]);
+  }).pipe(Effect.provide(layer), Effect.scoped);
+});
+
+it.effect("a stall carries the routine reports waiting in the batch with it", () => {
+  const { launched, begin, shells, step, flushDue, reports, layer, state } =
+    runningLaunch("batched");
+  const done = ThreadId.make("tot-launched:home:batched-done");
+  state.tots = [home({ watches: [watch(launched, "launched"), watch(done, "launched")] })];
+  return Effect.gen(function* () {
+    yield* begin;
+    yield* step(shell(done, "running"));
+    yield* TestClock.adjust("8 minutes");
+    yield* step(shell(done, "completed"));
+    yield* flushDue;
+    expect(reports).toHaveLength(0);
+    yield* TestClock.adjust("2 minutes");
+    yield* flushDue;
+    expect(reports).toHaveLength(1);
+    expect(reports[0]!.lines).toEqual([
+      expect.stringContaining("- Finished: "),
+      expect.stringContaining("- Stalled (no new activity for 10 min): "),
+    ]);
+    expect(shells.get(launched)?.status).toBe("running");
+  }).pipe(Effect.provide(layer), Effect.scoped);
+});
+
+it.effect("a stall on another Tot's thread names its source for the loop guard", () => {
+  const { reports, settings, layer, step, flushDue } = makeHarness([
+    home({ watches: [watch(yuiThread, "sent", "r1")] }),
+    yui,
+  ]);
+  settings.totStallMinutes = 10;
+  return Effect.gen(function* () {
+    yield* step(shell(yuiThread, "running", "r1"));
+    yield* TestClock.adjust("10 minutes");
+    yield* flushDue;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Stalled (no new activity for 10 min): "),
+    ]);
+    expect(reports[0]!.sources).toEqual([{ environmentId, threadId: yuiThread }]);
+    // The sent watch still waits for the run's real end.
+    yield* step(shell(yuiThread, "completed", "r1"));
+    yield* flushDue;
+    yield* TestClock.adjust("3 minutes");
+    yield* flushDue;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Stalled"),
+      expect.stringContaining("- Finished: "),
+    ]);
+  }).pipe(Effect.provide(layer));
+});
+
+const watchedPullRequest = (watchState: Record<string, unknown>) => ({
+  host: "github.com",
+  repository: "acme/app",
+  number: 7,
+  url: "https://github.com/acme/app/pull/7",
+  source: "agent",
+  watch: watchState,
+});
+const prTask = { taskId: "pull-request-watch:github.com/acme/app#7", kind: "monitor" as const };
+
+it.effect.each([
+  {
+    reason: "CI checks",
+    tasks: [{ ...prTask, awaited: true as const }],
+    pullRequests: [watchedPullRequest({ checksPending: true })],
+  },
+  {
+    reason: "pull request review or merge",
+    tasks: [{ ...prTask, awaited: true as const }],
+    pullRequests: [watchedPullRequest({ checksPending: false, until: "merged" })],
+  },
+  {
+    reason: "an approval",
+    tasks: [{ ...prTask, awaited: true as const }],
+    pullRequests: [watchedPullRequest({ checksPending: true, awaitingApproval: ["deploy"] })],
+  },
+  {
+    reason: "deploy",
+    tasks: [
+      { taskId: "mon-1", kind: "monitor" as const, awaited: true as const, description: "Deploy" },
+    ],
+    pullRequests: [],
+  },
+  {
+    reason: "a background task",
+    tasks: [{ taskId: "agent-1", kind: "subagent" as const }],
+    pullRequests: [],
+  },
+])("a turn that ends waiting on $reason says so, then reports Finished", (example) => {
+  const launched = ThreadId.make(`tot-launched:home:wait-${example.reason}`);
+  const { reports, layer, step, flush, flushDue } = makeHarness([
+    home({ watches: [watch(launched, "launched")] }),
+  ]);
+  const waiting = {
+    ...shell(launched, "completed", "run-1", example.tasks),
+    pullRequests: example.pullRequests,
+  } as never as OrchestrationV2ThreadShell;
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running"));
+    yield* step(waiting);
+    // Routine: it waits for the batch window like Finished.
+    yield* flushDue;
+    expect(reports).toHaveLength(0);
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining(`- Waiting (${example.reason}): `),
+    ]);
+    // No 30-minute Still working: the Tot knows what the run waits on.
+    yield* TestClock.adjust("31 minutes");
+    yield* step(waiting);
+    yield* flush;
+    expect(reports).toHaveLength(1);
+    yield* step(shell(launched, "completed"));
+    yield* TestClock.adjust("10 seconds");
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining(`- Waiting (${example.reason}): `),
+      expect.stringContaining("- Finished: "),
+    ]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("wake runs that keep waiting on the same checks do not repeat Waiting", () => {
+  const launched = ThreadId.make("tot-launched:home:pr-wakes");
+  const { reports, layer, step, flush } = makeHarness([
+    home({ watches: [watch(launched, "launched")] }),
+  ]);
+  const prShell = (
+    runId: string,
+    status: OrchestrationV2ThreadShell["status"],
+    watchState: Record<string, unknown>,
+  ) =>
+    ({
+      ...shell(launched, status, runId, [{ ...prTask, awaited: true }]),
+      pullRequests: [watchedPullRequest(watchState)],
+      latestRunBackgroundWake: runId !== "run-1",
+    }) as never as OrchestrationV2ThreadShell;
+  return Effect.gen(function* () {
+    yield* step(shell(launched, "running"));
+    yield* step(prShell("run-1", "completed", { checksPending: true }));
+    yield* step(prShell("run-2", "running", { checksPending: true }));
+    yield* step(prShell("run-2", "completed", { checksPending: true }));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Waiting (CI checks): "),
+    ]);
+    // A new reason is news.
+    yield* step(prShell("run-3", "running", { checksPending: false, until: "merged" }));
+    yield* step(prShell("run-3", "completed", { checksPending: false, until: "merged" }));
+    yield* flush;
+    expect(reports.flatMap((report) => report.lines)).toEqual([
+      expect.stringContaining("- Waiting (CI checks): "),
+      expect.stringContaining("- Waiting (pull request review or merge): "),
+    ]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("a remote run with no new activity reports a stall once", () =>
+  Effect.gen(function* () {
+    const waits = yield* Queue.unbounded<number>();
+    const running: OrchestratorMcpThreadWaitResult = {
+      threadId: remoteThread,
+      runId: RunId.make("run-1"),
+      status: "running",
+      timedOut: true,
+    };
+    const { reports, settings, layer, flush, syncFollowers } = makeHarness(
+      [home({ watches: [remoteWatch("launched")] })],
+      {
+        waitForThread: (_scope, _environment, input) =>
+          Queue.offer(waits, input.timeoutMs ?? 0).pipe(
+            Effect.andThen(Effect.sleep(input.timeoutMs ?? 0)),
+            Effect.as(running),
+          ),
+        readThread: () =>
+          Effect.succeed({
+            thread: { activeRunId: "run-1" },
+            recentRuns: [],
+            items: [
+              {
+                type: "command_execution",
+                runId: RunId.make("run-1"),
+                title: "vp run build",
+                text: null,
+                updatedAt: DateTime.formatIso(DateTime.makeUnsafe(0)),
+              },
+            ],
+            nextPosition: null,
+            hasMore: false,
+          } as never),
+      },
+    );
+    settings.totStallMinutes = 5;
+    yield* Effect.gen(function* () {
+      yield* syncFollowers;
+      expect(yield* Queue.take(waits)).toBe(5 * 60_000);
+      yield* TestClock.adjust("5 minutes");
+      yield* Queue.take(waits);
+      yield* TestClock.adjust("5 minutes");
+      yield* Queue.take(waits);
+      yield* flush;
+      const lines = reports.flatMap((report) => report.lines);
+      expect(lines).toEqual([expect.stringContaining("- Stalled (no new activity for 5 min): ")]);
+      expect(lines[0]).toContain("`vp run build`");
     }).pipe(Effect.provide(layer));
   }),
 );

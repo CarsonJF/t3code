@@ -39,7 +39,12 @@ import { ModelSelection } from "./modelSelection.ts";
 import { ProjectScript, type ProjectMutation } from "./project.ts";
 import { ThreadGroupOp, ThreadGroupsState } from "./threadGroups.ts";
 import { GroupChatsSetting } from "./groupChats.ts";
-import { parseTotThreadId, TotsSetting } from "./tots.ts";
+import {
+  DEFAULT_TOT_STALL_MINUTES,
+  parseTotThreadId,
+  TotsSetting,
+  TotStallMinutes,
+} from "./tots.ts";
 import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
 import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
 import {
@@ -1558,6 +1563,10 @@ export const ServerSettings = Schema.Struct({
   totReportBatchSeconds: TotReportBatchSeconds.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOT_REPORT_BATCH_SECONDS)),
   ),
+  /** A watched run quiet, or retrying, this long reports as stalled. Each Tot can override it. */
+  totStallMinutes: TotStallMinutes.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOT_STALL_MINUTES)),
+  ),
   snoozeLimitedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   autoResumeLimitedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /**
@@ -2053,6 +2062,7 @@ export const ServerSettingsPatch = Schema.Struct({
   idleCompaction: Schema.optionalKey(IdleCompactionMode),
   totIdleCompaction: Schema.optionalKey(Schema.Boolean),
   totReportBatchSeconds: Schema.optionalKey(TotReportBatchSeconds),
+  totStallMinutes: Schema.optionalKey(TotStallMinutes),
   sidebarAutoSettleKeepPullRequests: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   autoResumeLimitedThreads: Schema.optionalKey(Schema.Boolean),
