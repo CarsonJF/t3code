@@ -27,6 +27,7 @@ export type SettingsPath =
   | "/settings/diffs"
   | "/settings/keybindings"
   | "/settings/snap-shot"
+  | "/settings/touch-bar"
   | "/settings/providers"
   | "/settings/threads"
   | "/settings/browser"
@@ -107,6 +108,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/diffs": msg("Diffs & pull requests"),
   "/settings/keybindings": msg("Keybindings"),
   "/settings/snap-shot": msg("SnapShots"),
+  "/settings/touch-bar": msg("Touch Bar"),
   "/settings/providers": msg("Providers"),
   "/settings/threads": msg("Threads"),
   "/settings/browser": msg("Browser"),
@@ -154,6 +156,7 @@ const ALL_SETTINGS_NAV_GROUPS: ReadonlyArray<SettingsNavGroup> = [
       "/settings/keybindings",
       "/settings/voice",
       "/settings/snap-shot",
+      "/settings/touch-bar",
     ],
   },
   {
@@ -183,16 +186,27 @@ const ALL_SETTINGS_NAV_GROUPS: ReadonlyArray<SettingsNavGroup> = [
   },
 ];
 
-const SETTINGS_NAV_GROUPS_WITHOUT_SECRETS = ALL_SETTINGS_NAV_GROUPS.map((group) => ({
-  ...group,
-  paths: group.paths.filter((path) => path !== "/settings/secrets"),
-}));
+const withoutPaths = (
+  groups: ReadonlyArray<SettingsNavGroup>,
+  hidden: ReadonlySet<SettingsPath>,
+): ReadonlyArray<SettingsNavGroup> =>
+  groups.map((group) => ({ ...group, paths: group.paths.filter((path) => !hidden.has(path)) }));
 
-/** Sidebar groups; Secrets shows only when some environment's server enables secret providers. */
-export function settingsNavGroups(hasSecretProvidersEnvironment: boolean) {
-  return hasSecretProvidersEnvironment
+/**
+ * Sidebar groups. Secrets shows only when some environment's server enables secret providers,
+ * and Touch Bar only in the desktop app on a Mac.
+ */
+export function settingsNavGroups(
+  hasSecretProvidersEnvironment: boolean,
+  hasTouchBar = typeof navigator !== "undefined" && isElectron && isMacPlatform(navigator.platform),
+) {
+  const hidden = new Set<SettingsPath>([
+    ...(hasSecretProvidersEnvironment ? [] : (["/settings/secrets"] as const)),
+    ...(hasTouchBar ? [] : (["/settings/touch-bar"] as const)),
+  ]);
+  return hidden.size === 0
     ? ALL_SETTINGS_NAV_GROUPS
-    : SETTINGS_NAV_GROUPS_WITHOUT_SECRETS;
+    : withoutPaths(ALL_SETTINGS_NAV_GROUPS, hidden);
 }
 
 export function keybindingSearchAnchorId<Command extends KeybindingCommand>(command: Command) {
@@ -1081,6 +1095,14 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   ...KEYBINDING_SEARCH_ITEMS,
   {
+    id: "touch-bar-enabled",
+    title: msg("Show usage limits on the Touch Bar"),
+    to: "/settings/touch-bar",
+    searchTerms: [msg("macbook pro touch bar usage limits strip control")],
+    desktopOnly: true,
+    macOnly: true,
+  },
+  {
     id: "snap-shot-enabled",
     title: msg("SnapShots"),
     searchTerms: [msg("window capture screenshot")],
@@ -1596,6 +1618,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/chat": null,
   "/settings/diffs": null,
   "/settings/snap-shot": null,
+  "/settings/touch-bar": null,
   "/settings/keybindings": null,
   "/settings/providers": null,
   "/settings/threads": null,
