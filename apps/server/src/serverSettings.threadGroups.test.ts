@@ -237,7 +237,10 @@ it.live("keeps the groups an outside rewrite of settings.json replaced", () =>
       assert.deepEqual(history.beforeRemoval.at(-1)?.threadGroups.groups, [group("games")]);
     }),
   ).pipe(
-    Effect.provide(layerServerSettings()),
-    Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+    Effect.provide(
+      layerServerSettings().pipe(
+        Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+      ),
+    ),
   ),
 );
