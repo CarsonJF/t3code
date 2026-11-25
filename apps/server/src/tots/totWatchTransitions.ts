@@ -111,12 +111,20 @@ export function watchTransition(
   return null;
 }
 
+/** Routine news waits to share a wake; anything else reaches the Tot at once. */
+export const isRoutineWatchEvent = (event: TotWatchEvent) =>
+  event === "completed" || event === "still_working";
+
 /**
  * One line of the worker's last message, safe to place in a report. It keeps the end, where a
  * worker says what it needs, and stays inside a code span so it cannot render or forge a line.
  */
-export function formatWatchExcerpt(text: string | null | undefined): TotWatchExcerpt | null {
+export function formatWatchExcerpt(
+  text: string | null | undefined,
+  options: { readonly keep?: "start" | "end"; readonly maxChars?: number } = {},
+): TotWatchExcerpt | null {
   if (text === null || text === undefined) return null;
+  const max = options.maxChars ?? EXCERPT_MAX_CHARS;
   const flat = text
     .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, " ")
     .replace(/\s+/gu, " ")
@@ -124,9 +132,64 @@ export function formatWatchExcerpt(text: string | null | undefined): TotWatchExc
     .trim();
   if (flat === "") return null;
   const chars = Array.from(flat);
-  return chars.length <= EXCERPT_MAX_CHARS
-    ? { text: flat, truncated: false }
-    : { text: `…${chars.slice(-EXCERPT_MAX_CHARS).join("").trimStart()}`, truncated: true };
+  if (chars.length <= max) return { text: flat, truncated: false };
+  return options.keep === "start"
+    ? { text: `${chars.slice(0, max).join("").trimEnd()}…`, truncated: true }
+    : { text: `…${chars.slice(-max).join("").trimStart()}`, truncated: true };
+}
+
+const STEERING_EXCERPT_MAX_CHARS = 300;
+/** The newest messages a note quotes; older ones are only counted. */
+const STEERING_NOTE_MAX_MESSAGES = 3;
+
+/** What the user did in a thread a Tot launched since that Tot's last report on it. */
+export interface SteeringNote {
+  /** Oldest first, at most the newest few. */
+  readonly messages: ReadonlyArray<string>;
+  readonly earlierMessages: number;
+  /** Outcome labels of runs the user started there, oldest first. */
+  readonly runs: ReadonlyArray<string>;
+}
+
+export const EMPTY_STEERING_NOTE: SteeringNote = { messages: [], earlierMessages: 0, runs: [] };
+
+export const noteSteeringMessage = (note: SteeringNote, text: string): SteeringNote => {
+  const messages = [...note.messages, text];
+  const dropped = Math.max(0, messages.length - STEERING_NOTE_MAX_MESSAGES);
+  return {
+    ...note,
+    messages: messages.slice(dropped),
+    earlierMessages: note.earlierMessages + dropped,
+  };
+};
+
+export const noteSteeringRun = (
+  note: SteeringNote,
+  event: TotWatchEvent,
+  detail: TotWatchLineDetail = {},
+): SteeringNote => ({ ...note, runs: [...note.runs, label(event, detail)] });
+
+/** Indented under a report line, so it reads as part of that thread's news. */
+export function formatSteeringNote(note: SteeringNote): ReadonlyArray<string> {
+  const lines: Array<string> = [];
+  if (note.earlierMessages > 0) {
+    lines.push(
+      `  - The user wrote ${note.earlierMessages} earlier ${note.earlierMessages === 1 ? "message" : "messages"} here too.`,
+    );
+  }
+  for (const text of note.messages) {
+    const excerpt = formatWatchExcerpt(text, {
+      keep: "start",
+      maxChars: STEERING_EXCERPT_MAX_CHARS,
+    });
+    if (excerpt !== null) {
+      lines.push(`  - The user wrote here (untrusted thread text): \`${excerpt.text}\``);
+    }
+  }
+  if (note.runs.length > 0) {
+    lines.push(`  - The user started runs here themselves, not you: ${note.runs.join(", ")}.`);
+  }
+  return lines;
 }
 
 const label = (event: TotWatchEvent, detail: TotWatchLineDetail): string => {

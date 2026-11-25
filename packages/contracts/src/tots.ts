@@ -158,6 +158,11 @@ export const Tot = Schema.Struct({
   autoSettle: Schema.optional(Schema.Boolean),
   /** Replaces the environment's usage-limit fallback list for this Tot's work; `[]` turns it off. */
   usageLimitFallbackModels: Schema.optional(Schema.Array(ModelSelection)),
+  /**
+   * Whether its thread compacts before its prompt cache expires; absent follows the
+   * environment's `totIdleCompaction`.
+   */
+  idleCompaction: Schema.optional(Schema.Boolean),
 });
 export type Tot = typeof Tot.Type;
 
@@ -300,6 +305,8 @@ export const TotUpdateInput = Schema.Struct({
   autoSettle: Schema.optional(Schema.Boolean),
   /** Null goes back to the environment's list. */
   usageLimitFallbackModels: Schema.optional(Schema.NullOr(Schema.Array(ModelSelection))),
+  /** Null drops the override, so the Tot follows the environment's setting again. */
+  idleCompaction: Schema.optional(Schema.NullOr(Schema.Boolean)),
 });
 export type TotUpdateInput = typeof TotUpdateInput.Type;
 

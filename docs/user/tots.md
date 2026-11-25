@@ -34,6 +34,12 @@ When a thread a Tot started, or a scheduled task, stops on a provider's usage li
 
 A report says whether the thread **Finished**, **Failed**, was **Stopped**, needs an answer, or is **Still working**, and quotes the end of its last message. A thread that ends its turn with background work running reports when that work ends. If the work is still running after 30 minutes, for example a dev server, the Tot gets one Still working report.
 
+Failures, questions, approvals and stops reach a Tot at once. **Finished** and **Still working** reports wait up to 3 minutes so several arrive as one message, and any urgent report sends them early. Set `totReportBatchSeconds` in the server's settings to change the wait; `0` sends each report at once.
+
+When you write in a thread a Tot started, the Tot is not woken for it. Its next report on that thread quotes what you wrote, and runs you started there yourself are listed in that note instead of being reported as the Tot's own.
+
+**Compact when idle**, in the same panel, keeps a Tot's long-running thread small. By default a Tot's thread compacts just before its prompt cache expires, whatever **Compact idle threads** says for other threads, and the Tot first gets a turn to save its work in flight to its memory. Choose **Like other threads** to follow **Compact idle threads** instead, or set `totIdleCompaction` to `false` in the server's settings to change the default for every Tot. This works for Tots on Claude and OpenCode.
+
 ## Other machines
 
 Tots live on one server and reach your other machines through linked environments. Turn on **Linked environments** in **Settings → Labs** on each machine, and link them at full access so a Tot can act and approve there.
