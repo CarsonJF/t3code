@@ -40,6 +40,20 @@ export function environmentsWithThreadGroup(
     .map(([environmentId]) => environmentId);
 }
 
+/** Projects whose new threads go to `groupId`, counted in each environment that holds it. */
+export function threadGroupProjectCount(
+  byEnvironment: ThreadGroupsByEnvironment,
+  groupId: string,
+): number {
+  let count = 0;
+  for (const state of byEnvironment.values()) {
+    for (const projectId of Object.keys(state.projectDefaults)) {
+      if (projectDefaultGroupId(state, projectId as ProjectId) === groupId) count++;
+    }
+  }
+  return count;
+}
+
 export function projectDefaultGroupId(
   state: ThreadGroupsState,
   projectId: ProjectId,

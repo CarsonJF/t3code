@@ -522,18 +522,17 @@ function useSidebarThreads(input: {
     partition.activeThreads,
     threadGroupsState,
   );
-  const threadGroupSections = groups
-    .filter(({ threads: groupThreads }) => groupThreads.length > 0)
-    .map(({ group, threads: groupThreads }) => {
-      const expanded = threadGroupsState.collapsed[group.id] !== true;
-      return {
-        group,
-        count: groupThreads.length,
-        expanded,
-        statusThreads: expanded ? [] : groupThreads,
-        threads: expanded ? groupThreads : routeThreadOnly(groupThreads, routeRowThreadKey),
-      };
-    });
+  // Empty groups stay as slim, collapsed headers: hiding them also hid their only Edit and Delete.
+  const threadGroupSections = groups.map(({ group, threads: groupThreads }) => {
+    const expanded = groupThreads.length > 0 && threadGroupsState.collapsed[group.id] !== true;
+    return {
+      group,
+      count: groupThreads.length,
+      expanded,
+      statusThreads: expanded ? [] : groupThreads,
+      threads: expanded ? groupThreads : routeThreadOnly(groupThreads, routeRowThreadKey),
+    };
+  });
   const groupedThreads = threadGroupSections.flatMap((section) => section.threads);
   // Older settled threads load in pages; the shelf lists them only as far as they are loaded.
   const olderSettledShelf = useOlderSettledShelf({
