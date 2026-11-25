@@ -34,6 +34,7 @@ export type SettingsPath =
   | "/settings/devices"
   | "/settings/scheduled-tasks"
   | "/settings/tots"
+  | "/settings/avatar-library"
   | "/settings/source-control"
   | "/settings/worktrees"
   | "/settings/connections"
@@ -114,6 +115,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/devices": msg("Devices"),
   "/settings/scheduled-tasks": msg("Scheduled tasks"),
   "/settings/tots": msg("Tots"),
+  "/settings/avatar-library": msg("Avatar library"),
   "/settings/source-control": msg("Source control & issues"),
   "/settings/worktrees": msg("Worktrees"),
   "/settings/connections": msg("Environments"),
@@ -166,6 +168,7 @@ const ALL_SETTINGS_NAV_GROUPS: ReadonlyArray<SettingsNavGroup> = [
       "/settings/devices",
       "/settings/scheduled-tasks",
       "/settings/tots",
+      "/settings/avatar-library",
     ],
   },
   {
@@ -1194,6 +1197,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "avatar-library",
+    title: msg("Avatar library"),
+    to: "/settings/avatar-library",
+    searchTerms: [msg("tot face open bot figure shape theme describe import export")],
+  },
+  {
+    id: "avatar-design-model",
+    title: msg("Shape model"),
+    to: "/settings/avatar-library",
+    searchTerms: [msg("describe a shape avatar figure model")],
+  },
+  {
     id: "agent-browser-access",
     title: msg("Agent browser access"),
     to: "/settings/browser",
@@ -1616,6 +1631,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/secrets": null,
   "/settings/scheduled-tasks": null,
   "/settings/tots": null,
+  "/settings/avatar-library": null,
   "/settings/maintenance": null,
   "/settings/labs": null,
   "/settings/about": null,

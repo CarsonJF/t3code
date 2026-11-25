@@ -2097,6 +2097,18 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:tots:avatar-library",
       tag: WS_METHODS.totsAvatarLibrary,
     }),
+    saveAvatarLibraryItem: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:avatar-library-save",
+      tag: WS_METHODS.totsAvatarLibrarySave,
+    }),
+    removeAvatarLibraryItem: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:avatar-library-remove",
+      tag: WS_METHODS.totsAvatarLibraryRemove,
+    }),
+    describeAvatarFigure: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:describe-avatar-figure",
+      tag: WS_METHODS.totsDescribeAvatarFigure,
+    }),
     writeTotMemory: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:tots:write-memory",
       tag: WS_METHODS.totsWriteMemory,
