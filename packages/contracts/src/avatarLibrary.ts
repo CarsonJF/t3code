@@ -5,6 +5,7 @@
  */
 import * as Schema from "effect/Schema";
 
+import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { TotAvatar } from "./tots.ts";
 
 export const AvatarLibraryId = Schema.String.check(
@@ -59,6 +60,25 @@ export const AvatarLibraryExport = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("theme"), theme: AvatarTheme }),
 ]);
 export type AvatarLibraryExport = typeof AvatarLibraryExport.Type;
+
+export const AvatarLibraryRemoveInput = Schema.Struct({
+  kind: AvatarLibraryKind,
+  id: AvatarLibraryId,
+});
+export type AvatarLibraryRemoveInput = typeof AvatarLibraryRemoveInput.Type;
+
+export const AvatarFigureDescribeInput = Schema.Struct({
+  description: TrimmedNonEmptyString.check(Schema.isMaxLength(500)),
+});
+export type AvatarFigureDescribeInput = typeof AvatarFigureDescribeInput.Type;
+
+/** A figure generated from a description and validated; not saved until the user saves it. */
+export const AvatarFigureDescribeResult = Schema.Struct({
+  figure: AvatarFigure,
+  /** The figure drawn flat, as SVG markup, for a client without the renderer. */
+  previewSvg: Schema.String,
+});
+export type AvatarFigureDescribeResult = typeof AvatarFigureDescribeResult.Type;
 
 /** Looks every build offers next to the library's themes: BoopFace faces and a few open-bot ones. */
 export const TOT_BUILT_IN_THEMES: ReadonlyArray<AvatarTheme> = [

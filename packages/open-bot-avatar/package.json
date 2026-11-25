@@ -2,7 +2,7 @@
   "name": "open-bot-avatar",
   "version": "0.4.0",
   "private": true,
-  "description": "Vendored build of open-bot-avatar 0.4.0 with upstream PRs #31 and #32 (MIT) for Tot avatars.",
+  "description": "Vendored build of open-bot-avatar 0.4.0 with upstream PRs #31 and #32 (MIT) and its design prompt, for Tot avatars.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -30,6 +30,10 @@
     "./gallery": {
       "types": "./gallery.d.ts",
       "default": "./gallery.js"
+    },
+    "./prompt": {
+      "types": "./prompt.d.ts",
+      "default": "./prompt.js"
     }
   }
 }

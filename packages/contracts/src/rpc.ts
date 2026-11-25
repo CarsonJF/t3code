@@ -507,7 +507,13 @@ import {
   TotThreadResult,
   TotUpdateInput,
 } from "./tots.ts";
-import { AvatarLibrary } from "./avatarLibrary.ts";
+import {
+  AvatarFigureDescribeInput,
+  AvatarFigureDescribeResult,
+  AvatarLibrary,
+  AvatarLibraryExport,
+  AvatarLibraryRemoveInput,
+} from "./avatarLibrary.ts";
 import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
@@ -645,6 +651,9 @@ export const WS_METHODS = {
   totsStartFresh: "tots.startFresh",
   totsReadMemory: "tots.readMemory",
   totsAvatarLibrary: "tots.avatarLibrary",
+  totsAvatarLibrarySave: "tots.avatarLibrarySave",
+  totsAvatarLibraryRemove: "tots.avatarLibraryRemove",
+  totsDescribeAvatarFigure: "tots.describeAvatarFigure",
   totsDesignAvatar: "tots.designAvatar",
   groupChatsCreate: "groupChats.create",
   groupChatsUpdate: "groupChats.update",
@@ -1135,6 +1144,22 @@ const WsTotsReadMemoryRpc = Rpc.make(WS_METHODS.totsReadMemory, {
 const WsTotsAvatarLibraryRpc = Rpc.make(WS_METHODS.totsAvatarLibrary, {
   payload: Schema.Struct({}),
   success: AvatarLibrary,
+  error: totError,
+});
+/** Saves one figure or theme (an import file's contents), replacing one with the same id. */
+const WsTotsAvatarLibrarySaveRpc = Rpc.make(WS_METHODS.totsAvatarLibrarySave, {
+  payload: AvatarLibraryExport,
+  success: AvatarLibrary,
+  error: totError,
+});
+const WsTotsAvatarLibraryRemoveRpc = Rpc.make(WS_METHODS.totsAvatarLibraryRemove, {
+  payload: AvatarLibraryRemoveInput,
+  success: AvatarLibrary,
+  error: totError,
+});
+const WsTotsDescribeAvatarFigureRpc = Rpc.make(WS_METHODS.totsDescribeAvatarFigure, {
+  payload: AvatarFigureDescribeInput,
+  success: AvatarFigureDescribeResult,
   error: totError,
 });
 const WsTotsWriteMemoryRpc = Rpc.make(WS_METHODS.totsWriteMemory, {
@@ -2653,6 +2678,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsTotsStartFreshRpc,
   WsTotsReadMemoryRpc,
   WsTotsAvatarLibraryRpc,
+  WsTotsAvatarLibrarySaveRpc,
+  WsTotsAvatarLibraryRemoveRpc,
+  WsTotsDescribeAvatarFigureRpc,
   WsTotsDesignAvatarRpc,
   WsGroupChatsCreateRpc,
   WsGroupChatsUpdateRpc,

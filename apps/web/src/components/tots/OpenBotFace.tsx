@@ -1,10 +1,18 @@
 import type { TotFaceState, TotOpenBotAvatar, TotOpenBotMaterial } from "@t3tools/contracts";
-import type { AvatarDefinition, AvatarMaterial, AvatarMood, AvatarState } from "open-bot-avatar";
+import type {
+  AvatarDefinition,
+  AvatarMaterial,
+  AvatarMood,
+  AvatarState,
+  renderAvatarSvg,
+} from "open-bot-avatar";
 import type { MountedAvatar, mountAvatar } from "open-bot-avatar/dom";
 import { useEffect, useRef, useState } from "react";
 
 export interface OpenBotKit {
   readonly mountAvatar: typeof mountAvatar;
+  /** A still, flat figure as SVG markup: no canvas and no renderer left running. */
+  readonly renderAvatarSvg: typeof renderAvatarSvg;
   /** Upstream's built-in examples, then its community gallery. */
   readonly figures: ReadonlyArray<AvatarDefinition>;
   /** Each finish; the renderer draws flat wherever one cannot run (no canvas, no WebGL2). */
@@ -25,6 +33,7 @@ export const loadOpenBot = () =>
     const builtIn = new Set(core.examples.map((figure) => figure.id));
     loadedKit = {
       mountAvatar: dom.mountAvatar,
+      renderAvatarSvg: core.renderAvatarSvg,
       figures: [...core.examples, ...more.gallery.filter((figure) => !builtIn.has(figure.id))],
       materials: { flat: "flat", fluffy: fluffy.fluffy, glass: glass.glass, soft: soft.soft },
     };

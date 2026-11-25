@@ -175,6 +175,19 @@ export function resolveSpeechPostProcessingModelSelection(
     : settings.textGenerationModelSelection;
 }
 
+/** Avatar figure design follows the text generation model unless its own usable model is set. */
+export function resolveAvatarDesignModelSelection(
+  settings: ServerSettings,
+  providers?: ReadonlyArray<ServerProvider>,
+): ModelSelection {
+  const selection = settings.avatarDesignModelSelection;
+  return selection &&
+    isModelSelectionProviderEnabled(settings, selection) &&
+    isTextGenerationTargetUsable(settings, providers, selection.instanceId)
+    ? selection
+    : settings.textGenerationModelSelection;
+}
+
 export interface PersistedServerObservabilitySettings {
   readonly otlpTracesUrl: string | undefined;
   readonly otlpMetricsUrl: string | undefined;
@@ -613,6 +626,9 @@ export function applyServerSettingsPatch(
       : {}),
     ...(patch.speechPostProcessingModelSelection !== undefined
       ? { speechPostProcessingModelSelection: patch.speechPostProcessingModelSelection }
+      : {}),
+    ...(patch.avatarDesignModelSelection !== undefined
+      ? { avatarDesignModelSelection: patch.avatarDesignModelSelection }
       : {}),
     ...(patch.defaultProjectScripts !== undefined
       ? { defaultProjectScripts: patch.defaultProjectScripts }
