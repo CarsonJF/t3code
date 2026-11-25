@@ -1,5 +1,6 @@
 import {
   DEFAULT_HOME_TOT,
+  HOME_TOT_ID,
   OrchestratorMcpFailure,
   type Tot,
   type TotThemePatch,
@@ -16,8 +17,8 @@ import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
-import { requireTotChange } from "../../totCaller.ts";
-import { readCaller } from "../../threadAccess.ts";
+import { readTotCaller, requireTotChange } from "../../totCaller.ts";
+import { assertFullAccess, readCaller } from "../../threadAccess.ts";
 import { TotToolkit } from "./tools.ts";
 
 /** Sizes and a summary only: the stored CSS and opaque effect text are never echoed. */
@@ -34,6 +35,32 @@ const themeResult = (tot: Tot) => {
     ].join(", "),
   };
 };
+
+/**
+ * Who may reach Tot instructions: a Tot here, its own or (Home) any, or a person
+ * at a client outside any thread. Agents in other threads may not.
+ */
+const instructionsCaller = Effect.fn("mcp.totInstructionsCaller")(function* (writing: boolean) {
+  const tot = yield* readTotCaller();
+  if (Option.isSome(tot)) {
+    const caller = writing ? yield* requireTotChange() : tot.value;
+    if (caller.via !== "local")
+      return yield* new OrchestratorMcpFailure({
+        code: "capability_denied",
+        message: "Your instructions live with you here; change them from your own environment.",
+      });
+    return Option.some(caller.totId);
+  }
+  const context = yield* readCaller();
+  if (context.scope.thread !== undefined || context.scope.client?.linked === true)
+    return yield* new OrchestratorMcpFailure({
+      code: "capability_denied",
+      message: "Only a Tot or the user can read or change Tot instructions.",
+    });
+  if (writing)
+    yield* assertFullAccess(context, "Changing Tot instructions needs a full-access client.");
+  return Option.none<Tot["id"]>();
+});
 
 export const layer = McpToolAccess.toLayer(TotToolkit, {
   t3_tot_list: McpToolAccess.reads(() =>
@@ -298,6 +325,38 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
         }),
         scope: created.scope,
       };
+    }),
+  ),
+  t3_tot_instructions: McpToolAccess.reads((input) =>
+    Effect.gen(function* () {
+      const writing = input.instructions !== undefined;
+      const caller = yield* instructionsCaller(writing);
+      const targetId = input.tot ?? Option.getOrUndefined(caller);
+      if (targetId === undefined)
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: "Pass `tot`: you are not a Tot.",
+        });
+      if (Option.isSome(caller) && caller.value !== targetId && caller.value !== HOME_TOT_ID)
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message: "A Tot can reach only its own instructions; Home and the user can reach any.",
+        });
+      const tots = yield* TotService.TotService;
+      const invalid = (error: { readonly message: string }) =>
+        new OrchestratorMcpFailure({ code: "invalid_request", message: error.message });
+      const tot =
+        input.instructions === undefined
+          ? (yield* tots.list).find((candidate) => candidate.id === targetId)
+          : yield* tots
+              .update({ id: targetId, instructions: input.instructions })
+              .pipe(Effect.mapError(invalid));
+      if (tot === undefined)
+        return yield* new OrchestratorMcpFailure({
+          code: "invalid_request",
+          message: `There is no Tot "${targetId}".`,
+        });
+      return { totId: tot.id, name: tot.name, instructions: tot.instructions, updated: writing };
     }),
   ),
   t3_tot_watch: McpToolAccess.reads((input) =>
