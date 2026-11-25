@@ -38,8 +38,10 @@ export interface CanvasSurface {
     key: string;
     canvas: HTMLCanvasElement;
     ctx: CanvasRenderingContext2D | null;
-    /** The avatar's volume, for a fluffy coat: built when first asked for. Null at depth 0, which has no surface to coat. */
+    /** The avatar's volume, for a material: built when first asked for. Null at depth 0, which has no surface to coat. */
     volume: (() => Volume) | null;
+    /** The definition's body path, for materials that shade the outline itself. */
+    outline: string;
     cap: Square;
     fit: Square | null;
     layout: string;
@@ -49,6 +51,6 @@ export interface CanvasSurface {
 export declare function mountCanvas(el: HTMLElement, key: string, definition: AvatarDefinition, depth: number | undefined): CanvasSurface;
 /**
  * Paint one frame `size` CSS pixels wide. `fill` and `ink` override the frame's colors with any
- * canvas color. A `fluffy` body falls back to flat where fluffy can't be drawn.
+ * canvas color. A material falls back to flat where it cannot be drawn.
  */
 export declare function paintCanvas(surface: CanvasSurface, frame: AvatarFrame, size: number, fill?: string, ink?: string, material?: AvatarMaterial): void;

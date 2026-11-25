@@ -4,3 +4,4 @@ export { requestFrame, setPointer, subscribeFrames } from './clock.ts';
 export type { FrameSubscriber, Pointer } from './clock.ts';
 export { trackPointer } from './pointer.ts';
 export { prefersReducedMotion } from './reduced.ts';
+export type { CanvasMaterial, MaterialImage, MaterialLook } from './materials/material.ts';

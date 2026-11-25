@@ -9,12 +9,9 @@
 import { EdgeIndex } from '../../distance.js';
 import { edgeBands } from '../../path.js';
 import { EYE_H, EYE_W, GAZE_X, GAZE_Y, HAPPY_ARC } from '../../validate.js';
-import { SOCKET_PAD } from './socket.js';
+import { halfDepth } from '../materials/shape.js';
+import { SOCKET_PAD } from '../materials/socket.js';
 const isCapsule = (shape) => 'radius' in shape;
-/** Front-to-back half extent of a shape, viewBox units. */
-export function halfDepth(shape) {
-    return isCapsule(shape) ? shape.radius : Math.max(0.5, ...shape.parts.map((part) => part.depth / 2));
-}
 /** Grid spacing, viewBox units. */
 const STEP = 1.05;
 /** Empty margin around the shape, viewBox units. */

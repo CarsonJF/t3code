@@ -62,7 +62,9 @@ const TOT_AVATAR_STYLES = ["boopface", "open-bot"] as const;
 export const TotAvatarStyle = Schema.Literals(TOT_AVATAR_STYLES);
 export type TotAvatarStyle = typeof TotAvatarStyle.Type;
 
-const TOT_OPEN_BOT_MATERIALS = ["flat", "fluffy"] as const;
+/** The open-bot finishes. Each falls back to flat where its canvas or WebGL is missing. */
+const TOT_OPEN_BOT_MATERIALS = ["flat", "fluffy", "glass", "soft"] as const;
+export type TotOpenBotMaterial = (typeof TOT_OPEN_BOT_MATERIALS)[number];
 export const TOT_OPEN_BOT_MAX_DEPTH = 14;
 
 /**
@@ -74,7 +76,7 @@ export const TotOpenBotAvatar = Schema.Struct({
     description: "An open-bot-avatar figure id, such as mug, cat, rocket or lightbulb.",
   }),
   material: Schema.optional(Schema.Literals(TOT_OPEN_BOT_MATERIALS)).annotate({
-    description: "flat (default) or fluffy, a coat of fur.",
+    description: "flat (default), fluffy (fur), glass or soft (subsurface glow).",
   }),
   depth: Schema.optional(
     Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: TOT_OPEN_BOT_MAX_DEPTH })),

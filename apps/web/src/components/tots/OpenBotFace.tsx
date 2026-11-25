@@ -1,5 +1,5 @@
-import type { TotFaceState, TotOpenBotAvatar } from "@t3tools/contracts";
-import type { AvatarDefinition, AvatarMood, AvatarState } from "open-bot-avatar";
+import type { TotFaceState, TotOpenBotAvatar, TotOpenBotMaterial } from "@t3tools/contracts";
+import type { AvatarDefinition, AvatarMaterial, AvatarMood, AvatarState } from "open-bot-avatar";
 import type { MountedAvatar, mountAvatar } from "open-bot-avatar/dom";
 import { useEffect, useRef, useState } from "react";
 
@@ -7,6 +7,8 @@ export interface OpenBotKit {
   readonly mountAvatar: typeof mountAvatar;
   /** Upstream's built-in examples, then its community gallery. */
   readonly figures: ReadonlyArray<AvatarDefinition>;
+  /** Each finish; the renderer draws flat wherever one cannot run (no canvas, no WebGL2). */
+  readonly materials: Readonly<Record<TotOpenBotMaterial, AvatarMaterial>>;
 }
 
 let loadedKit: OpenBotKit | null = null;
@@ -16,11 +18,15 @@ export const loadOpenBot = () =>
     import("open-bot-avatar"),
     import("open-bot-avatar/dom"),
     import("open-bot-avatar/gallery"),
-  ]).then(([core, dom, more]) => {
+    import("open-bot-avatar/materials/fluffy"),
+    import("open-bot-avatar/materials/glass"),
+    import("open-bot-avatar/materials/soft"),
+  ]).then(([core, dom, more, fluffy, glass, soft]) => {
     const builtIn = new Set(core.examples.map((figure) => figure.id));
     loadedKit = {
       mountAvatar: dom.mountAvatar,
       figures: [...core.examples, ...more.gallery.filter((figure) => !builtIn.has(figure.id))],
+      materials: { flat: "flat", fluffy: fluffy.fluffy, glass: glass.glass, soft: soft.soft },
     };
     return loadedKit;
   }));
@@ -89,13 +95,13 @@ export function OpenBotFace(props: {
     mounted?.update({
       color,
       ...(eyeColor === undefined ? {} : { eyeColor }),
-      material: material ?? "flat",
+      material: props.kit.materials[material ?? "flat"],
       ...(depth === undefined ? {} : { depth }),
       state,
       mood,
       still: !moving,
     });
-  }, [mounted, color, eyeColor, material, depth, state, mood, moving]);
+  }, [props.kit, mounted, color, eyeColor, material, depth, state, mood, moving]);
 
   return (
     <div

@@ -159,6 +159,25 @@ describe("TotAvatar styles", () => {
     expect(screen.container.querySelector("boop-face")).toBeNull();
   });
 
+  it("draws every finish, flat where its canvas or WebGL is missing", async () => {
+    await loadOpenBot();
+    for (const material of ["fluffy", "glass", "soft"] as const) {
+      await using screen = await render(
+        <TotAvatar
+          avatar={{ ...avatar, style: "open-bot", openBot: { figure: "mug", material } }}
+          state="idle"
+          animation="still"
+          size={64}
+        />,
+        { router: false /* a lone avatar, no routes */ },
+      );
+      await vi.waitFor(() =>
+        expect(openBot(screen.container)!.querySelector("canvas, svg")).not.toBeNull(),
+      );
+      expect(screen.container.querySelector("boop-face")).toBeNull();
+    }
+  });
+
   it("falls back to BoopFace for a figure this build does not know", async () => {
     await loadOpenBot();
     await using screen = await render(

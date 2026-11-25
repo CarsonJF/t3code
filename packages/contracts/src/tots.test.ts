@@ -189,6 +189,13 @@ describe("Tot avatar styles", () => {
     expect(totAvatarStyleOf(face)).toBe("open-bot");
   });
 
+  it("takes every open-bot finish", () => {
+    for (const material of ["flat", "fluffy", "glass", "soft"] as const) {
+      const face = { color: "#0A7EA4", style: "open-bot", openBot: { figure: "mug", material } };
+      expect(decodeAvatar(face)).toEqual(face);
+    }
+  });
+
   it("falls back to BoopFace when open-bot is chosen without a figure, or only stored", () => {
     expect(totAvatarStyleOf({ color: "#0A7EA4", style: "open-bot" })).toBe("boopface");
     expect(totAvatarStyleOf({ color: "#0A7EA4", openBot: { figure: "mug" } })).toBe("boopface");
@@ -200,7 +207,7 @@ describe("Tot avatar styles", () => {
       { color: "#0A7EA4", openBot: { figure: "mug", depth: 15 } },
       { color: "#0A7EA4", openBot: { figure: "mug", depth: 2.5 } },
       { color: "#0A7EA4", openBot: { figure: "Mug Cup" } },
-      { color: "#0A7EA4", openBot: { figure: "mug", material: "glass" } },
+      { color: "#0A7EA4", openBot: { figure: "mug", material: "metal" } },
       { color: "#0A7EA4", openBot: { figure: "mug", eyeColor: "black" } },
     ]) {
       expect(() => decodeAvatar(face)).toThrow();

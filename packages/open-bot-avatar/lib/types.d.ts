@@ -57,11 +57,17 @@ export interface AvatarMotionBlend {
     };
     t: number;
 }
-/** A body's finish: a flat fill, or a coat of fluffy fur (live avatars on a canvas, see AvatarOptions). */
-export type AvatarMaterial = 'flat' | 'fluffy';
+/** A flat fill (default), or an explicitly imported canvas material (see AvatarOptions). */
+export type AvatarMaterial = 'flat' | import('./dom/materials/material.ts').CanvasMaterial;
 export interface RenderOptions {
     /** Body color as #rgb or #rrggbb. Invalid values fall back to the default. */
     color?: string;
+    /**
+     * The soft-shape subsurface look (see material.ts and the `soft` canvas material): with a hex
+     * `color`, the body faces front and its cross-sections take a depth ramp of the body colour,
+     * which vector renderers paint per slice. Absent: every slice is the body colour.
+     */
+    soft?: import('./material.ts').SoftMaterial;
     /** Eye color as #rgb or #rrggbb. Defaults to a plain near-black ink. */
     eyeColor?: string;
     /**

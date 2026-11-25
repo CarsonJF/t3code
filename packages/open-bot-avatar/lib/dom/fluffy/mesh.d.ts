@@ -1,5 +1,4 @@
-import { type Bounds } from '../../path.ts';
-import type { Volume } from '../../volume.ts';
+import { type MaterialShape } from '../materials/shape.ts';
 export interface FluffyMesh {
     /** Position and outward normal per vertex (6 floats). */
     vertices: Float32Array;
@@ -19,14 +18,8 @@ export interface IndexRange {
     start: number;
     count: number;
 }
-/** A state mark: a vertical capsule centered at the origin. Equal width and height give a ball. */
-export interface Capsule {
-    bounds: Bounds;
-    radius: number;
-}
-export type FluffyShape = Volume | Capsule;
-/** Front-to-back half extent of a shape, viewBox units. */
-export declare function halfDepth(shape: FluffyShape): number;
+export type { Capsule } from '../materials/shape.ts';
+export type FluffyShape = MaterialShape;
 /**
  * The roots are stored in this many passes over the surface, each taking every ROOT_PASSES-th
  * root. Each pass runs along the surface, which draws faster than roots in random order.

@@ -5,3 +5,6 @@ export { MOOD_MS, moodProgress, settleMood } from './mood.js';
 export { REST, followGaze, followStep, pointerGaze } from './follow.js';
 export { createAnimator } from './animator.js';
 export { examples, getExample } from './examples.js';
+export { DEFAULT_SOFT, RAMP_STEPS, rampAt, rampHexAt, sliceTone, softRamp } from './material.js';
+export { SPRITE_SIZE, softSprite } from './softsprite.js';
+export { HARK, HARK_ROSTER, HARK_SKY, harkBot, harkSky } from './presets/hark.js';

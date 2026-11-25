@@ -16,6 +16,7 @@ import {
   type TotAccessory,
   type TotAvatar,
   type TotOpenBotAvatar,
+  type TotOpenBotMaterial,
   type TotShape,
 } from "@t3tools/contracts";
 import { useEffect, useState, type ReactNode } from "react";
@@ -25,6 +26,18 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Switch } from "../ui/switch";
 import { DEFAULT_OPEN_BOT, useOpenBotKit } from "./OpenBotFace";
 import { loadBoopFace, TotAvatar as TotFace } from "./TotAvatar";
+
+const OPEN_BOT_FINISHES: ReadonlyArray<{ id: TotOpenBotMaterial; label: string }> = [
+  { id: "flat", label: "Flat" },
+  { id: "fluffy", label: "Fluffy" },
+  { id: "glass", label: "Glass" },
+  { id: "soft", label: "Soft" },
+];
+/** open-bot-avatar's own ink, then a light one for dark bodies. */
+const OPEN_BOT_EYE_COLORS = [
+  { color: "#151515", label: "Dark" },
+  { color: "#f8fafc", label: "Light" },
+];
 
 const COLOR_CHOICES = ["#0A7EA4", "#7C3AED", "#DB2777", "#EA580C", "#16A34A", "#475569"];
 export const TOT_FACE_COLORS = COLOR_CHOICES;
@@ -71,6 +84,7 @@ export function TotFaceEditor(props: {
   const look = totFaceLookOf(value);
   const openBot = value.style === "open-bot" ? (value.openBot ?? DEFAULT_OPEN_BOT) : null;
   const kit = useOpenBotKit(openBot !== null);
+  const eyeColor = (openBot?.eyeColor ?? OPEN_BOT_EYE_COLORS[0]!.color).toLowerCase();
   const [accessoryChoices, setAccessoryChoices] =
     useState<ReadonlyArray<TotAccessoryChoice>>(TOT_ACCESSORY_FALLBACK);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reads the accessory catalog the loaded component ships
@@ -333,14 +347,20 @@ export function TotFaceEditor(props: {
       ) : (
         <>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground text-xs">Fluffy</span>
-            <Switch
-              aria-label="Fluffy"
-              checked={openBot.material === "fluffy"}
-              onCheckedChange={(checked) =>
-                props.onChange(openBotFace(openBotWith({ material: checked ? "fluffy" : "flat" })))
-              }
-            />
+            <span className="text-muted-foreground text-xs">Finish</span>
+            <div className="flex items-center gap-1" aria-label="Finish" role="group">
+              {OPEN_BOT_FINISHES.map((finish) => (
+                <button
+                  key={finish.id}
+                  type="button"
+                  aria-pressed={(openBot.material ?? "flat") === finish.id}
+                  className="rounded-md border border-border px-2 py-1 text-muted-foreground text-xs aria-pressed:border-ring aria-pressed:bg-muted aria-pressed:text-foreground"
+                  onClick={() => props.onChange(openBotFace(openBotWith({ material: finish.id })))}
+                >
+                  {finish.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-muted-foreground text-xs">Depth</span>
@@ -359,15 +379,30 @@ export function TotFaceEditor(props: {
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-muted-foreground text-xs">Eyes</span>
-            <input
-              type="color"
-              aria-label="Eye color"
-              className="size-5 cursor-pointer rounded border-0 bg-transparent p-0"
-              value={openBot.eyeColor ?? "#151515"}
-              onChange={(event) =>
-                props.onChange(openBotFace(openBotWith({ eyeColor: event.target.value })))
-              }
-            />
+            <div className="flex items-center gap-1.5" aria-label="Eyes" role="group">
+              {OPEN_BOT_EYE_COLORS.map((choice) => (
+                <button
+                  key={choice.color}
+                  type="button"
+                  aria-label={`${choice.label} eyes`}
+                  aria-pressed={eyeColor === choice.color}
+                  className="size-6 rounded-full border border-border aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-ring"
+                  style={{ backgroundColor: choice.color }}
+                  onClick={() =>
+                    props.onChange(openBotFace(openBotWith({ eyeColor: choice.color })))
+                  }
+                />
+              ))}
+              <input
+                type="color"
+                aria-label="Eye color"
+                className="h-6 w-8 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
+                value={eyeColor}
+                onChange={(event) =>
+                  props.onChange(openBotFace(openBotWith({ eyeColor: event.target.value })))
+                }
+              />
+            </div>
           </div>
         </>
       )}

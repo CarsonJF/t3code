@@ -1,3 +1,4 @@
+import type { SoftMaterial } from './material.ts';
 import type { Rim } from './effects.ts';
 import type { Pose } from './motion.ts';
 import type { Bounds, Point } from './path.ts';
@@ -90,6 +91,8 @@ export type FrameShape = {
     /** Id of an entry in AvatarFrame.paths. */
     path: string;
     matrix: Matrix;
+    /** Depth in the part's volume, 0 (surface) .. 1 (deepest); indexes AvatarFrame.ramp. */
+    tone: number;
 } | {
     kind: 'eye';
     key: 'eye-0' | 'eye-1';
@@ -169,6 +172,25 @@ export interface AvatarFrame {
         view: ViewBasis;
         scale: number;
         eyes: SurfaceEye[];
+    };
+    /**
+     * The soft material's colour ramp, surface first, as hex stops — present only when
+     * `soft` is set and the body colour is hex. Slice shapes index it by `tone`;
+     * vector renderers paint it per slice, the canvas renderer prefers softBody.
+     */
+    ramp?: string[];
+    /**
+     * The soft material's per-pixel body: the outline to shade with the soft-shape
+     * subsurface integral (see softsprite.ts), its material, and the matrix to draw it
+     * under (the body's shrink about its pivot, before the frame root). The canvas
+     * renderer paints one cached sprite in place of the slice stack; the body faces
+     * front in this mode — gaze, 2D motion, states and moods stay live.
+     */
+    softBody?: {
+        d: string;
+        evenOdd: boolean;
+        material: SoftMaterial;
+        matrix: Matrix;
     };
 }
 /**

@@ -16,15 +16,12 @@
  * the fluffy renderer (see fluffy/renderer.ts) in place of the slices and eye marks.
  */
 import { avatarExtent, preparedVolume } from '../render.js';
+import { rampHexAt } from '../material.js';
 import { eyeBox, paintEye } from './eye.js';
-import { paintFluffyMark } from './fluffy/marks.js';
-import { renderFluffy } from './fluffy/renderer.js';
 /** Slack around a frame's bounds when the bitmap is laid out, viewBox units: idle motion and gaze stay inside it. */
 export const FIT_SLACK = 8;
 /** Margin a frame keeps from the bitmap's edge for antialiasing, viewBox units. */
 export const FIT_PAD = 1;
-/** How far a fluffy coat's pile reaches past the frame's flat bounds, viewBox units. */
-const PILE_MARGIN = 3;
 /**
  * The square to lay the bitmap out over: `prev` while it still holds `b`, else `prev` grown to
  * hold `b` with slack. Never larger than `cap` unless `b` itself leaves `cap`.
@@ -110,13 +107,14 @@ export function mountCanvas(el, key, definition, depth) {
     return {
         key, canvas, ctx: canvas.getContext('2d'), cap, fit: null, layout: '', left: 0, top: 0,
         volume: depth === 0 ? null : () => (volume ??= preparedVolume(definition, depth).vol),
+        outline: definition.body.path,
     };
 }
 /** The marks of `thinking` and `blocked`, which a frame lists as slices in place of the body. */
 const isMark = (shape) => shape.key.startsWith('mark-');
 /**
  * Paint one frame `size` CSS pixels wide. `fill` and `ink` override the frame's colors with any
- * canvas color. A `fluffy` body falls back to flat where fluffy can't be drawn.
+ * canvas color. A material falls back to flat where it cannot be drawn.
  */
 export function paintCanvas(surface, frame, size, fill = frame.color, ink = frame.ink, material = 'flat') {
     const { canvas, ctx } = surface;
@@ -132,13 +130,14 @@ export function paintCanvas(surface, frame, size, fill = frame.color, ink = fram
             sections.set(id, { box, path: new Path2D(d), rule: evenOdd ? 'evenodd' : 'nonzero' });
     }
     const { matrices, bounds } = framePlacement(frame);
-    const volume = material === 'fluffy' ? surface.volume : null;
-    const fluffy = volume !== null;
-    if (fluffy) {
-        bounds.x0 -= PILE_MARGIN;
-        bounds.y0 -= PILE_MARGIN;
-        bounds.x1 += PILE_MARGIN;
-        bounds.y1 += PILE_MARGIN;
+    const finish = typeof material === 'object' && material !== null ? material : null;
+    const volume = finish ? surface.volume : null;
+    if (finish) {
+        const margin = finish.margin ?? 0;
+        bounds.x0 -= margin;
+        bounds.y0 -= margin;
+        bounds.x1 += margin;
+        bounds.y1 += margin;
     }
     const fit = fitSquare(surface.layout === layout ? surface.fit : null, bounds, surface.cap);
     if (surface.layout === layout && fit === surface.fit) {
@@ -159,7 +158,9 @@ export function paintCanvas(surface, frame, size, fill = frame.color, ink = fram
     }
     // The whole body and its eyes as one image, unless it has shrunk away into a mark.
     const { view, scale: bodyScale, eyes } = frame.surface;
-    const coat = volume && bodyScale > 0.001 ? renderFluffy(volume(), view, { color: fill, ink, eyes }, scale) : null;
+    const coat = finish && volume && bodyScale > 0.001
+        ? finish.render(volume(), view, { color: fill, ink, eyes }, scale, surface.outline)
+        : null;
     let coatPainted = false;
     ctx.lineCap = 'round';
     ctx.strokeStyle = ink;
@@ -171,11 +172,20 @@ export function paintCanvas(surface, frame, size, fill = frame.color, ink = fram
         if (shape.kind === 'slice') {
             const section = sections.get(shape.path);
             if (isMark(shape)) {
-                if (!fluffy || !paintFluffyMark(ctx, section.box, scale, fill))
+                const painted = finish?.paintMark?.(ctx, section.box, scale, fill) ?? false;
+                if (!painted)
                     ctx.fill(section.path, section.rule);
             }
             else if (!coat) {
-                ctx.fill(section.path, section.rule);
+                if (frame.ramp && fill === frame.color) {
+                    // Soft without its sprite: the frame's per-slice depth ramp, as in the SVG.
+                    ctx.fillStyle = rampHexAt(frame.ramp, shape.tone);
+                    ctx.fill(section.path, section.rule);
+                    ctx.fillStyle = fill;
+                }
+                else {
+                    ctx.fill(section.path, section.rule);
+                }
             }
             else if (!coatPainted) {
                 // The body's slices follow one another: the coat takes the place of the first, under the root's motion.
@@ -187,7 +197,7 @@ export function paintCanvas(surface, frame, size, fill = frame.color, ink = fram
             }
         }
         else if (shape.kind === 'eye') {
-            if (coat)
+            if (coat && coat.eyes !== false)
                 continue;
             ctx.fillStyle = ink;
             paintEye(ctx, shape.mark);

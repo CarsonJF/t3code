@@ -1,5 +1,5 @@
 /**
- * Fluffy eyes are beads seated in sockets pressed into the coat. A socket follows its eye's
+ * Material eyes are beads seated in sockets on the body. A socket follows its eye's
  * contour through every shape the eye takes, so the shader reads the contour as a small
  * distance field: one square tile per eye, re-made only when the contour changes.
  */

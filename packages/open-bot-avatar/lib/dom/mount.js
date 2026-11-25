@@ -104,10 +104,10 @@ const VIEW_MARGIN = 100;
 /** Slack so a 60 Hz display reliably draws every other frame rather than drifting between 1 and 3. */
 const FRAME_SLACK = 0.004;
 /**
- * The frame that last painted a fluffy still. They take turns, one a frame: the first paint of a
- * shape builds its mesh, and a gallery that changes finish asks for all of its stills at once.
+ * The frame that last painted a material still. They take turns, one a frame: the first paint of a
+ * shape prepares its geometry, and a gallery that changes finish asks for all of its stills at once.
  */
-let fluffyStillAt = -1;
+let materialStillAt = -1;
 export function mountAvatar(host, initial) {
     let opts = { ...initial };
     const animator = createAnimator();
@@ -173,8 +173,10 @@ export function mountAvatar(host, initial) {
         surface = null;
         lastStill = '';
     };
-    /** Whether the avatar is painted in fluffy: on a canvas, live or still. */
-    const fluffy = () => opts.material === 'fluffy' && opts.renderer !== 'scene' && canvasSupported();
+    /** Render options the chosen material asks for (soft's ramp and front-facing pose). */
+    const materialFrame = (p) => (typeof p.material === 'object' && p.material !== null ? p.material.frame : undefined);
+    /** Imported materials use a painted canvas even for stills. */
+    const canvasMaterial = () => typeof opts.material === 'object' && opts.material !== null && opts.renderer !== 'scene' && canvasSupported();
     const paint = (p, options) => {
         if (scene || lastStill)
             clear();
@@ -206,8 +208,9 @@ export function mountAvatar(host, initial) {
                     view: p.view,
                     gaze: p.lookAt ?? undefined,
                     reducedMotion: true,
+                    ...materialFrame(p),
                 };
-                if (fluffy()) {
+                if (canvasMaterial()) {
                     // Nothing to paint until the host has a size; the resize that gives it one redraws.
                     if (size > 0)
                         paint(p, { ...options, size });
@@ -244,6 +247,7 @@ export function mountAvatar(host, initial) {
                 gaze: step.gaze,
                 view: p.view,
                 reducedMotion,
+                ...materialFrame(p),
             };
             if (p.renderer !== 'scene' && canvasSupported()) {
                 paint(p, options);
@@ -279,10 +283,10 @@ export function mountAvatar(host, initial) {
             // frame they ask for. A change still draws offscreen, so the content is current when printed.
             if ((opts.still || !visible) && !dirty)
                 return false;
-            if (opts.still && size > 0 && fluffy()) {
-                if (fluffyStillAt === time)
+            if (opts.still && size > 0 && canvasMaterial()) {
+                if (materialStillAt === time)
                     return true;
-                fluffyStillAt = time;
+                materialStillAt = time;
             }
             dirty = false;
             const more = draw(time, pointer);

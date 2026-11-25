@@ -20,6 +20,7 @@
  * and rolls.
  */
 import { mix, oklch, parseHex, toHex, toOklch } from './color.js';
+import { rampHexAt, sliceTone, softRamp } from './material.js';
 import { bodyScale, markParts, ribbonPieces, ribbonReach, rimOf } from './effects.js';
 import { eyePath, plainLook } from './eyes.js';
 import { computePose, hashString, noise } from './motion.js';
@@ -430,7 +431,12 @@ function flatFrame(definition, options, size) {
     const { vol } = p;
     const b = vol.bounds;
     const { color, ink } = colors(options);
+    const soft = options.soft !== undefined && !!parseHex(options.color);
     const pose = poseOf(p, options);
+    if (soft) {
+        pose.yaw = 0;
+        pose.pitch = 0;
+    }
     const pivot = pivotOf(b);
     const v = viewBasis(pose.yaw, pose.pitch);
     const stack = activeStack(v);
@@ -451,7 +457,7 @@ function flatFrame(definition, options, size) {
             }
             // Parallel slices have the same order along every viewing ray.
             const depth = stack === 'z' ? v.facing * s.at : -v.sY * v.cP * s.at;
-            items.push({ depth, shape: { kind: 'slice', key: `${i}${stack}${j}`, path: path.id, matrix: shrink(m) } });
+            items.push({ depth, shape: { kind: 'slice', key: `${i}${stack}${j}`, path: path.id, matrix: shrink(m), tone: sliceTone(vol.parts[i], s) } });
         });
         // Painted on the surface; each eye goes once the surface under it turns away.
         eyeStates(p, pose).forEach((e, idx) => {
@@ -480,10 +486,12 @@ function flatFrame(definition, options, size) {
     const marks = fx.marks.map((mark, i) => {
         if (!paths.has(mark.id))
             paths.set(mark.id, { id: mark.id, d: mark.d, evenOdd: false, box: mark.box });
-        return { kind: 'slice', key: `mark-${i}`, path: mark.id, matrix: mul(fixed, mark.matrix) };
+        return { kind: 'slice', key: `mark-${i}`, path: mark.id, matrix: mul(fixed, mark.matrix), tone: 0 };
     });
     return {
         name: p.def.name, color, ink, paths: [...paths.values()], root,
+        ramp: soft ? softRamp(parseHex(color), options.soft).map(toHex) : undefined,
+        softBody: soft ? { d: p.def.body.path, evenOdd: false, material: options.soft ?? {}, matrix: shrink([1, 0, 0, 1, 0, 0]) } : undefined,
         shapes: [...ribbon(false), ...items.map((it) => it.shape), ...ribbon(true), ...marks],
         surface: { view: v, scale: fx.body, eyes },
     };
@@ -513,7 +521,7 @@ export function renderAvatarSvg(definition, options = {}) {
     const frame = avatarFrame(definition, options);
     const defsMarkup = frame.paths.map((d) => `<path id="${d.id}" d="${d.d}"${d.evenOdd ? ' fill-rule="evenodd"' : ''}/>`).join('');
     const body = frame.shapes
-        .map((s) => s.kind === 'slice' ? `<use href="#${s.path}" transform="${mat(s.matrix)}"/>`
+        .map((s) => s.kind === 'slice' ? `<use href="#${s.path}" transform="${mat(s.matrix)}"${frame.ramp ? ` fill="${rampHexAt(frame.ramp, s.tone)}"` : ''}/>`
         : s.kind === 'eye' ? `<g transform="${mat(s.matrix)}">${eyeSvg(s.mark, frame.ink)}</g>`
             : `<g transform="${mat(s.matrix)}">${ribbonSvg(s.d, s.gradient)}</g>`)
         .join('');

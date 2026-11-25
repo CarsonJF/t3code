@@ -1,7 +1,8 @@
+import { halfDepth } from '../materials/shape.js';
 import { DYE_RAMP_SIZE, dyeRamp } from './dye.js';
-import { ROOT_PASSES, buildMesh, halfDepth, rootsIn } from './mesh.js';
+import { ROOT_PASSES, buildMesh, rootsIn } from './mesh.js';
 import { PASS, fragmentShader, vertexShader } from './shaders.js';
-import { SOCKET_TILE, exposedHeight, socketKey, socketRegion, socketTile } from './socket.js';
+import { SOCKET_TILE, exposedHeight, socketKey, socketRegion, socketTile } from '../materials/socket.js';
 /** Shells of pile between the body and the strands, at full detail. */
 const SHELLS = 5;
 /**

@@ -74,20 +74,28 @@ describe("TotFaceEditor styles", () => {
       .not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Figure Mug" }));
-    // The switch draws no width without the app's theme variables, so click it directly.
-    (screen.getByRole("switch", { name: "Fluffy" }).element() as HTMLElement).click();
+    await userEvent.click(screen.getByRole("button", { name: "Glass" }));
+    await userEvent.click(screen.getByRole("button", { name: "Light eyes" }));
     expect(onChange).toHaveBeenLastCalledWith({
       color: "#0A7EA4",
       shape: "flower",
       style: "open-bot",
-      openBot: { figure: "mug", material: "fluffy" },
+      openBot: { figure: "mug", material: "glass", eyeColor: "#f8fafc" },
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Flat" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      color: "#0A7EA4",
+      shape: "flower",
+      style: "open-bot",
+      openBot: { figure: "mug", eyeColor: "#f8fafc" },
     });
 
     await userEvent.click(screen.getByRole("button", { name: "BoopFace" }));
     expect(onChange).toHaveBeenLastCalledWith({
       color: "#0A7EA4",
       shape: "flower",
-      openBot: { figure: "mug", material: "fluffy" },
+      openBot: { figure: "mug", eyeColor: "#f8fafc" },
     });
     await expect.element(screen.getByRole("button", { name: "Shape flower" })).toBeVisible();
   });

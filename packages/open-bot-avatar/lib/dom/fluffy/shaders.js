@@ -5,7 +5,7 @@
  * avatar turns.
  */
 import { DYE_RAMP_RANGE } from './dye.js';
-import { SOCKET_PAD } from './socket.js';
+import { SOCKET_PAD } from '../materials/socket.js';
 /** The values of the `pass` uniform. */
 export const PASS = { body: 0, shell: 1, strand: 2 };
 /** A number as a GLSL float literal. */

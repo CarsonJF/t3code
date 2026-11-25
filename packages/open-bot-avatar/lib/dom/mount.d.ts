@@ -6,8 +6,9 @@ export interface AvatarOptions {
     /** Eye color: #rgb or #rrggbb, or any CSS color. Defaults to a near-black ink. */
     eyeColor?: string;
     /**
-     * The body's finish: 'flat' (default), or 'fluffy' for a coat of fur with the eyes set into it.
-     * Fluffy needs the canvas renderer and WebGL2; without them the avatar draws flat.
+     * The body's finish: 'flat' (default), or an imported material object.
+     * Materials need canvas; the built-in fluffy and glass finishes also need WebGL2.
+     * Import from open-bot-avatar/materials/fluffy, /materials/glass or /materials/soft (2D canvas only).
      */
     material?: AvatarMaterial;
     /** Volume amount 0..14 (6 = natural depth, 0 = flat). */
@@ -35,7 +36,7 @@ export interface AvatarOptions {
     };
     /** true or false to force; 'system' (default) follows prefers-reduced-motion. */
     reducedMotion?: boolean | 'system';
-    /** Render one fixed pose and never animate (thumbnails, lists): a static SVG, or for fluffy one painted canvas. */
+    /** Render one fixed pose and never animate (thumbnails, lists): a static SVG, or for a material one painted canvas. */
     still?: boolean;
     /**
      * How a live avatar draws. 'canvas' (default) paints each frame to one canvas: one compositor layer
