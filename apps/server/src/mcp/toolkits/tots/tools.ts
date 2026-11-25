@@ -1,5 +1,6 @@
 import {
   EnvironmentId,
+  NeedsYouInbox,
   GroupChatId,
   MAX_WEBHOOK_FILTERS,
   ModelSelection,
@@ -24,6 +25,7 @@ import * as ProjectService from "../../../project/ProjectService.ts";
 import * as ScheduledTaskService from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
+import * as NeedsYou from "../../../needsYou/NeedsYou.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const shared = {
@@ -218,6 +220,23 @@ const TotInstructionsTool = Tool.make("t3_tot_instructions", {
   }),
 }).annotate(Tool.Destructive, false);
 
+const NeedsYouTool = Tool.make("t3_needs_you", {
+  ...shared,
+  dependencies: [...shared.dependencies, NeedsYou.NeedsYou],
+  description:
+    "What waits on the user here and in linked environments: pending approvals and questions, unseen failed or stopped runs, failed scheduled runs. Read-only; answer with t3_pending_request.",
+  parameters: Schema.Struct({
+    environmentId: OrchestratorMcpEnvironmentTarget,
+    linked: Schema.optional(Schema.Boolean).annotate({ description: "Default true." }),
+    includeHidden: Schema.optional(Schema.Boolean).annotate({
+      description: "Also dismissed and snoozed items.",
+    }),
+  }),
+  success: NeedsYouInbox,
+})
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false);
+
 export const TotToolkit = Toolkit.make(
   TotListTool,
   TotWatchTool,
@@ -228,4 +247,5 @@ export const TotToolkit = Toolkit.make(
   TotWebhookListenerTool,
   TotCreateTool,
   TotInstructionsTool,
+  NeedsYouTool,
 );

@@ -3,9 +3,11 @@ import {
   ArrowRightIcon,
   BotIcon,
   ChartNoAxesColumnIcon,
+  InboxIcon,
   SettingsIcon,
 } from "lucide-react";
 import { useTotHostEnvironmentId } from "../tots/totEditorStore";
+import { useNeedsYou } from "../needsYou/useNeedsYou";
 import { GroupChatEditorHost } from "../tots/GroupChatEditorDialog";
 import { TotEditorHost } from "../tots/TotEditorDialog";
 import { TotMemoryHost } from "../tots/TotMemoryDialog";
@@ -214,18 +216,33 @@ function SidebarUtilityItem({
   icon,
   label,
   onClick,
+  count = 0,
 }: {
   icon: ReactNode;
   label: string;
   onClick: () => void;
+  count?: number;
 }) {
   return (
     <SidebarMenuItem className="shrink-0">
       <Tooltip>
         <TooltipTrigger
           render={
-            <SidebarMenuButton aria-label={label} onClick={onClick} size="icon">
+            <SidebarMenuButton
+              aria-label={label}
+              onClick={onClick}
+              size="icon"
+              className="relative"
+            >
               {icon}
+              {count > 0 ? (
+                <span
+                  aria-hidden
+                  className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-3xs font-medium leading-none text-primary-foreground tabular-nums"
+                >
+                  {count > 99 ? "99+" : count}
+                </span>
+              ) : null}
             </SidebarMenuButton>
           }
         />
@@ -246,6 +263,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const pullRequestsSupported = usePullRequestsSupported();
   const issuesSupported = useIssuesSupported();
   const totHostEnvironmentId = useTotHostEnvironmentId();
+  const needsYouCount = useNeedsYou().count;
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -311,6 +329,19 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               onClick={handleIssuesClick}
             />
           ) : null}
+          <SidebarUtilityItem
+            icon={<InboxIcon />}
+            label={
+              needsYouCount > 0
+                ? gt("Needs you ({count})", { count: needsYouCount })
+                : gt("Needs you")
+            }
+            count={needsYouCount}
+            onClick={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/needs-you" });
+            }}
+          />
           <SidebarUtilityItem
             icon={<ChartNoAxesColumnIcon />}
             label={gt("Usage")}

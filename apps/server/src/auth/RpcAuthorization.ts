@@ -115,6 +115,9 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.totsReadMemory]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsDesignAvatar]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsAvatarLibrary]: AuthOrchestrationReadScope,
+  [WS_METHODS.needsYouSubscribe]: AuthOrchestrationReadScope,
+  // A read: the server makes at most one model call per waiting question and keeps the answer.
+  [WS_METHODS.needsYouSuggest]: AuthOrchestrationReadScope,
   [WS_METHODS.totsAvatarLibrarySave]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsAvatarLibraryRemove]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsDescribeAvatarFigure]: AuthOrchestrationOperateScope,

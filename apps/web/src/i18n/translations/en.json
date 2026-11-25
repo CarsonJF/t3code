@@ -13195,5 +13195,50 @@
   "7dcbf66bc26f10ae": "Nightly memory tidy-up for {name}",
   "0c9b03a0a40b461f": "Reverting…",
   "0c7b8cd7ce14bb5f": "Revert last tidy-up",
-  "81a0dfe96d155888": "Nightly memory tidy-up"
+  "81a0dfe96d155888": "Nightly memory tidy-up",
+  "6a1390b1f63ef634": "Could not hide it",
+  "cd3bf273c74438c2": "Approval",
+  "5c8772e727c04218": "Question",
+  "71a0d291605ff58d": "Failed run",
+  "85c9954de7b4cee7": "Stopped run",
+  "3ffa3898db62ec7e": "Scheduled run failed",
+  "93e6e9252bdccfa1": "Could not send the decision",
+  "4e430d5ea01c249b": "Could not send the answer",
+  "070babcc726100d9": "Type an answer",
+  "39fd01a80e88ee2a": "Could not bring it back",
+  "1b7c524fccf06537": "Needs you",
+  "7c5a3071fb7d9f14": "Nothing needs you",
+  "2843b91a4c4a5e98": "Approvals, questions and failed runs from every Tot and linked machine show up here.",
+  "2df485ee15283e6b": "Could not read this machine:",
+  "5eb5603f5b29900d": "Threads",
+  "df1fb90eb9a77fbf": "Scheduled tasks",
+  "39b4070d872d2028": "Snooze",
+  "a30ccddf9846901f": "For an hour",
+  "05c315b2aeaf837c": "For four hours",
+  "2ac68b6da5c86403": "Until tomorrow morning",
+  "3a364fe01dd16636": [
+    "Connect this app to ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " to approve here, or open the thread there."
+  ],
+  "77ada50f836c7878": "Suggested",
+  "cfea388d49c84ed1": "Thinking of replies…",
+  "5536b6ffc0e02e95": "Send answer",
+  "5bd55126073a21cb": [
+    "Snoozed and dismissed (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ")"
+  ],
+  "6e96ce482c3d701e": "Dismissed",
+  "9bd31b8911a11607": "Bring back",
+  "338ce4267d4f180c": "Needs you ({count})",
+  "d25661576338fcf0": "Needs you"
 }

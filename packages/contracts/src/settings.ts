@@ -1512,6 +1512,10 @@ export const ServerSettings = Schema.Struct({
   avatarDesignModelSelection: Schema.NullOr(ModelSelection).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  // Null follows textGenerationModelSelection; Needs you uses it to suggest replies to questions.
+  replySuggestionModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   // Null follows textGenerationModelSelection; the nightly Tot memory tidy-up uses it.
   totMemoryTidyModelSelection: Schema.NullOr(ModelSelection).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
@@ -2036,6 +2040,7 @@ export const ServerSettingsPatch = Schema.Struct({
   speechPostProcessingModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   avatarDesignModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   totMemoryTidyModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  replySuggestionModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   totMemoryTidyMaxBytes: Schema.optionalKey(TotMemoryTidyMaxBytes),
   projectAgentBrowserAccessOverrides: Schema.optionalKey(
     Schema.Record(ProjectId, Schema.NullOr(Schema.Boolean)),
