@@ -1,0 +1,314 @@
+/**
+ * A live avatar in any DOM element, without a framework.
+ *
+ *   const avatar = mountAvatar(el, { definition, color: '#1f7cf2', followPointer: true });
+ *   avatar.update({ state: 'working', mood: 'happy' });
+ *   avatar.destroy();
+ *
+ * Live avatars paint each frame to one canvas (see paint.ts): one compositor
+ * layer and a small bitmap per avatar. `renderer: 'scene'` mounts a CSS 3D scene
+ * instead, where every cross-section is its own small SVG and each frame only
+ * writes a few CSS transforms; it costs a compositor layer per visible slice,
+ * and is also the fallback where canvas is unavailable. `still` avatars are
+ * static images and never animate. Every avatar on the page shares one
+ * animation loop.
+ */
+import { createAnimator } from '../animator.js';
+import { pointerGaze } from '../follow.js';
+import { resolveLook } from '../motion.js';
+import { DEFAULT_COLOR, DEFAULT_EYE_COLOR, liveFrame, renderAvatarScene, renderAvatarSvg, sceneFrame } from '../render.js';
+import { requestFrame, subscribeFrames } from './clock.js';
+import { canvasSupported, mountCanvas, paintCanvas } from './paint.js';
+import { trackPointer } from './pointer.js';
+import { prefersReducedMotion } from './reduced.js';
+function mountScene(el, definition, depth) {
+    el.innerHTML = renderAvatarScene(definition, { depth });
+    const q = (s) => el.querySelector(s);
+    const stacks = { z: q('[data-stack="z"]'), x: q('[data-stack="x"]') };
+    return {
+        key: q('[data-avatar-scene]').dataset.avatarScene ?? '',
+        geometry: geometryKey(definition),
+        motion: q('[data-motion]'),
+        view: q('[data-view]'),
+        stacks,
+        slices: { z: [...stacks.z.children], x: [...stacks.x.children] },
+        eyes: [0, 1].map((i) => {
+            const root = q(`[data-eye="${i}"]`);
+            const morph = root.querySelector('[data-morph]');
+            return { root, pill: root.querySelector('i'), arc: root.querySelector('svg'), morph, path: morph.querySelector('path') };
+        }),
+        fx: { back: q('[data-fx="back"]'), front: q('[data-fx="front"]') },
+        last: {},
+    };
+}
+/** Write a style property only when its value changed since the last frame. */
+function put(m, key, el, prop, value) {
+    if (m.last[key] === value)
+        return;
+    m.last[key] = value;
+    el.style[prop] = value;
+}
+function apply(m, frame) {
+    put(m, 'motion', m.motion, 'transform', frame.motion);
+    put(m, 'view', m.view, 'transform', frame.view);
+    // A body that has given way to a mark holds no layers.
+    put(m, 'body', m.view, 'display', frame.body > 0 ? 'block' : 'none');
+    for (const side of ['back', 'front']) {
+        if (m.last[side] === frame[side])
+            continue;
+        m.last[side] = frame[side];
+        m.fx[side].innerHTML = frame[side];
+    }
+    // display:none, not visibility: hidden slices would still each hold a 3D layer.
+    put(m, 'z', m.stacks.z, 'display', frame.stack === 'z' ? 'block' : 'none');
+    put(m, 'x', m.stacks.x, 'display', frame.stack === 'x' ? 'block' : 'none');
+    const slices = m.slices[frame.stack];
+    frame.slices.forEach((shown, i) => slices[i] && put(m, `${frame.stack}${i}`, slices[i], 'display', shown ? 'block' : 'none'));
+    frame.eyes.forEach((eye, i) => {
+        const e = m.eyes[i];
+        put(m, `e${i}`, e.root, 'transform', eye.transform);
+        put(m, `v${i}`, e.root, 'visibility', eye.visible ? 'visible' : 'hidden');
+        put(m, `p${i}`, e.pill, 'transform', eye.pill);
+        put(m, `ph${i}`, e.pill, 'display', eye.happy || eye.d ? 'none' : 'block');
+        put(m, `a${i}`, e.arc, 'display', eye.happy && !eye.d ? 'block' : 'none');
+        put(m, `m${i}`, e.morph, 'display', eye.d ? 'block' : 'none');
+        if (eye.d && m.last[`d${i}`] !== eye.d) {
+            m.last[`d${i}`] = eye.d;
+            e.path.setAttribute('d', eye.d);
+        }
+    });
+}
+const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+const isHex = (c) => c === undefined || HEX.test(c);
+const keys = new WeakMap();
+/** Everything in a definition the static scene markup depends on. */
+function geometryKey(definition) {
+    let key = keys.get(definition);
+    if (key === undefined) {
+        key = JSON.stringify([definition?.id, definition?.name, definition?.body?.path, definition?.eyes]);
+        keys.set(definition, key);
+    }
+    return key;
+}
+/** Midpoint between the eyes as a fraction of the (square, 100-unit) box: the look starts there. */
+function eyesOrigin(definition) {
+    const { x, y } = definition.eyes ?? {};
+    const at = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v / 100)) : 0.5);
+    return { x: at(x), y: at(y) };
+}
+/** Avatars smaller than this (CSS px) redraw at SMALL_FPS: the difference doesn't show, and pages often hold many. */
+const SMALL_SIZE = 128;
+const SMALL_FPS = 30;
+/** How far outside the viewport (CSS px) avatars keep animating, so they are already moving as they scroll in. */
+const VIEW_MARGIN = 100;
+/** Slack so a 60 Hz display reliably draws every other frame rather than drifting between 1 and 3. */
+const FRAME_SLACK = 0.004;
+/**
+ * The frame that last painted a material still. They take turns, one a frame: the first paint of a
+ * shape prepares its geometry, and a gallery that changes finish asks for all of its stills at once.
+ */
+let materialStillAt = -1;
+export function mountAvatar(host, initial) {
+    let opts = { ...initial };
+    const animator = createAnimator();
+    let rect = null;
+    let scene = null;
+    let surface = null;
+    let lastStill = '';
+    let failed = false;
+    let dirty = true;
+    let releasePointer = null;
+    let size = host.clientWidth;
+    const resize = typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(([entry]) => {
+            const next = entry.contentRect.width;
+            if (next === size)
+                return;
+            size = next;
+            dirty = true;
+            requestFrame();
+        });
+    resize?.observe(host);
+    /** Whether the host is in or near the viewport. Offscreen, a live avatar only redraws after a change. */
+    let visible = true;
+    const intersect = typeof IntersectionObserver === 'undefined'
+        ? null
+        : new IntersectionObserver((entries) => {
+            const next = entries[entries.length - 1].isIntersecting;
+            if (next === visible)
+                return;
+            visible = next;
+            if (visible)
+                requestFrame();
+        }, { rootMargin: `${VIEW_MARGIN}px` });
+    intersect?.observe(host);
+    if (getComputedStyle(host).position === 'static')
+        host.style.position = 'relative';
+    const syncHost = () => {
+        host.style.color = opts.color ?? DEFAULT_COLOR;
+        host.style.setProperty('--avatar-ink', opts.eyeColor ?? DEFAULT_EYE_COLOR);
+        const decorative = opts.label === '';
+        if (decorative) {
+            host.removeAttribute('role');
+            host.removeAttribute('aria-label');
+            host.setAttribute('aria-hidden', 'true');
+        }
+        else {
+            host.setAttribute('role', 'img');
+            host.setAttribute('aria-label', opts.label ?? opts.definition?.name ?? 'Avatar');
+            host.removeAttribute('aria-hidden');
+        }
+        const wantsPointer = !!opts.followPointer && !opts.still;
+        if (wantsPointer && !releasePointer)
+            releasePointer = trackPointer();
+        else if (!wantsPointer && releasePointer) {
+            releasePointer();
+            releasePointer = null;
+        }
+    };
+    const clear = () => {
+        host.textContent = '';
+        scene = null;
+        surface = null;
+        lastStill = '';
+    };
+    /** Render options the chosen material asks for (soft's ramp and front-facing pose). */
+    const materialFrame = (p) => (typeof p.material === 'object' && p.material !== null ? p.material.frame : undefined);
+    /** Imported materials use a painted canvas even for stills. */
+    const canvasMaterial = () => typeof opts.material === 'object' && opts.material !== null && opts.renderer !== 'scene' && canvasSupported();
+    const paint = (p, options) => {
+        if (scene || lastStill)
+            clear();
+        const flat = liveFrame(p.definition, { ...options, color: p.color, eyeColor: p.eyeColor });
+        const key = `${geometryKey(p.definition)}|${p.depth}`;
+        if (!surface || surface.key !== key || !host.contains(surface.canvas))
+            surface = mountCanvas(host, key, p.definition, p.depth);
+        // Any CSS color works, as in the scene: one that is not hex is read back every frame from the
+        // host's computed `color` and --avatar-ink (which syncHost sets), so themes apply live.
+        const css = isHex(p.color) && isHex(p.eyeColor) ? null : getComputedStyle(host);
+        const fill = css && !isHex(p.color) ? css.color || flat.color : flat.color;
+        const ink = css && !isHex(p.eyeColor) ? css.getPropertyValue('--avatar-ink').trim() || flat.ink : flat.ink;
+        paintCanvas(surface, flat, size, fill, ink, p.material);
+    };
+    const draw = (time, pointer) => {
+        const p = opts;
+        const reducedMotion = p.reducedMotion === 'system' || p.reducedMotion === undefined ? prefersReducedMotion() : p.reducedMotion;
+        const now = performance.now();
+        // `mood: 'idle' | 'thinking'` are the states they were before `state` existed.
+        const look = resolveLook({ state: p.state, mood: p.mood, motion: p.mood });
+        try {
+            if (p.still) {
+                const options = {
+                    color: p.color,
+                    eyeColor: p.eyeColor,
+                    depth: p.depth,
+                    state: look.state,
+                    mood: look.mood,
+                    view: p.view,
+                    gaze: p.lookAt ?? undefined,
+                    reducedMotion: true,
+                    ...materialFrame(p),
+                };
+                if (canvasMaterial()) {
+                    // Nothing to paint until the host has a size; the resize that gives it one redraws.
+                    if (size > 0)
+                        paint(p, { ...options, size });
+                    failed = false;
+                    return false;
+                }
+                if (scene || surface)
+                    clear();
+                const svg = renderAvatarSvg(p.definition, options);
+                // The engine derives SVG ids from geometry, so repeated avatars can share them safely.
+                if (svg !== lastStill) {
+                    host.innerHTML = svg;
+                    lastStill = svg;
+                }
+                failed = false;
+                return false;
+            }
+            if (lastStill)
+                clear();
+            const target = p.lookAt
+                ? p.lookAt
+                : p.followPointer && pointer && rect && rect.width > 0
+                    ? pointerGaze(pointer, rect, eyesOrigin(p.definition))
+                    : null;
+            const step = animator.step({ now, state: look.state, mood: look.mood, target, hold: p.holdGaze, reducedMotion });
+            const options = {
+                depth: p.depth,
+                state: look.state,
+                mood: look.mood,
+                stateAge: step.stateAge,
+                motionBlend: step.motionBlend,
+                size: size || undefined,
+                time,
+                gaze: step.gaze,
+                view: p.view,
+                reducedMotion,
+                ...materialFrame(p),
+            };
+            if (p.renderer !== 'scene' && canvasSupported()) {
+                paint(p, options);
+                failed = false;
+                return !reducedMotion || step.moving;
+            }
+            if (surface)
+                clear();
+            const frame = sceneFrame(p.definition, { ...options, color: p.color });
+            if (!scene || scene.key !== frame.scene || scene.geometry !== geometryKey(p.definition) || !host.contains(scene.view)) {
+                scene = mountScene(host, p.definition, p.depth);
+            }
+            apply(scene, frame);
+            failed = false;
+            return !reducedMotion || step.moving;
+        }
+        catch (error) {
+            if (!failed) {
+                clear();
+                console.error('open-bot-avatar: render failed', error);
+                failed = true;
+            }
+            return false;
+        }
+    };
+    syncHost();
+    const unsubscribe = subscribeFrames({
+        measure: () => {
+            rect = visible && opts.followPointer && !opts.still && !opts.holdGaze && !opts.lookAt ? host.getBoundingClientRect() : null;
+        },
+        draw: (time, pointer) => {
+            // Stills, and live avatars out of view, only redraw after a change; live avatars in view every
+            // frame they ask for. A change still draws offscreen, so the content is current when printed.
+            if ((opts.still || !visible) && !dirty)
+                return false;
+            if (opts.still && size > 0 && canvasMaterial()) {
+                if (materialStillAt === time)
+                    return true;
+                materialStillAt = time;
+            }
+            dirty = false;
+            const more = draw(time, pointer);
+            if (!visible)
+                return false;
+            return more && size > 0 && size < SMALL_SIZE ? 1 / SMALL_FPS - FRAME_SLACK : more;
+        },
+    });
+    return {
+        update(next) {
+            opts = { ...opts, ...next };
+            syncHost();
+            dirty = true;
+            requestFrame();
+        },
+        destroy() {
+            unsubscribe();
+            resize?.disconnect();
+            intersect?.disconnect();
+            releasePointer?.();
+            releasePointer = null;
+            clear();
+        },
+    };
+}

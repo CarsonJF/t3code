@@ -516,6 +516,8 @@ const make = Effect.gen(function* () {
         (face.accessories ?? [])
           .map((accessory) => `${accessory.kind}:${accessory.color ?? ""}`)
           .join(","),
+        face.style ?? "",
+        JSON.stringify(face.openBot ?? null),
       ].join("|");
     const key = faceKey(avatar);
     const designs = [
