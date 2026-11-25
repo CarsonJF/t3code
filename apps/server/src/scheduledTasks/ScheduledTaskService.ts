@@ -55,6 +55,8 @@ import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as Metrics from "../observability/Metrics.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as UsageLimitFallback from "../orchestration-v2/UsageLimitFallback.ts";
+import * as ScheduledRunAlerts from "./ScheduledRunAlerts.ts";
 import { OrchestratorDispatchError } from "../orchestration-v2/Orchestrator.ts";
 import { userFacingDispatchErrorMessage } from "../orchestration-v2/UserFacingErrors.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
@@ -216,6 +218,9 @@ const decodeWorkspaceStrategyJson = Schema.decodeUnknownEffect(
   Schema.fromJsonString(ScheduledTask.fields.workspaceStrategy),
 );
 const decodeModelSelectionJson = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(ScheduledTask.fields.modelSelection),
+);
+const encodeModelSelectionJson = Schema.encodeEffect(
   Schema.fromJsonString(ScheduledTask.fields.modelSelection),
 );
 const HeadersJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));
@@ -509,6 +514,8 @@ export const layer = Layer.effect(
     const digest = yield* Digest.Digest;
     const mac = yield* Mac.Mac;
     const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
+    const fallback = yield* UsageLimitFallback.UsageLimitFallback;
+    const alerts = yield* ScheduledRunAlerts.ScheduledRunAlerts;
     const threadManagement = yield* ThreadManagementService.ThreadManagementService;
     const serviceScope = yield* Effect.scope;
     const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
@@ -838,6 +845,8 @@ export const layer = Layer.effect(
             next_run_at = ${input.nextRunAtIso},
             last_run_status = ${input.status},
             last_run_error = ${input.error},
+            enabled = CASE WHEN ${input.status} = 'failed' AND ${input.nextRunAtIso} IS NULL
+              AND json_extract(schedule_json, '$.type') = 'once' THEN 0 ELSE enabled END,
             run_count = run_count + 1
         WHERE task_id = ${input.id}
           AND last_run_status = 'running'
@@ -864,11 +873,14 @@ export const layer = Layer.effect(
         const reread = yield* Effect.result(findTask(task.id));
         if (Result.isSuccess(reread) && reread.success === null) return;
         const source = Result.isSuccess(reread) && reread.success !== null ? reread.success : task;
+        const next = nextRunAfterRun({ ...source, lastRunAt: startedAtIso }, now);
         yield* sql`
           UPDATE scheduled_tasks
           SET last_run_status = 'failed',
               last_run_error = ${message},
-              next_run_at = ${nextRunAfterRun({ ...source, lastRunAt: startedAtIso }, now)},
+              next_run_at = ${next},
+              enabled = CASE WHEN ${next} IS NULL
+                AND json_extract(schedule_json, '$.type') = 'once' THEN 0 ELSE enabled END,
               updated_at = ${iso(now)},
               run_count = run_count + CASE WHEN EXISTS (
                 SELECT 1 FROM scheduled_task_webhook_pending
@@ -934,40 +946,22 @@ export const layer = Layer.effect(
       ),
     );
 
-    // A dispatch is recorded once the message is accepted; the provider can still
-    // reject the turn after that, so follow the run and record its failure. A one-time
-    // task whose turn completed at or after its runAt is spent, so it is removed; its
-    // thread stays. A paused task always has a NULL next_run_at, so that alone proves nothing.
-    const recordRunOutcome = Effect.fn("ScheduledTaskService.recordRunOutcome")(function* (
-      taskId: ScheduledTaskId,
-      startedAtIso: string,
-      threadId: ThreadId,
+    // Waits for the run a message started. Null when it never became this occurrence's own run.
+    const awaitRunOutcome = Effect.fnUntraced(function* (
+      thread: { readonly projectId: ProjectId; readonly threadId: ThreadId },
       messageId: MessageId,
     ) {
-      const shell = yield* threadManagement.getThreadShell(threadId);
-      if (shell === null) return;
-      const thread = { projectId: shell.projectId, threadId };
       const { runs } = yield* threadManagement.getProjectThreadRecords(thread, ["runs"]);
       const dispatched = runs.find((run) => run.userMessageId === messageId);
-      if (dispatched === undefined) return;
+      if (dispatched === undefined) return null;
       const { run } = yield* threadManagement.waitForThread({
         ...thread,
         runId: dispatched.id,
         timeoutMs: RUN_OUTCOME_WAIT_MS,
       });
-      if (run === null || !ThreadManagementService.isTerminalRunStatus(run.status)) return;
-      if (run.status === "completed") {
-        const removed = yield* sql`
-          DELETE FROM scheduled_tasks
-          WHERE task_id = ${taskId} AND last_run_at = ${startedAtIso}
-            AND last_run_status = 'succeeded' AND next_run_at IS NULL
-            AND json_extract(schedule_json, '$.type') = 'once'
-            AND julianday(last_run_at) >= julianday(json_extract(schedule_json, '$.runAt'))
-          RETURNING task_id
-        `;
-        if (removed.length > 0) yield* notifyChanged;
-        return;
-      }
+      if (run === null || !ThreadManagementService.isTerminalRunStatus(run.status)) return null;
+      const terminal = { ...run, status: run.status };
+      if (run.status === "completed") return { run: terminal, failure: null };
       // Only the run's failed errors feed latestRootProviderFailure; a long-lived task
       // thread holds tens of thousands of items.
       const { turnItems, messages } = yield* threadManagement.getProjectThreadRecords(
@@ -985,18 +979,85 @@ export const layer = Layer.effect(
         run.status === "cancelled" &&
         messages.find((message) => message.id === messageId)?.runId !== run.id
       )
+        return null;
+      return { run: terminal, failure: latestRootProviderFailure(run, turnItems) };
+    });
+
+    // The provider can still reject an accepted dispatch, so follow the run. A usage limit gets
+    // one fallback retry, whose outcome stands for the occurrence. A spent one-time task is
+    // removed on success and turned off on failure. A paused task also has a NULL next_run_at.
+    const recordRunOutcome = Effect.fn("ScheduledTaskService.recordRunOutcome")(function* (
+      task: ScheduledTask,
+      startedAtIso: string,
+      threadId: ThreadId,
+      messageId: MessageId,
+    ) {
+      const taskId = task.id;
+      const shell = yield* threadManagement.getThreadShell(threadId);
+      if (shell === null) return;
+      const thread = { projectId: shell.projectId, threadId };
+      let outcome = yield* awaitRunOutcome(thread, messageId);
+      if (outcome === null) return;
+      if (outcome.run.status === "failed" && outcome.failure?.class === "usage_limit") {
+        const retried = yield* fallback.retry({
+          threadId,
+          runId: outcome.run.id,
+          totId: task.createdByTotId ?? null,
+        });
+        if (retried !== null)
+          outcome = (yield* awaitRunOutcome(thread, retried.messageId)) ?? outcome;
+      }
+      // A bound run uses its thread's model, not the stored one, so keep the stored one true.
+      if (scheduledTaskThreadMode(task) !== "new_thread") {
+        yield* Effect.gen(function* () {
+          const current = yield* threadManagement.getThreadShell(threadId);
+          if (current === null) return;
+          const json = yield* encodeModelSelectionJson(current.modelSelection);
+          yield* sql`
+            UPDATE scheduled_tasks SET model_selection_json = ${json}
+            WHERE task_id = ${taskId} AND thread_id = ${threadId}
+              AND model_selection_json IS NOT ${json}
+          `;
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Could not refresh a bound task's model", { taskId, cause }),
+          ),
+        );
+      }
+      const { run, failure } = outcome;
+      if (run.status === "completed") {
+        yield* sql`
+          DELETE FROM scheduled_tasks
+          WHERE task_id = ${taskId} AND last_run_at = ${startedAtIso}
+            AND last_run_status = 'succeeded' AND next_run_at IS NULL
+            AND json_extract(schedule_json, '$.type') = 'once'
+            AND julianday(last_run_at) >= julianday(json_extract(schedule_json, '$.runAt'))
+        `;
+        yield* notifyChanged;
         return;
-      const error =
-        latestRootProviderFailure(run, turnItems)?.message ?? UNSUCCESSFUL_RUN_ERRORS[run.status];
+      }
+      const error = failure?.message ?? UNSUCCESSFUL_RUN_ERRORS[run.status];
       const updated = yield* sql`
         UPDATE scheduled_tasks
-        SET last_run_status = 'failed', last_run_error = ${error}
+        SET last_run_status = 'failed', last_run_error = ${error},
+            enabled = CASE WHEN next_run_at IS NULL
+              AND json_extract(schedule_json, '$.type') = 'once' THEN 0 ELSE enabled END
         WHERE task_id = ${taskId} AND last_run_at = ${startedAtIso}
           AND (last_run_status = 'succeeded'
             OR (last_run_status = 'failed' AND last_run_error = ${HELD_OCCURRENCE_ERROR}))
         RETURNING task_id
       `;
-      if (updated.length > 0) yield* notifyChanged;
+      yield* notifyChanged;
+      if (updated.length === 0) return;
+      yield* alerts.notifyFailure({
+        taskId,
+        title: task.title,
+        ownerTotId: task.createdByTotId ?? null,
+        startedAtIso,
+        errorClass: failure?.class ?? run.status,
+        failedAtIso: iso(yield* localNow),
+        threadId,
+      });
     });
 
     const runTask = Effect.fn("ScheduledTaskService.runTask")(function* (
@@ -1198,15 +1259,23 @@ export const layer = Layer.effect(
           const [row] = yield* getRows(task.id);
           const current = row === undefined ? null : yield* decodeRow(row, origin);
           const scheduleSource = current ?? task;
-          const completed: ScheduledTask = {
-            ...scheduleSource,
-            updatedAt: iso(completedAt),
-            lastRunAt: startedAtIso,
             // A manual run that starts before a one-time run must not use it up.
-            nextRunAt: nextRunAt(
+          const next = nextRunAt(
               scheduleSource,
               scheduleSource.schedule.type === "once" ? startedAt : completedAt,
+          );
+          const completed: ScheduledTask = {
+            ...scheduleSource,
+            enabled:
+              scheduleSource.enabled &&
+              !(
+                lastRunStatus === "failed" &&
+                next === null &&
+                scheduleSource.schedule.type === "once"
             ),
+            updatedAt: iso(completedAt),
+            lastRunAt: startedAtIso,
+            nextRunAt: next,
             lastRunStatus,
             lastRunError,
             runCount: scheduleSource.runCount + 1,
@@ -1254,8 +1323,19 @@ export const layer = Layer.effect(
             ),
           );
         if (written) yield* notifyChanged;
+        if (written && !runSucceeded) {
+          yield* alerts.notifyFailure({
+            taskId: active.id,
+            title: active.title,
+            ownerTotId: active.createdByTotId ?? null,
+            startedAtIso,
+            errorClass: "dispatch_failed",
+            failedAtIso: iso(completedAt),
+            threadId: null,
+          });
+        }
         if (written && threadId !== null) {
-          yield* recordRunOutcome(active.id, startedAtIso, threadId, messageId).pipe(
+          yield* recordRunOutcome(active, startedAtIso, threadId, messageId).pipe(
             Effect.catchCause((cause) =>
               Effect.logWarning("Could not record scheduled run outcome", {
                 taskId: active.id,
@@ -1403,11 +1483,14 @@ export const layer = Layer.effect(
           Effect.gen(function* () {
             const decoded = yield* Effect.result(decodeRow(row));
             if (Result.isSuccess(decoded)) {
+              const next = nextRunAfterRun(decoded.success, now);
               yield* sql`
                 UPDATE scheduled_tasks
                 SET last_run_status = 'failed',
                     last_run_error = 'Run was interrupted by a server restart.',
-                    next_run_at = ${nextRunAfterRun(decoded.success, now)},
+                    next_run_at = ${next},
+                    enabled = CASE WHEN ${next} IS NULL
+                      AND json_extract(schedule_json, '$.type') = 'once' THEN 0 ELSE enabled END,
                     updated_at = ${iso(now)},
                     run_count = run_count + CASE WHEN EXISTS (
                       SELECT 1 FROM scheduled_task_webhook_pending
@@ -1488,6 +1571,7 @@ export const layer = Layer.effect(
         if (thread.projectId !== projectId) {
           return yield* taskError("That thread belongs to a different project.", { taskId });
         }
+        return thread;
       },
     );
 
@@ -1531,9 +1615,14 @@ export const layer = Layer.effect(
         keptThreadId === existingTask.threadId;
       const threadId = threadMode === "new_thread" || movedOffThread ? null : keptThreadId;
       // An unchanged destination is not rechecked, so a task on an archived thread stays editable.
-      if (threadId !== null && threadId !== existingTask?.threadId) {
-        yield* requireDestinationThread(threadId, input.projectId, id);
-      }
+      // A bound run uses its thread's model, so a new binding stores that one rather than a
+      // selection it ignores; each run refreshes it after that.
+      const boundModel =
+        threadId !== null && threadId !== existingTask?.threadId
+          ? (yield* requireDestinationThread(threadId, input.projectId, id)).modelSelection
+          : threadId !== null
+            ? existingTask?.modelSelection
+            : undefined;
       // Refused on save rather than at run time; a disabled task can still be saved, so one
       // stored above the ceiling can be turned off before its mode is lowered. A task bound to a
       // thread runs in that thread's mode, which the orchestrator checks instead. Checked before
@@ -1686,7 +1775,7 @@ export const layer = Layer.effect(
         threadId,
         threadMode,
         workspaceStrategy,
-        modelSelection: input.modelSelection,
+        modelSelection: boundModel ?? input.modelSelection,
         runtimeMode: input.runtimeMode,
         interactionMode: input.interactionMode,
         createdBy: existingTask?.createdBy ?? input.createdBy ?? "user",
