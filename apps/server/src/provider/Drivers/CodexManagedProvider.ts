@@ -291,6 +291,8 @@ export const makeManagedCodexProvider = Effect.fn("makeManagedCodexProvider")(fu
         "generateTranscriptionPostProcessing",
         nativeGeneration.generateTranscriptionPostProcessing(value),
       ),
+    generateAvatarFigure: (value) =>
+      protect("generateAvatarFigure", nativeGeneration.generateAvatarFigure(value)),
   };
   return {
     instanceId,

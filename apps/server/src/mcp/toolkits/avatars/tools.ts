@@ -18,11 +18,12 @@ const LibraryEntry = Schema.Struct({ id: Schema.String, name: Schema.String });
 
 export const AvatarLibraryTool = Tool.make("t3_avatar_library", {
   description:
-    "How to make new open-bot figures (SVG outline + eyes) and face themes (named faces), shared by every Tot here. save_* upserts by id and returns a PNG; preview returns one too. Check it and save again until it reads small. list shows library items; apply puts a theme on a Tot.",
+    "Open-bot figures (SVG outline + eyes) and face themes (named faces), shared by every Tot here. To make a figure: get design_prompt, follow it exactly, then save_figure and check the PNG it returns. save_* upserts by id; preview returns a PNG too. list shows library items; apply puts a theme on a Tot.",
   parameters: Schema.Struct({
     environmentId: OrchestratorMcpEnvironmentTarget,
     action: Schema.Literals([
       "list",
+      "design_prompt",
       "save_figure",
       "save_theme",
       "delete",
@@ -53,6 +54,7 @@ export const AvatarLibraryTool = Tool.make("t3_avatar_library", {
     figures: Schema.optional(Schema.Array(LibraryEntry)),
     themes: Schema.optional(Schema.Array(LibraryEntry)),
     path: Schema.optional(Schema.String),
+    prompt: Schema.optional(Schema.String),
     note: Schema.optional(Schema.String),
     screenshot: Schema.optional(
       Schema.Struct({

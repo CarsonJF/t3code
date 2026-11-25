@@ -206,6 +206,7 @@ import * as ManagedProviders from "./policy/managedProviders.ts";
 import * as ServerSettings from "./serverSettings.ts";
 import { invalidateSettingsSecrets } from "./sourceControl/sourceControlHostSecrets.ts";
 import * as GroupChatService from "./tots/GroupChatService.ts";
+import * as AvatarFigureDesigner from "./tots/AvatarFigureDesigner.ts";
 import * as TotService from "./tots/TotService.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
@@ -748,6 +749,8 @@ const SPLIT_WS_RPC_PREFIXES = [
   "issueTrackers",
   "provider",
   "orchestration",
+  "tots",
+  "groupChats",
 ] as const;
 type SplitWsRpc = Extract<
   ServerWsRpc,
@@ -1599,6 +1602,7 @@ export const layerWsRpc = (
       const peerThreadRelay = yield* PeerThreadRelay.PeerThreadRelay;
       const peerClientPairing = yield* PeerClientPairing.PeerClientPairing;
       const tots = yield* TotService.TotService;
+      const avatarDesigner = yield* AvatarFigureDesigner.AvatarFigureDesigner;
       const groupChats = yield* GroupChatService.GroupChatService;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
@@ -2885,6 +2889,11 @@ export const layerWsRpc = (
         [WS_METHODS.totsStartFresh]: (input) => tots.startFresh(input.id),
         [WS_METHODS.totsReadMemory]: (input) => tots.readMemory(input.id),
         [WS_METHODS.totsAvatarLibrary]: () => tots.avatarLibrary,
+        [WS_METHODS.totsAvatarLibrarySave]: (input) => tots.saveLibraryItem(input),
+        [WS_METHODS.totsAvatarLibraryRemove]: (input) =>
+          tots.removeLibraryItem(input.kind, input.id).pipe(Effect.andThen(tots.avatarLibrary)),
+        [WS_METHODS.totsDescribeAvatarFigure]: (input) =>
+          avatarDesigner.describe(input.description),
         [WS_METHODS.totsDesignAvatar]: (input) => tots.askForAvatar(input.id, input.prompt),
         [WS_METHODS.groupChatsCreate]: (input) => groupChats.create(input),
         [WS_METHODS.groupChatsUpdate]: (input) => groupChats.update(input),
@@ -3833,6 +3842,7 @@ export const layer = Layer.unwrap(
     const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
     const npmRelease = yield* NpmRelease.NpmRelease;
     const totService = yield* TotService.TotService;
+    const avatarDesigner = yield* AvatarFigureDesigner.AvatarFigureDesigner;
     const groupChatService = yield* GroupChatService.GroupChatService;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const issues = yield* IssueService.IssueService;
@@ -3933,7 +3943,12 @@ export const layer = Layer.unwrap(
               ),
               Layer.provide(Layer.succeed(NpmRelease.NpmRelease, npmRelease)),
               Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
-              Layer.provide(Layer.succeed(TotService.TotService, totService)),
+              Layer.provide(
+                Layer.mergeAll(
+                  Layer.succeed(TotService.TotService, totService),
+                  Layer.succeed(AvatarFigureDesigner.AvatarFigureDesigner, avatarDesigner),
+                ),
+              ),
               Layer.provide(Layer.succeed(GroupChatService.GroupChatService, groupChatService)),
               // Share server-lifetime PR caches so WS mutations invalidate every client's HTTP diffs.
               Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),

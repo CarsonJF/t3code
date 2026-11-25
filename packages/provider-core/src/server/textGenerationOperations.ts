@@ -21,6 +21,20 @@ import {
 
 export const TranscriptionPostProcessingOutput = Schema.Struct({ transcription: Schema.String });
 
+/** Loose on purpose: structured-output APIs reject range checks, and the caller validates. */
+export const AvatarFigureOutput = Schema.Struct({
+  version: Schema.Number,
+  id: Schema.String,
+  name: Schema.String,
+  body: Schema.Struct({ path: Schema.String }),
+  eyes: Schema.Struct({
+    x: Schema.Number,
+    y: Schema.Number,
+    spacing: Schema.Number,
+    scale: Schema.Number,
+  }),
+});
+
 export type Operation = keyof ProviderTextGeneration;
 
 export interface Request<S extends Schema.Top> {
@@ -189,6 +203,18 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
       });
     });
 
+  const generateAvatarFigure: ProviderTextGeneration["generateAvatarFigure"] = Effect.fn(
+    `${name}.generateAvatarFigure`,
+  )(function* (input) {
+    return yield* run({
+      operation: "generateAvatarFigure",
+      cwd: input.cwd,
+      prompt: input.prompt,
+      outputSchema: AvatarFigureOutput,
+      modelSelection: input.modelSelection,
+    });
+  });
+
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = Effect.fn(
     `${name}.generateReviewGuide`,
   )(function* (input) {
@@ -208,5 +234,6 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     generateThreadTitle,
     generateReviewGuide,
     generateTranscriptionPostProcessing,
+    generateAvatarFigure,
   } satisfies ProviderTextGeneration;
 }

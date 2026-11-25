@@ -1,6 +1,7 @@
 import {
   type AvatarFigure,
   type AvatarLibrary,
+  type AvatarLibraryExport,
   type AvatarLibraryKind,
   type AvatarTheme,
   CommandId,
@@ -108,6 +109,8 @@ export class TotService extends Context.Service<
     /** Validates and saves a figure, replacing one with the same id. */
     readonly saveFigure: (figure: AvatarFigure) => Effect.Effect<AvatarFigure, TotError>;
     readonly saveTheme: (theme: AvatarTheme) => Effect.Effect<AvatarTheme, TotError>;
+    /** Saves an export file's item, replacing one with the same id, and reads the library again. */
+    readonly saveLibraryItem: (item: AvatarLibraryExport) => Effect.Effect<AvatarLibrary, TotError>;
     readonly removeLibraryItem: (
       kind: AvatarLibraryKind,
       id: string,
@@ -728,6 +731,18 @@ const make = Effect.gen(function* () {
         Effect.mapError(libraryFailure("The theme could not be saved.")),
       ),
     ),
+    saveLibraryItem: Effect.fn("TotService.saveLibraryItem")(function* (item: AvatarLibraryExport) {
+      if (item.kind === "figure") {
+        yield* withFiles(saveAvatarFigure(item.figure)).pipe(
+          Effect.mapError(libraryFailure("The figure could not be saved.")),
+        );
+      } else {
+        yield* withFiles(saveAvatarTheme(item.theme)).pipe(
+          Effect.mapError(libraryFailure("The theme could not be saved.")),
+        );
+      }
+      return yield* avatarLibrary;
+    }),
     removeLibraryItem: Effect.fn("TotService.removeLibraryItem")(
       (kind: AvatarLibraryKind, id: string) =>
         withFiles(removeAvatarLibraryItem(kind, id)).pipe(
