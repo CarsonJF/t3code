@@ -26,6 +26,7 @@ import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textG
 import {
   generatedThreadTitle,
   investigationUnsupported,
+  AvatarFigureOutput,
   TranscriptionPostProcessingOutput,
 } from "@t3tools/provider-core/server/textGenerationOperations";
 import {
@@ -392,6 +393,16 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
         modelSelection: input.modelSelection,
       });
     });
+  const generateAvatarFigure: ProviderTextGeneration["generateAvatarFigure"] = Effect.fn(
+    "MuseTextGeneration.generateAvatarFigure",
+  )(function* (input) {
+    return yield* runMuseJson({
+      operation: "generateAvatarFigure",
+      prompt: input.prompt,
+      outputSchema: AvatarFigureOutput,
+      modelSelection: input.modelSelection,
+    });
+  });
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = () =>
     Effect.fail(investigationUnsupported("generateReviewGuide", "Muse Code"));
   return {
@@ -401,5 +412,6 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
     generateThreadTitle,
     generateReviewGuide,
     generateTranscriptionPostProcessing,
+    generateAvatarFigure,
   } satisfies ProviderTextGeneration;
 });

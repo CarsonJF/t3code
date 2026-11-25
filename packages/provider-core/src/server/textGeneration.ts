@@ -118,7 +118,32 @@ export interface TranscriptionPostProcessingResult {
   transcription: string;
 }
 
+/** A figure as the model wrote it; the caller validates it before anyone sees it. */
+export interface AvatarFigureDraft {
+  readonly version: number;
+  readonly id: string;
+  readonly name: string;
+  readonly body: { readonly path: string };
+  readonly eyes: {
+    readonly x: number;
+    readonly y: number;
+    readonly spacing: number;
+    readonly scale: number;
+  };
+}
+
+/** A whole prompt (the open-bot design prompt plus a description) answered with one figure. */
+export interface AvatarFigureGenerationInput {
+  cwd: string;
+  prompt: string;
+  modelSelection: ModelSelection;
+}
+
 export interface ProviderTextGeneration {
+  readonly generateAvatarFigure: (
+    input: AvatarFigureGenerationInput,
+  ) => Effect.Effect<AvatarFigureDraft, TextGenerationError>;
+
   readonly generateTranscriptionPostProcessing: (
     input: TranscriptionPostProcessingInput,
   ) => Effect.Effect<TranscriptionPostProcessingResult, TextGenerationError>;
