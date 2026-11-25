@@ -262,3 +262,28 @@ it.effect("a run replaces a bound task's stale stored model with the one its thr
     }).pipe(Effect.provide(layer));
   }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );
+
+it.effect("a bound task that pins its model keeps that model across saves and runs", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(Date.parse("2026-11-01T07:00:00.000Z"));
+    const { layer, settled } = yield* harness({
+      first: "failed",
+      retry: null,
+      threadModel: flash,
+    });
+    yield* Effect.gen(function* () {
+      const service = yield* ScheduledTaskService.ScheduledTaskService;
+      const { task } = yield* service.upsert({
+        ...onceTask,
+        schedule: { type: "interval", everyMs: 60 * 60 * 1_000 },
+        modelPinned: true,
+      });
+      assert.deepEqual(task.modelSelection, glm);
+      yield* service.runNow({ id: task.id });
+      // The failure notice is sent after the bound-model refresh would have run.
+      yield* Deferred.await(settled);
+      const stored = (yield* service.list()).tasks.find((entry) => entry.id === task.id);
+      assert.deepEqual(stored?.modelSelection, glm);
+    }).pipe(Effect.provide(layer));
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
+);

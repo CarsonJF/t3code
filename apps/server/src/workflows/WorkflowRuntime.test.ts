@@ -18,8 +18,8 @@ import * as TestClock from "effect/testing/TestClock";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import WorkflowsMigration from "../persistence/Migrations/111_Workflows.ts";
-import WorkflowSkippedRunsMigration from "../persistence/Migrations/114_WorkflowSkippedRuns.ts";
-import WorkflowRunTagsMigration from "../persistence/Migrations/116_WorkflowRunTags.ts";
+import WorkflowSkippedRunsMigration from "../persistence/Migrations/115_WorkflowSkippedRuns.ts";
+import WorkflowRunTagsMigration from "../persistence/Migrations/117_WorkflowRunTags.ts";
 import { type AgentResult, WorkflowAgents } from "./WorkflowAgents.ts";
 import * as WorkflowEngine from "./WorkflowEngine.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
