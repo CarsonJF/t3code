@@ -2087,6 +2087,10 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
+    readAvatarLibrary: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:avatar-library",
+      tag: WS_METHODS.totsAvatarLibrary,
+    }),
     writeTotMemory: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:tots:write-memory",
       tag: WS_METHODS.totsWriteMemory,
