@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import type { DatabaseMigrationProgress } from "./server.ts";
 import type { PreviewCaptureFailureEncoded } from "./previewCapture.ts";
+import type { TouchBarState } from "./touchBar.ts";
 
 import { SnapShotSource } from "./chatAttachment.ts";
 import { EnvironmentId, PortSchema, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -1118,6 +1119,8 @@ export interface DesktopBridge {
   getClientPlatform: () => string;
   restartAudioService?: () => Promise<boolean>;
   setNotificationBadge: (badge: { count: number; image: string | null }) => Promise<void>;
+  /** Draws the usage strip on a Mac's Touch Bar; a no-op elsewhere. Absent on older desktop builds. */
+  setTouchBarState?: (state: TouchBarState) => Promise<void>;
   onNotificationBadgeClear: (listener: () => void) => () => void;
   onTrackpadScrollBegin: (listener: () => void) => () => void;
   onTrackpadScrollEnd: (listener: () => void) => () => void;
