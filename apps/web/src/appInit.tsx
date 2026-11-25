@@ -68,6 +68,7 @@ import { installCommandPaletteCommands } from "./shortcuts/commandPaletteCommand
 import { registerOpenFavoriteEditorCommand } from "./components/chat/OpenInPickerShortcut";
 import { environmentThreadShells, threadEnvironment } from "./state/threads";
 import { startThreadGroupsMigration } from "./threadGroupsStore";
+import { startTouchBarSync } from "./touchBar/touchBarSync";
 import { resolveActiveThreadRouteRef, resolveThreadRouteTarget } from "./threadRoutes";
 
 /** Writes appearance settings onto the document, touching only the groups that changed. */
@@ -323,6 +324,7 @@ export function startAppServices(): AppRouter {
   startThreadNotifications(appAtomRegistry, router);
   startGuideRunNotifications(appAtomRegistry, router);
   if (isElectron) startDesktopUpdateLaunchNotice();
+  if (isElectron) startTouchBarSync(router);
 
   return router;
 }

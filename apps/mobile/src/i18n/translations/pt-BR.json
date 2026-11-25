@@ -5707,5 +5707,17 @@
   "99451a5d2d40440f": "Retirada por {by}.",
   "3ee30a50b70fffab": "Retirada por {by}: {reason}",
   "201490988858b511": "retirada por {by}",
-  "46d614fa7b4bf1e5": "Execuções de workflow"
+  "46d614fa7b4bf1e5": "Execuções de workflow",
+  "bf46f2af2d5cc173": "{count, plural, one {Checked thread groups {count} time} other {Checked thread groups {count} times}}",
+  "b237c0cbf553bd58": "{count, plural, one {Tried to check thread groups {count} time} other {Tried to check thread groups {count} times}}",
+  "181021e1c877777a": "{count, plural, one {Updated thread groups {count} time} other {Updated thread groups {count} times}}",
+  "2d6c8f24c6b2262d": "{count, plural, one {Tried to update thread groups {count} time} other {Tried to update thread groups {count} times}}",
+  "6fb4edd760679da7": "S",
+  "4ce03694e870b0de": "W",
+  "a7a5e6d4db8f4e6d": "M",
+  "8810d0d4f6034375": "Running",
+  "c89f9a3e9e89efc0": "Idle",
+  "267bd2982a153996": "Deleted group",
+  "f68ebd9661469c87": "Tell it what you want done. It starts, watches and answers the threads in its scope for you.",
+  "c900815e1a139742": "Tots"
 }
