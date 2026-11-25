@@ -455,19 +455,17 @@ function FigurePicker(props: {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const current = props.figures.find((entry) => entry.figure.id === props.selected)?.figure;
+  const close = () => {
+    setOpen(false);
+    setQuery("");
+  };
   const needle = query.trim().toLowerCase();
   const shown = props.figures.filter(
     ({ figure }) =>
       needle === "" || figure.name.toLowerCase().includes(needle) || figure.id.includes(needle),
   );
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) setQuery("");
-      }}
-    >
+    <Popover open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <PopoverTrigger
         render={
           <Button
@@ -493,7 +491,7 @@ function FigurePicker(props: {
           onKeyDown={(event) => {
             if (event.key === "Enter" && shown[0] !== undefined) {
               props.onPick(shown[0].figure.id);
-              setOpen(false);
+              close();
             }
           }}
         />
@@ -515,7 +513,7 @@ function FigurePicker(props: {
                 className="flex items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm hover:bg-accent aria-selected:bg-muted"
                 onClick={() => {
                   props.onPick(figure.id);
-                  setOpen(false);
+                  close();
                 }}
               >
                 <TotFace

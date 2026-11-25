@@ -162,6 +162,12 @@ describe("TotFaceEditor library", () => {
     });
     await expect.element(screen.getByRole("button", { name: "Figure: Lighthouse" })).toBeVisible();
 
+    // Reopening starts from the whole list, not the last search.
+    await userEvent.click(screen.getByRole("button", { name: "Figure: Lighthouse" }));
+    await expect.element(screen.getByRole("textbox", { name: "Search figures" })).toHaveValue("");
+    await expect.element(screen.getByRole("option", { name: "Figure Mug" })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+
     await userEvent.click(screen.getByRole("button", { name: "Manage shapes…" }));
     expect(onManageShapes).toHaveBeenCalledOnce();
 
