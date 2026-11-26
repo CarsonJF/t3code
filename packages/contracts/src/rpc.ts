@@ -513,6 +513,15 @@ import {
   AvatarLibraryExport,
   AvatarLibraryRemoveInput,
 } from "./avatarLibrary.ts";
+import {
+  NeedsYouError,
+  NeedsYouHideInput,
+  NeedsYouInbox,
+  NeedsYouItemRef,
+  NeedsYouListInput,
+  NeedsYouRespondInput,
+  NeedsYouSuggestResult,
+} from "./needsYou.ts";
 import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
@@ -653,6 +662,11 @@ export const WS_METHODS = {
   totsAvatarLibraryRemove: "tots.avatarLibraryRemove",
   totsDescribeAvatarFigure: "tots.describeAvatarFigure",
   totsDesignAvatar: "tots.designAvatar",
+  needsYouSubscribe: "needsYou.subscribe",
+  needsYouHide: "needsYou.hide",
+  needsYouRestore: "needsYou.restore",
+  needsYouSuggest: "needsYou.suggest",
+  needsYouRespond: "needsYou.respond",
   groupChatsCreate: "groupChats.create",
   groupChatsUpdate: "groupChats.update",
   groupChatsRemove: "groupChats.remove",
@@ -1125,6 +1139,31 @@ const WsGroupChatsRemoveRpc = Rpc.make(WS_METHODS.groupChatsRemove, {
 const WsTotsDesignAvatarRpc = Rpc.make(WS_METHODS.totsDesignAvatar, {
   payload: TotDesignAvatarInput,
   error: totError,
+});
+const needsYouError = Schema.Union([NeedsYouError, EnvironmentAuthorizationError]);
+/** The whole inbox, hidden items included, again whenever it changes. */
+const WsNeedsYouSubscribeRpc = Rpc.make(WS_METHODS.needsYouSubscribe, {
+  payload: NeedsYouListInput,
+  success: NeedsYouInbox,
+  error: needsYouError,
+  stream: true,
+});
+const WsNeedsYouHideRpc = Rpc.make(WS_METHODS.needsYouHide, {
+  payload: NeedsYouHideInput,
+  error: needsYouError,
+});
+const WsNeedsYouRestoreRpc = Rpc.make(WS_METHODS.needsYouRestore, {
+  payload: NeedsYouItemRef,
+  error: needsYouError,
+});
+const WsNeedsYouSuggestRpc = Rpc.make(WS_METHODS.needsYouSuggest, {
+  payload: NeedsYouItemRef,
+  success: NeedsYouSuggestResult,
+  error: needsYouError,
+});
+const WsNeedsYouRespondRpc = Rpc.make(WS_METHODS.needsYouRespond, {
+  payload: NeedsYouRespondInput,
+  error: needsYouError,
 });
 const WsTotsReadMemoryRpc = Rpc.make(WS_METHODS.totsReadMemory, {
   payload: TotMemoryReadInput,
@@ -2676,6 +2715,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsTotsAvatarLibraryRemoveRpc,
   WsTotsDescribeAvatarFigureRpc,
   WsTotsDesignAvatarRpc,
+  WsNeedsYouSubscribeRpc,
+  WsNeedsYouHideRpc,
+  WsNeedsYouRestoreRpc,
+  WsNeedsYouSuggestRpc,
+  WsNeedsYouRespondRpc,
   WsGroupChatsCreateRpc,
   WsGroupChatsUpdateRpc,
   WsGroupChatsRemoveRpc,

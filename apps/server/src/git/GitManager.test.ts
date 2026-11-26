@@ -334,6 +334,7 @@ function createTextGeneration(
       Effect.succeed({ transcription: "processed transcript" }),
     generateAvatarFigure: () => Effect.die("unused"),
     generateMemoryTidy: () => Effect.die("unused"),
+    generateReplySuggestions: () => Effect.die("unused"),
     ...overrides,
   };
 
@@ -387,6 +388,7 @@ function createTextGeneration(
       implementation.generateTranscriptionPostProcessing(input),
     generateAvatarFigure: (input) => implementation.generateAvatarFigure(input),
     generateMemoryTidy: (input) => implementation.generateMemoryTidy(input),
+    generateReplySuggestions: (input) => implementation.generateReplySuggestions(input),
   };
 }
 

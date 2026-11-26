@@ -5,6 +5,7 @@ import {
   type Tot,
   type TotThemePatch,
 } from "@t3tools/contracts";
+import { formatThreadLink } from "@t3tools/shared/threadLinks";
 import { totThemeProblem } from "@t3tools/shared/totTheme";
 import { findTotTemplate } from "@t3tools/shared/totTemplates";
 import * as Effect from "effect/Effect";
@@ -14,6 +15,7 @@ import * as ThreadManagementService from "../../../orchestration-v2/ThreadManage
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as ScheduledTaskService from "../../../scheduledTasks/ScheduledTaskService.ts";
 import { defaultWebhookWakePrompt } from "../../../scheduledTasks/webhookListener.ts";
+import * as NeedsYou from "../../../needsYou/NeedsYou.ts";
 import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -392,6 +394,42 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
         ),
       );
       return { ok: true as const };
+    }),
+  ),
+  t3_needs_you: McpToolAccess.reads((input) =>
+    Effect.gen(function* () {
+      yield* readCaller();
+      const scope = yield* McpInvocationContext.McpInvocationContext;
+      const inbox = yield* (yield* NeedsYou.NeedsYou)
+        .list({
+          linked: input.linked !== false,
+          includeHidden: input.includeHidden === true,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message }),
+          ),
+        );
+      return {
+        environments: inbox.environments.map((entry) => ({
+          ...entry,
+          items: entry.items.map((item) =>
+            item.threadId === null
+              ? item
+              : {
+                  ...item,
+                  link:
+                    entry.environmentId === scope.environmentId
+                      ? McpInvocationContext.threadLinkFor(scope, item.threadId, item.title)
+                      : formatThreadLink(
+                          { environmentId: entry.environmentId, threadId: item.threadId },
+                          item.title,
+                        ),
+                },
+          ),
+        })),
+      };
     }),
   ),
 });

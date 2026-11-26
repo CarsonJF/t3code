@@ -81,6 +81,16 @@ Turn on **Tot toasts** in Appearance settings to get a toast when a Tot replies,
 
 A Tot's replies are drawn in its color, with its face and name beside them.
 
+## Needs you
+
+The **Needs you** button (the inbox icon at the bottom of the sidebar) collects everything waiting on you, from every Tot and every linked machine: approvals, questions, runs that failed or stopped since you last opened their thread, and failed scheduled runs. A count on the button shows how many.
+
+Items are grouped by machine and by Tot. Approve or decline, pick an option or type an answer, or open the thread. Answers go through the same path as the thread itself. When a question has no options, a few **Suggested** replies appear as chips; they only fill in the answer, and nothing is sent until you press **Send answer**. Suggestions use the text generation model, or the `replySuggestionModelSelection` setting when it is set.
+
+**Snooze** hides an item for a while; **Dismiss** hides it until it goes away. Both are listed under **Snoozed and dismissed**, where **Bring back** shows them again. Approvals on a linked machine this app is not connected to open there instead.
+
+Tots can read the same list with `t3_needs_you`.
+
 ## Webhook listeners
 
 Ask a Tot to listen for something outside events, such as a doorbell, a CI job or a

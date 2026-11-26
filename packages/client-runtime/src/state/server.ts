@@ -1685,6 +1685,16 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:scheduled-tasks:live",
       tag: WS_METHODS.scheduledTasksSubscribe,
     }),
+    needsYouLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:needs-you:live",
+      tag: WS_METHODS.needsYouSubscribe,
+    }),
+    // The server keeps one answer per question, so a re-read costs no model call.
+    needsYouSuggestions: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:needs-you:suggestions",
+      tag: WS_METHODS.needsYouSuggest,
+      staleTimeMs: 3_600_000,
+    }),
     // A cold transcript scan is measured in seconds, so keep the result around
     // long enough that switching windows or re-rendering does not rescan. With
     // nothing to show yet, the server's last scan answers first, then a plain
@@ -2102,6 +2112,18 @@ export function createServerEnvironmentAtoms<R, E>(
     describeAvatarFigure: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:tots:describe-avatar-figure",
       tag: WS_METHODS.totsDescribeAvatarFigure,
+    }),
+    hideNeedsYou: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:needs-you:hide",
+      tag: WS_METHODS.needsYouHide,
+    }),
+    restoreNeedsYou: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:needs-you:restore",
+      tag: WS_METHODS.needsYouRestore,
+    }),
+    respondNeedsYou: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:needs-you:respond",
+      tag: WS_METHODS.needsYouRespond,
     }),
     writeTotMemory: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:tots:write-memory",
