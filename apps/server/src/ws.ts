@@ -216,6 +216,7 @@ import * as NeedsYou from "./needsYou/NeedsYou.ts";
 import * as ExternalCompanions from "./companions/ExternalCompanions.ts";
 import { COMPANION_TOKEN_ROUTE } from "./companions/http.ts";
 import { loopbackBindAddress } from "./auth/utils.ts";
+import * as UsageLimitFallback from "./orchestration-v2/UsageLimitFallback.ts";
 import * as TotService from "./tots/TotService.ts";
 import * as TotWorkService from "./tots/TotWorkService.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
@@ -1627,6 +1628,7 @@ export const layerWsRpc = (
       });
       const companionLoopback = loopbackBindAddress(config.host) ?? "127.0.0.1";
       const companionTokenEndpoint = `http://${companionLoopback.includes(":") ? `[${companionLoopback}]` : companionLoopback}:${config.port}${COMPANION_TOKEN_ROUTE}`;
+      const usageLimitFallback = yield* UsageLimitFallback.UsageLimitFallback;
       const groupChats = yield* GroupChatService.GroupChatService;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
@@ -2958,6 +2960,8 @@ export const layerWsRpc = (
           companions === undefined
             ? Effect.fail(noCompanions)
             : companions.revokeGrant(input.companionId),
+        [WS_METHODS.usageLimitRetryOnAccount]: (input) =>
+          usageLimitFallback.retryOnAccount(input).pipe(Effect.asVoid),
         [WS_METHODS.groupChatsCreate]: (input) => groupChats.create(input),
         [WS_METHODS.groupChatsUpdate]: (input) => groupChats.update(input),
         [WS_METHODS.groupChatsRemove]: (input) => groupChats.remove(input.id),

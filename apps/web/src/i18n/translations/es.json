@@ -13480,5 +13480,24 @@
   "ea0097edaa06817b": "Solo entre semana",
   "e7e9762bbb8514c4": "Comprobación previa (opcional)",
   "4e4eca8f36ff7d92": "Un comando de shell que se ejecuta primero en la carpeta del Tot; si termina con un código distinto de cero, se omite esa revisión.",
-  "7ada5fe78b59c87a": "Echar un vistazo encontró algo"
+  "7ada5fe78b59c87a": "Echar un vistazo encontró algo",
+  "a59436c0eebf13af": "No se pudo reintentar con esa cuenta",
+  "de52f30cce176b8c": "Reintentar con {account}",
+  "13629f8216661033": [
+    "Conecta esta app a ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " para reintentar aquí con otra cuenta, o abre el hilo allí."
+  ],
+  "1012470564ed461f": [
+    "Reintentar con ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ]
 }

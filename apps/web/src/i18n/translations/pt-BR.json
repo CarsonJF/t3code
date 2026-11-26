@@ -13485,5 +13485,24 @@
   "090ae1c0253f99c3": "Entre",
   "ea0097edaa06817b": "Somente dias úteis",
   "e7e9762bbb8514c4": "Pré-verificação (opcional)",
-  "4e4eca8f36ff7d92": "Um comando de shell executado primeiro na pasta do Tot; uma saída diferente de zero pula essa varredura."
+  "4e4eca8f36ff7d92": "Um comando de shell executado primeiro na pasta do Tot; uma saída diferente de zero pula essa varredura.",
+  "a59436c0eebf13af": "Não foi possível tentar novamente com essa conta",
+  "de52f30cce176b8c": "Tentar novamente com {account}",
+  "13629f8216661033": [
+    "Conecte este app a ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " para tentar novamente aqui com outra conta, ou abra a conversa lá."
+  ],
+  "1012470564ed461f": [
+    "Tentar novamente com ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ]
 }
