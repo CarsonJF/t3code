@@ -3,6 +3,9 @@ import * as DatabaseMigrationProgress from "./persistence/DatabaseMigrationProgr
 import * as GroupChatService from "./tots/GroupChatService.ts";
 import * as AvatarFigureDesigner from "./tots/AvatarFigureDesigner.ts";
 import * as NeedsYou from "./needsYou/NeedsYou.ts";
+import * as CompanionGrants from "./companions/CompanionGrants.ts";
+import * as CompanionHttp from "./companions/http.ts";
+import * as ExternalCompanions from "./companions/ExternalCompanions.ts";
 import * as TotService from "./tots/TotService.ts";
 import * as TotWatchService from "./tots/TotWatchService.ts";
 import * as TotWorkService from "./tots/TotWorkService.ts";
@@ -941,10 +944,11 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerStaticAndDevRoute,
     Ws.layer,
     speechStreamRouteLayer,
+    CompanionHttp.layer.pipe(Layer.provide(CompanionGrants.layer)),
   ),
   McpHttpServer.layer.pipe(
     Layer.provide(ProviderAdapterRegistry.layerFromProviderInstanceRegistry),
-    Layer.provide(McpOAuth.layerMcpClientAuthenticator),
+    Layer.provide(McpOAuth.layerMcpClientAuthenticator.pipe(Layer.provide(CompanionGrants.layer))),
     Layer.provide(ProjectionStoreV2.layer),
   ),
   // Follows delegated tasks running in linked environments, including after a restart.
@@ -994,7 +998,17 @@ const layerMakeRoutes = Layer.mergeAll(
       GroupChatService.layer,
       TotMemoryTidyJob.layer,
       NeedsYou.layer,
-    ).pipe(Layer.provideMerge(TotWorkService.layer), Layer.provideMerge(TotService.layer)),
+    ).pipe(
+      // Companions feed Needs you; their connections live as long as the server.
+      Layer.provideMerge(
+        ExternalCompanions.layer.pipe(
+          Layer.provideMerge(CompanionGrants.layer),
+          Layer.provide(SecretResolver.layer),
+        ),
+      ),
+      Layer.provideMerge(TotWorkService.layer),
+      Layer.provideMerge(TotService.layer),
+    ),
   ),
   Layer.provide(AvatarFigureDesigner.layer),
   // Links to other environments, shared by clients (WebSocket) and agents (/mcp).

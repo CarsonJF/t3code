@@ -61,6 +61,11 @@ export interface McpClientCaller {
   readonly onBehalfOf?: { readonly service: "discord"; readonly userId: string } | undefined;
   /** An outside client's thread links go through this hosted app, as Copy thread's do. */
   readonly hostedAppUrl?: string | undefined;
+  /**
+   * The registered External Companion whose grant this session is: the caller origin of what it
+   * starts here. Only accepted from this machine.
+   */
+  readonly companionId?: string | undefined;
 }
 
 /**

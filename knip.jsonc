@@ -60,6 +60,7 @@
         "src/process-launcher.ts!",
         "scripts/cli.ts",
         "scripts/fetch-expo-schema.ts",
+        "scripts/mock-companion.ts",
         "scripts/probe-claude-fork-local-rollback-replay.ts",
         "scripts/update-test-shard-weights.ts",
         "scripts/verify-background-live.ts",

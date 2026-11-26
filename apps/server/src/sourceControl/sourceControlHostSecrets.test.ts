@@ -167,6 +167,7 @@ it.effect("reads a collected reference again once it is invalidated", () =>
     cache.set("voice#key", "stale");
     cache.set("expo#token", "stale");
     cache.set("simlock#token", "stale");
+    cache.set("companion#token", "stale");
     assert.deepEqual((yield* read()).bitbucket, {
       email: "me@example.test",
       accessToken: "stale",
@@ -181,12 +182,21 @@ it.effect("reads a collected reference again once it is invalidated", () =>
         textGenerators: {},
         easDeviceHosts,
         simlockDeviceHosts,
+        externalCompanions: [
+          {
+            id: "demo",
+            label: "",
+            baseUrl: "http://127.0.0.1:4790",
+            token: source("companion#token"),
+          },
+        ],
       }),
     );
     assert.isFalse(cache.has("cliproxy#key"));
     assert.isFalse(cache.has("voice#key"));
     assert.isFalse(cache.has("expo#token"));
     assert.isFalse(cache.has("simlock#token"));
+    assert.isFalse(cache.has("companion#token"));
     assert.deepEqual((yield* read()).bitbucket, {
       email: "me@example.test",
       accessToken: "rotated",

@@ -117,6 +117,14 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.needsYouHide]: AuthOrchestrationOperateScope,
   [WS_METHODS.needsYouRestore]: AuthOrchestrationOperateScope,
   [WS_METHODS.needsYouRespond]: AuthOrchestrationOperateScope,
+  // A companion's messages and answers act for the user, as a reply in a thread does.
+  [WS_METHODS.companionsSend]: AuthOrchestrationOperateScope,
+  [WS_METHODS.companionsRespond]: AuthOrchestrationOperateScope,
+  // Sends a token to a URL the caller names, as a saved setting would.
+  [WS_METHODS.companionsTest]: AuthSettingsWriteScope,
+  // A grant lets the companion sign in to /mcp, like a pairing link.
+  [WS_METHODS.companionsGrantIssue]: AuthAccessWriteScope,
+  [WS_METHODS.companionsGrantRevoke]: AuthAccessWriteScope,
   // A guest link hands thread access to someone outside, like a pairing link.
   [WS_METHODS.guestShareCreate]: AuthAccessWriteScope,
   [WS_METHODS.peerLinksLink]: AuthAccessWriteScope,

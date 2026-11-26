@@ -29,6 +29,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
+import * as ExternalCompanions from "../companions/ExternalCompanions.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
@@ -123,6 +124,9 @@ const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const random = yield* SecureRandom.SecureRandom;
+  const companions = Option.getOrUndefined(
+    yield* Effect.serviceOption(ExternalCompanions.ExternalCompanions),
+  );
 
   const hiddenPath = path.join(config.stateDir, HIDDEN_FILE);
   const hiddenLock = yield* Semaphore.make(1);
@@ -192,13 +196,14 @@ const make = Effect.gen(function* () {
       return item === null ? [] : [item];
     });
     const totList = yield* tots.list;
+    const companionItems = companions === undefined ? [] : yield* companions.needsYouItems;
     return {
       environmentId: descriptor.environmentId,
       label: descriptor.label,
       local: true,
       error: null,
       tots: totList.map((tot) => ({ id: tot.id, name: tot.name })),
-      items: newestFirst([...requests.flat(), ...runs, ...failedTasks]),
+      items: newestFirst([...requests.flat(), ...runs, ...failedTasks, ...companionItems]),
     } satisfies NeedsYouEnvironment;
   });
 
@@ -304,6 +309,7 @@ const make = Effect.gen(function* () {
         ),
         scheduled.subscribeList().pipe(Stream.as(undefined), Stream.ignoreCause),
         Stream.fromPubSub(hiddenChanged),
+        companions === undefined ? Stream.empty : companions.needsYouChanges,
         Stream.tick(POLL_INTERVAL),
       ],
       { concurrency: "unbounded" },

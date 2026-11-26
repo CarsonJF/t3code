@@ -18,6 +18,7 @@ export const NeedsYouItemKind = Schema.Literals([
   "failed_run",
   "stopped_run",
   "scheduled_failure",
+  "companion",
 ]);
 export type NeedsYouItemKind = typeof NeedsYouItemKind.Type;
 
@@ -42,6 +43,17 @@ export const NeedsYouItem = Schema.Struct({
   hiddenUntil: Schema.optional(Schema.NullOr(IsoDateTime)),
   /** A thread link agents can pass on; clients build their own. */
   link: Schema.optional(Schema.String),
+  /** Set on `companion` items: answered through `companions.respond`, not a thread. */
+  companion: Schema.optional(
+    Schema.Struct({
+      companionId: Schema.String,
+      name: Schema.String,
+      needsYouId: Schema.String,
+      channel: Schema.String,
+      kind: Schema.Literals(["question", "approval"]),
+      options: Schema.Array(Schema.String),
+    }),
+  ),
 });
 export type NeedsYouItem = typeof NeedsYouItem.Type;
 
