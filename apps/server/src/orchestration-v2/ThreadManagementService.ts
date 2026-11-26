@@ -43,6 +43,9 @@ import {
   type RuntimeRequestId,
   type ScheduledTaskId,
   ThreadId,
+  type RunRestriction,
+  totAskDecision,
+  type TurnCaller,
   type TurnItemId,
 } from "@t3tools/contracts";
 import { delegatedTaskProgress } from "@t3tools/provider-core/server/subagentProjection";
@@ -78,6 +81,7 @@ import * as LegacyV1ThreadImporter from "./legacy/LegacyV1ThreadImporter.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { ThreadWorktreeRestore } from "../workspace/restoreMissingWorktree.ts";
 import { checkOutput, outputRequestProblem } from "./runOutput.ts";
+import { describeCaller, outsideCallerOf, totOwningThread } from "../tots/totCallers.ts";
 
 export type ThreadManagementSendMode = "auto" | "queue" | "steer" | "restart";
 
@@ -102,7 +106,11 @@ export function withCreationProvenance(
       } = command;
       return { ...rest, ...provenance };
     }
-    case "message.dispatch":
+    case "message.dispatch": {
+      // Only the server names an outside caller and the limit it runs under.
+      const { caller: _caller, restriction: _restriction, ...rest } = command;
+      return { ...rest, ...provenance };
+    }
     case "thread.fork":
     case "thread.merge_back":
     case "delegated_task.request":
@@ -171,6 +179,8 @@ export interface ThreadManagementSendInput {
   readonly outputSchema?: Readonly<Record<string, Schema.Json>>;
   readonly createdBy: OrchestrationV2Actor;
   readonly creationSource: OrchestrationV2CreationSource;
+  /** The outside caller, when the entry point knows it better than the fields above. */
+  readonly caller?: TurnCaller;
 }
 
 export interface ThreadManagementSendResult {
@@ -277,6 +287,20 @@ export class ThreadManagementThreadArchivedError extends Schema.TaggedError<Thre
 ) {
   override get message(): string {
     return `Thread ${this.threadId} is archived and cannot receive messages.`;
+  }
+}
+
+/** A Tot's "Who can ask" list does not name this caller, so no turn starts. */
+export class ThreadManagementCallerRefusedError extends Schema.TaggedError<ThreadManagementCallerRefusedError>()(
+  "ThreadManagementCallerRefusedError",
+  {
+    threadId: ThreadId,
+    totName: Schema.String,
+    caller: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `${this.totName} does not take requests from ${this.caller}. Only a person can add it, in ${this.totName}'s settings under Who can ask.`;
   }
 }
 
@@ -408,6 +432,7 @@ export const ThreadManagementError = Schema.Union([
   ThreadManagementThreadNotFoundError,
   ThreadManagementRunNotFoundError,
   ThreadManagementThreadArchivedError,
+  ThreadManagementCallerRefusedError,
   ThreadManagementNoSteerableRunError,
   ThreadManagementRunOutputRejectedError,
   ThreadManagementThreadNotInterruptibleError,
@@ -974,6 +999,39 @@ const make = Effect.gen(function* () {
       ),
     );
 
+  // Every send into a Tot's thread passes its "Who can ask" list; the app's own user never does.
+  const gateTotSend = Effect.fn("ThreadManagementService.gateTotSend")(function* (
+    input: ThreadManagementSendInput,
+  ): Effect.fn.Return<
+    { readonly caller?: TurnCaller; readonly restriction?: RunRestriction },
+    ThreadManagementCallerRefusedError
+  > {
+    const tots = yield* serverSettings.getSettings.pipe(
+      Effect.orDie,
+      Effect.map((settings) => settings.tots),
+    );
+    const tot = totOwningThread(input.threadId, tots);
+    const caller = tot === undefined ? undefined : outsideCallerOf(tot, input, tots);
+    if (tot === undefined || caller === undefined) return {};
+    const decision = totAskDecision(tot, caller);
+    if (decision.kind === "refuse") {
+      yield* Effect.logWarning("A Tot refused a turn from a caller not on its Who can ask list", {
+        totId: tot.id,
+        origin: caller.origin,
+        callerId: caller.id,
+      });
+      return yield* new ThreadManagementCallerRefusedError({
+        threadId: input.threadId,
+        totName: tot.name,
+        caller: describeCaller(caller),
+      });
+    }
+    return {
+      caller,
+      ...(decision.restriction === undefined ? {} : { restriction: decision.restriction }),
+    };
+  });
+
   const sendToThread: ThreadManagementServiceShape["sendToThread"] = Effect.fn(
     "ThreadManagementService.sendToThread",
   )(function* (input) {
@@ -991,10 +1049,11 @@ const make = Effect.gen(function* () {
         problem: schemaProblem,
       });
     }
+    const gate = yield* gateTotSend(input);
     const steerableRun = latestSteerableRun(target);
-    // A fresh send, or one that asks for a result, never joins a running turn.
+    // A fresh send, one that asks for a result, or an outside caller's never joins a running turn.
     const mode =
-      (input.freshContext || input.outputSchema !== undefined) &&
+      (input.freshContext || input.outputSchema !== undefined || gate.caller !== undefined) &&
       (input.mode === "steer" || input.mode === "restart")
         ? "queue"
         : input.mode;
@@ -1056,6 +1115,7 @@ const make = Effect.gen(function* () {
       ...(input.modelSelection === undefined ? {} : { modelSelection: input.modelSelection }),
       ...(input.freshContext ? { freshContext: true } : {}),
       ...(input.outputSchema === undefined ? {} : { outputSchema: input.outputSchema }),
+      ...gate,
       dispatchMode,
       ...(mode === "auto" ? { deliveryIntent: "auto" } : {}),
       createdBy: input.createdBy,

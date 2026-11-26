@@ -16,7 +16,11 @@ import * as ServerSettings from "../../../serverSettings.ts";
 import { totSendTarget } from "../../../tots/totSendTarget.ts";
 import { assertSameLink } from "../../linkOrigin.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
-import { isThreadManagementError, threadManagementFailure } from "../../OrchestratorMcpService.ts";
+import {
+  isThreadManagementError,
+  outsideClientCaller,
+  threadManagementFailure,
+} from "../../OrchestratorMcpService.ts";
 import {
   assertTargetWithinLimits,
   dispatchFailure,
@@ -133,6 +137,10 @@ export const layer = McpToolAccess.toLayer(
               commandId,
               messageId,
               ...(caller === undefined ? {} : { senderThreadId: caller.id }),
+              ...(caller === undefined && context.scope.client?.senderThread !== undefined
+                ? { linkedSender: context.scope.client.senderThread }
+                : {}),
+              ...outsideClientCaller(context.scope, caller),
               text: input.message ?? "",
               attachments,
               mode: "auto",
