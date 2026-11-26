@@ -13275,7 +13275,6 @@
   "39fd01a80e88ee2a": "Kunde inte ta tillbaka den",
   "1b7c524fccf06537": "Behöver dig",
   "7c5a3071fb7d9f14": "Inget behöver dig",
-  "2843b91a4c4a5e98": "Godkännanden, frågor och misslyckade körningar från alla Tots och länkade datorer visas här.",
   "2df485ee15283e6b": "Kunde inte läsa den här datorn:",
   "5eb5603f5b29900d": "Trådar",
   "df1fb90eb9a77fbf": "Schemalagda uppgifter",
@@ -13361,5 +13360,103 @@
   "8ed8b1e465719f27": "Bara du kan starta turer i {name}.",
   "d078947fa2c00d7e": "Anroparens ursprung",
   "d951fe94dcf0553f": "Åtkomst",
-  "85c730fca701f640": "Ta bort anropare"
+  "85c730fca701f640": "Ta bort anropare",
+  "27a6e8500eda7c2b": "Det gick inte att läsa in äldre meddelanden",
+  "0980674e69d501f1": "Det gick inte att skicka meddelandet",
+  "02af338d7b3c0808": "Meddelande till {name}",
+  "bb081b4501ebd5a7": "Skicka",
+  "d4a50d7c02a35383": "Den här följeslagaren är inte registrerad",
+  "9bec74fe0017bac6": "Lägg till den i Inställningar → Externa följeslagare.",
+  "c5e19e2d69c5207f": "Ansluter",
+  "3974a1c8d27fb8b9": "Läs in äldre meddelanden",
+  "6c8cf04cdc23eaba": "Konversationen kunde inte läsas. Den läses in igen när följeslagaren är tillbaka.",
+  "83b364ee20adb1f7": [
+    "Inga meddelanden med ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ännu."
+  ],
+  "868cf870dcb75675": "Besvarad",
+  "cf84573e22244b27": [
+    "Besvarad: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "01f1b7ea80a6d537": "Ditt svar",
+  "0ef416c08f583e40": "{count, plural, one {{count} oläst} other {{count} olästa}}",
+  "02e4bb298880af45": "Barn",
+  "1a8ed8aebc5ac91e": "Externa följeslagare",
+  "017954af6e4e5255": "Barn",
+  "50385e4a29e78714": "Externa följeslagare",
+  "3fb9f5581a8d4614": "Följeslagare",
+  "adf5eb437f367152": "Godkännanden, frågor och misslyckade körningar från varje Tot, följeslagare och länkad maskin visas här.",
+  "9a1b199e16600d74": [
+    "Anslut den här appen till ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " för att svara på dess följeslagare här."
+  ],
+  "b3c8e21b5dfc586d": "Öppna följeslagare",
+  "b0dc2c9ea1ec6d90": "Fråga innan åtgärd",
+  "1cf02e750ba6251a": "Godkänn ändringar",
+  "e2e55cb2dd4d1344": "Det gick inte att spara följeslagarna",
+  "3d493ff28b5fba22": "Det gick inte att återkalla behörigheten",
+  "8b4eabdfc58b5fa0": "Redigera",
+  "2c5674665579a329": "Ta bort",
+  "ffb1eb468eaf0b06": "Token",
+  "30a56f7e1ff009f1": "Det gick inte att utfärda behörigheten",
+  "74202565bb77aaf0": "Anslut en miljö för att hantera dess följeslagare.",
+  "a6b7d9df094eb2f8": "Lägg till följeslagare",
+  "ee38a3adf88fb3c2": "Följeslagare",
+  "09b910ec70f5ee9e": "Agenttjänster som du kör någon annanstans och som talar External Companion Protocol v1. Den här servern pratar med dem, så deras tokens stannar här.",
+  "63db50d72e72da95": "Inga följeslagare ännu",
+  "276075eb99f582cf": "Lägg till en med dess URL och token.",
+  "66b483d78b1f69ec": [
+    "MCP-behörighet utfärdad (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "), väntar på att följeslagaren ska lösa in sin installationskod."
+  ],
+  "be5f0a14a8adf8b8": [
+    "MCP-åtkomst: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ". Förnyas av sig själv när den används."
+  ],
+  "7982df88795fbe87": "MCP-behörighet",
+  "bed9d3e3cecc6be7": "Återkalla MCP",
+  "4e856401b998933c": "Lägg till en följeslagare",
+  "cd21c76abe888449": "Redigera följeslagare",
+  "3f71baf70aad6a38": "T3 läser dess manifest från bas-URL:en och skickar token som en bearer-token.",
+  "95df1da03d0347d1": "Ett nytt ursprung behöver token igen: en sparad token går bara dit den sparades för.",
+  "22b961ed5aca6afa": [
+    "MCP-behörighet för ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "8d4ca23f01876a58": "Följeslagaren byter en installationskod mot en timmes MCP-åtkomst som den förnyar själv, bara från den här maskinen. Du kan återkalla den här när som helst.",
+  "f0578e109081ffe8": "Åtkomst",
+  "27979116f8b1fcd8": "Ge följeslagaren den här installationskoden. Den fungerar en gång, inom tio minuter, och visas inte igen.",
+  "c851cde8a524f926": "Kopierad.",
+  "7a8677489fabed40": "Token-slutpunkt:",
+  "652118d78a932e2a": "Utfärda installationskod",
+  "5f5ca02947c8abb1": "följeslagare agent tjänst bearer token mcp behörighet barn"
 }
