@@ -50,6 +50,7 @@ import {
   createEnvironmentSubscriptionAtomFamily,
   createRuntimeCommand,
 } from "./runtime.ts";
+import { EMPTY_CHANNEL_VIEW, reduceCompanionChannel } from "../companions.ts";
 import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
@@ -1693,6 +1694,16 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:needs-you:live",
       tag: WS_METHODS.needsYouSubscribe,
     }),
+    companionsLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:companions:live",
+      tag: WS_METHODS.companionsSubscribe,
+    }),
+    companionChannel: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:companions:channel",
+      tag: WS_METHODS.companionsChannel,
+      transform: (stream) =>
+        stream.pipe(Stream.scan(() => EMPTY_CHANNEL_VIEW, reduceCompanionChannel)),
+    }),
     // The server keeps one answer per question, so a re-read costs no model call.
     needsYouSuggestions: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:needs-you:suggestions",
@@ -2130,6 +2141,30 @@ export function createServerEnvironmentAtoms<R, E>(
     restoreNeedsYou: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:needs-you:restore",
       tag: WS_METHODS.needsYouRestore,
+    }),
+    testCompanion: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:companions:test",
+      tag: WS_METHODS.companionsTest,
+    }),
+    companionHistory: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:companions:history",
+      tag: WS_METHODS.companionsHistory,
+    }),
+    sendToCompanion: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:companions:send",
+      tag: WS_METHODS.companionsSend,
+    }),
+    respondToCompanion: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:companions:respond",
+      tag: WS_METHODS.companionsRespond,
+    }),
+    issueCompanionGrant: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:companions:grant-issue",
+      tag: WS_METHODS.companionsGrantIssue,
+    }),
+    revokeCompanionGrant: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:companions:grant-revoke",
+      tag: WS_METHODS.companionsGrantRevoke,
     }),
     respondNeedsYou: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:needs-you:respond",

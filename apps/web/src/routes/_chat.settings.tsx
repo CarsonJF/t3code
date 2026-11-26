@@ -188,7 +188,8 @@ function SettingsRouteLayout() {
       singleEnvironment={
         pathname === "/settings/providers" ||
         pathname === "/settings/secrets" ||
-        pathname === "/settings/avatar-library"
+        pathname === "/settings/avatar-library" ||
+        pathname === "/settings/external-companions"
       }
       deviceOnly={SETTINGS_DEVICE_ONLY_PATHS.has(pathname)}
       onChange={(next) => {

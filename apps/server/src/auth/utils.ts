@@ -151,6 +151,10 @@ function inferOs(userAgent: string | undefined): string | undefined {
   return undefined;
 }
 
+/** The address of the socket peer itself, ignoring any forwarding header. */
+export const requestPeerAddress = (request: HttpServerRequest.HttpServerRequest) =>
+  readRemoteAddressFromSource(request.source);
+
 function readRemoteAddressFromSource(source: unknown): string | undefined {
   if (!source || typeof source !== "object") {
     return undefined;
