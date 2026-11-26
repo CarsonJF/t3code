@@ -439,7 +439,13 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
           code: "invalid_request",
           message: `There is no Tot "${targetId}".`,
         });
-      return { totId: tot.id, name: tot.name, instructions: tot.instructions, updated: writing };
+      return {
+        totId: tot.id,
+        name: tot.name,
+        instructions: tot.instructions,
+        updated: writing,
+        whoCanAsk: tot.whoCanAsk ?? [],
+      };
     }),
   ),
   t3_tot_watch: McpToolAccess.reads((input) =>

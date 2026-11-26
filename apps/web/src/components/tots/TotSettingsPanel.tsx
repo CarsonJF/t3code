@@ -57,6 +57,7 @@ import { TotAvatar } from "./TotAvatar";
 import { AvatarLibraryDialog } from "../settings/AvatarLibrarySettings";
 import { TotFaceEditor } from "./TotFaceEditor";
 import { TotWorkSection } from "./TotWorkSection";
+import { TotWhoCanAskSection } from "./TotWhoCanAskSection";
 import {
   WATCH_REPORTS,
   finishedOneOffTasks,
@@ -428,6 +429,16 @@ function TotSettingsEditor(props: {
               onCheckedChange={(autoSettle) => setDraft({ ...draft, autoSettle })}
             />
           </div>
+
+          <Separator />
+
+          <TotWhoCanAskSection
+            totName={tot.name}
+            value={draft.whoCanAsk}
+            disabled={!canEdit}
+            error={errors.whoCanAsk}
+            onChange={(whoCanAsk) => setDraft({ ...draft, whoCanAsk })}
+          />
 
           <Separator />
 

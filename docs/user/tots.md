@@ -97,6 +97,31 @@ Items are grouped by machine and by Tot. Approve or decline, pick an option or t
 
 Tots can read the same list with `t3_needs_you`.
 
+## Who can ask
+
+A Tot always takes turns from you and from T3 Code itself, such as watch reports and its own
+scheduled tasks. **Who can ask** in its settings lists everyone else it takes turns from, and
+how far those turns go. Each Tot starts with three entries marked **Trusted by default**, at
+Full access: your other Tots (on this machine and through linked machines, with the threads
+they launch), every linked machine, and every webhook or scheduled task aimed at it. So Tots
+keep talking to each other, and webhook monitors keep waking them, with no setup.
+
+Anyone not listed is refused with an error that names the setting, and no turn starts:
+Discord users, outside clients, and agent threads that are not one of your Tots or their
+workers. Add them by origin and id, or `*` for everyone from one origin.
+
+To tighten, change an entry's access or remove it:
+
+- **Full access** runs the caller's turns like yours.
+- **Ask before changes** runs them in approval-required mode, so every change waits for
+  your approval in the thread or under **Needs you**. No Tot can answer those approvals.
+- **Read-only** lets the Tot look but change nothing. It needs a Codex or Claude model.
+
+Turns from listed callers never join a turn already running; they wait for their own. In
+an Ask or Read-only turn, T3 Code's own tools that change things (launching threads,
+scheduled tasks, messaging other Tots) are off. Only you can change the list; a Tot can read
+it with `t3_tot_instructions` but not widen it.
+
 ## Webhook listeners
 
 Ask a Tot to listen for something outside events, such as a doorbell, a CI job or a

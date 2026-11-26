@@ -358,6 +358,41 @@ it.effect.each([
   ),
 );
 
+// A Tot's thread whose current run is an outside caller's limited turn.
+const totThreadId = ThreadId.make("tot:home:restricted");
+const totShell = liveThreadShell(totThreadId);
+const totRun = (restriction: "ask" | "read-only" | undefined) =>
+  Layer.mock(ThreadManagement.ThreadManagementService)({
+    getThreadShell: (threadId) =>
+      Effect.succeed(threadId === totThreadId ? totShell : (shells.get(threadId) ?? null)),
+    getProjectThreadRecords: () =>
+      Effect.succeed({
+        runs: [
+          {
+            id: totShell.activeRunId,
+            ...(restriction === undefined ? {} : { restriction }),
+          },
+        ],
+      } as never),
+  });
+
+it.effect.each([
+  ["reads", "read-only", "ran"],
+  ["writes", "read-only", "capability_denied"],
+  ["writes", "ask", "capability_denied"],
+  ["writes", undefined, "ran"],
+  ["acts_as_caller", "read-only", "capability_denied"],
+  ["writes_threads", "ask", "capability_denied"],
+  ["starts_threads", "read-only", "capability_denied"],
+  ["writes_environment", "ask", "capability_denied"],
+  ["writes_owner_work", "read-only", "capability_denied"],
+] as const)("%s from a Tot turn limited to %s: %s", ([tool, restriction, expected]) =>
+  call(tool, threadCaller(totThreadId), {}).pipe(
+    Effect.map((outcome) => expect(outcome).toBe(expected)),
+    Effect.provide(probeServer(totRun(restriction))),
+  ),
+);
+
 it("refuses a declaration or handlers layer that only wears another's fields", () => {
   const copiedDeclaration = Object.assign(
     unchecked,
