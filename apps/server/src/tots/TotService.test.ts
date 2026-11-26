@@ -5,6 +5,7 @@ import {
   TotId,
   EnvironmentId,
   HOME_TOT_ID,
+  LOOK_AROUND_DEFAULT_SCHEDULE,
   ProjectId,
   ProviderInstanceId,
   RunId,
@@ -574,13 +575,51 @@ it.effect(
   },
 );
 
+it.effect(
+  "the stack watch template adds its Look around sweep, off until the user turns it on",
+  () => {
+    const { layer, savedRoutines } = makeTots();
+    return Effect.gen(function* () {
+      yield* (yield* TotService.TotService).create({
+        name: "Stack",
+        avatar,
+        scope: "all",
+        instructions: "Watch.",
+        modelSelection,
+        template: "home-stack-watcher",
+      });
+      expect(savedRoutines).toContainEqual(
+        expect.objectContaining({
+          title: "Look around",
+          enabled: false,
+          readOnly: true,
+          projectId: totProjectId,
+          schedule: LOOK_AROUND_DEFAULT_SCHEDULE,
+          createdByTotId: "stack",
+        }),
+      );
+    }).pipe(Effect.provide(layer));
+  },
+);
+
 it.effect("a Tot's first thread picks up the routines its template made", () => {
   const templated = {
     ...routine("templated", null),
     threadMode: "continue",
     createdByTotId: HOME_TOT_ID,
   } as ScheduledTask;
-  const { layer, savedRoutines } = makeTots(undefined, [templated, routine("unbound", null)]);
+  // A sweep keeps its own read-only thread.
+  const sweep = {
+    ...routine("sweep", null),
+    threadMode: "fresh_session",
+    readOnly: true,
+    createdByTotId: HOME_TOT_ID,
+  } as ScheduledTask;
+  const { layer, savedRoutines } = makeTots(undefined, [
+    templated,
+    sweep,
+    routine("unbound", null),
+  ]);
   return Effect.gen(function* () {
     const { threadId } = yield* (yield* TotService.TotService).enable(HOME_TOT_ID, modelSelection);
     expect(savedRoutines).toEqual([expect.objectContaining({ id: "templated", threadId })]);

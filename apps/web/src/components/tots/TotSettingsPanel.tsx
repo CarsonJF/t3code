@@ -54,6 +54,7 @@ import { Textarea } from "../ui/textarea";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import { TotAvatar } from "./TotAvatar";
+import { TotLookAroundSection } from "./TotLookAroundSection";
 import { AvatarLibraryDialog } from "../settings/AvatarLibrarySettings";
 import { TotFaceEditor } from "./TotFaceEditor";
 import { TotWorkSection } from "./TotWorkSection";
@@ -381,6 +382,10 @@ function TotSettingsEditor(props: {
 
           <Separator />
 
+          <TotLookAroundSection environmentId={environmentId} tot={tot} />
+
+          <Separator />
+
           <TotScheduledTasksSection environmentId={environmentId} tot={tot} />
 
           <Separator />
@@ -666,8 +671,9 @@ function TotScheduledTasksSection(props: {
   const remove = useAtomCommand(serverEnvironment.deleteScheduledTask, { reportFailure: false });
   const [clearing, setClearing] = useState(false);
   const timeZone = tasksQuery.data?.timeZone;
-  const tasks = (tasksQuery.data?.tasks ?? []).filter((task) =>
-    scheduledTaskBelongsToTot(task, props.tot),
+  // The Tot's sweep has its own section.
+  const tasks = (tasksQuery.data?.tasks ?? []).filter(
+    (task) => task.readOnly !== true && scheduledTaskBelongsToTot(task, props.tot),
   );
   const projectTitles = new Map(
     projects

@@ -65,9 +65,21 @@ export function scheduleLabel(
   }
   if (schedule.type === "interval") {
     const minutes = schedule.everyMs / 60_000;
-    return Number.isInteger(minutes)
+    const every = Number.isInteger(minutes)
       ? resolve(msg("Every {minutes} min", { minutes }))
       : resolve(msg("Every {seconds} sec", { seconds: Math.round(schedule.everyMs / 1000) }));
+    const days = schedule.weekdays ?? [];
+    const limits = [
+      days.length === 0 || days.length === 7
+        ? null
+        : days.length === 5 && days.every((day) => day >= 1 && day <= 5)
+          ? resolve(msg("weekdays"))
+          : days.map((day) => weekdayShortLabel(day, locale)).join(", "),
+      schedule.activeHours === undefined
+        ? null
+        : `${formatTimeOfDay(schedule.activeHours.from, timestampFormat)}–${formatTimeOfDay(schedule.activeHours.to, timestampFormat)}`,
+    ].filter((part) => part !== null);
+    return [every, ...limits].join(", ");
   }
   const weekdays = schedule.weekdays ?? [];
   const time = formatTimeOfDay(schedule.timeOfDay, timestampFormat);
@@ -131,6 +143,11 @@ export interface DraftState extends ScheduledTaskGateDraft {
   /** The stored ISO run time, sent back unchanged when the field was not edited. */
   readonly savedRunAt: string;
   readonly weekdays: ReadonlySet<number>;
+  /** An interval's days and hours, which this form does not edit but keeps. */
+  readonly intervalLimits?: Pick<
+    Extract<ScheduledTask["schedule"], { type: "interval" }>,
+    "weekdays" | "activeHours"
+  >;
   readonly projectId: string;
   readonly threadId: string;
   /** The thread the form opened with, so a save can tell a cleared destination from an unbound one. */
@@ -302,7 +319,7 @@ export function scheduleFromDraft(draft: DraftState): ScheduledTaskUpsertSchedul
   }
   if (draft.scheduleMode === "interval") {
     const everyMs = Math.round(Number(draft.intervalMinutes) * 60_000);
-    return { type: "interval", everyMs };
+    return { type: "interval", everyMs, ...draft.intervalLimits };
   }
   const selectedEveryDay = draft.weekdays.size === 0 || draft.weekdays.size === 7;
   return {
@@ -332,6 +349,14 @@ export function taskToDraft(task: ScheduledTask): DraftState {
     runAt: schedule.type === "once" ? toDateTimeLocalValue(new Date(schedule.runAt)) : "",
     savedRunAt: schedule.type === "once" ? schedule.runAt : "",
     weekdays,
+    ...(schedule.type === "interval"
+      ? {
+          intervalLimits: {
+            ...(schedule.weekdays === undefined ? {} : { weekdays: schedule.weekdays }),
+            ...(schedule.activeHours === undefined ? {} : { activeHours: schedule.activeHours }),
+          },
+        }
+      : {}),
     projectId: task.projectId,
     threadId: task.threadId ?? "",
     savedThreadId: task.threadId ?? "",

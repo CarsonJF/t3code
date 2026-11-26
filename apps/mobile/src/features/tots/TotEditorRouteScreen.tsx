@@ -42,6 +42,7 @@ import { useTotHosts, type TotHost } from "../../state/tots";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
+import { TotLookAroundSection } from "./TotLookAroundSection";
 import { TotStillFace } from "./TotStillFace";
 
 const COLOR_CHOICES = ["#0A7EA4", "#7C3AED", "#DB2777", "#EA580C", "#16A34A", "#475569"];
@@ -394,6 +395,10 @@ function TotEditorForm(props: {
           onValueChange={setMemoryTidy}
         />
       </ListSection>
+
+      {editing === null ? null : (
+        <TotLookAroundSection environmentId={environmentId} tot={editing} />
+      )}
 
       {failure === null ? null : <AppText className="text-sm text-destructive">{failure}</AppText>}
 

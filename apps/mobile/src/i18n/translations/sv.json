@@ -5747,5 +5747,14 @@
   "25bdaed653d3d2c3": "En malls föreslagna rutiner skapas pausade.",
   "fc72809a59128290": "Tom",
   "6eb33caef72a98a1": "Runt 03:30 tar en billig modell bort dubbletter i {memory} och kortar den. Den förra kopian sparas som {backup}.",
-  "4b3694d90784a5be": "Nattlig minnesstädning"
+  "4b3694d90784a5be": "Nattlig minnesstädning",
+  "8b84d7ff5492dd87": "Ingen runda än.",
+  "43ed1e8b6f94d851": "Senaste rundan: ok, {time}",
+  "bc1a710d973c4857": "Senaste rundan behöver uppmärksamhet: {findings}",
+  "94c00ff3d1c9116e": "Titta runt",
+  "8f71572fc417cde3": "Den här Totens leverantör kan inte hålla rundan skrivskyddad. Välj en Codex- eller Claude-modell.",
+  "e5cc1c6a5c6457cf": "En skrivskyddad runda enligt schema; servern nekar alla ändringar. Tyst när allt är bra. Ändra schema och förkontroll på datorn eller webben.",
+  "cd79fe8de4c658c9": "Slå på Toten en gång för att ställa in rundan.",
+  "f4e1531edae9a180": "Vad som ska kollas, till exempel CI på forken eller containrarnas hälsa",
+  "deeeb2f9f7e0f73e": "Vad som ska kollas"
 }

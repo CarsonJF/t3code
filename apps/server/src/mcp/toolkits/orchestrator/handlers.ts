@@ -172,6 +172,7 @@ const handlers = {
         modelSelection,
         precheck,
         missedRunGraceMinutes,
+        readOnly,
       }) =>
         Effect.gen(function* () {
           if (scheduledTaskId === undefined) return yield* Effect.die("unreachable");
@@ -188,6 +189,7 @@ const handlers = {
             modelSelection,
             precheck,
             missedRunGraceMinutes,
+            readOnly,
           });
         }),
     ),

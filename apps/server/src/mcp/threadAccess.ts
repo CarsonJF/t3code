@@ -5,6 +5,7 @@ import type {
 import {
   CommandId,
   type EnvironmentId,
+  isLookAroundThread,
   isRuntimeModeAbove,
   OrchestratorMcpFailure,
   type ProjectId,
@@ -240,10 +241,21 @@ const callerRunRestriction = Effect.fn("mcp.callerRunRestriction")(function* (co
   return run?.restriction;
 });
 
-/** T3 Code's own tools that change things refuse an outside caller's limited turn. */
+/**
+ * T3 Code's own tools that change things refuse a limited turn: an outside caller's, or any turn
+ * in a Look around sweep's thread, which is read-only whatever its run says.
+ */
 export const refuseRestrictedRun = Effect.fn("mcp.refuseRestrictedRun")(function* (
   context: Caller,
 ) {
+  const threadId = context.scope.thread?.threadId;
+  if (threadId !== undefined && isLookAroundThread(threadId)) {
+    return yield* new OrchestratorMcpFailure({
+      code: "capability_denied",
+      message:
+        "This tool changes something, and a Look around sweep is read-only. Report it in your result instead.",
+    });
+  }
   const restriction = yield* callerRunRestriction(context);
   if (restriction === undefined) return;
   return yield* new OrchestratorMcpFailure({

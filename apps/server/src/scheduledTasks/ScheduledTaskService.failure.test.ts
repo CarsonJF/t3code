@@ -132,6 +132,7 @@ const harness = (input: {
               Ref.update(notices, (all) => [...all, failure]).pipe(
                 Effect.andThen(Deferred.succeed(settled, undefined)),
               ),
+            notifySweepAttention: () => Effect.void,
           }),
           NodeCrypto.layer,
           Scheduler.layer,

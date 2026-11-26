@@ -194,6 +194,21 @@ describe("a Tot's Who can ask list", () => {
     );
   });
 
+  // The run's restriction is what RuntimePolicy and McpToolAccess check, as for a Look around sweep.
+  it.effect("runs a companion listed as read-only on the same read-only path", () => {
+    const dispatched: Array<Dispatch> = [];
+    const companion = { origin: "companion", id: "phone" } as const;
+    return send({ caller: companion }).pipe(
+      Effect.map(() => {
+        expect(dispatched).toHaveLength(1);
+        expect(dispatched[0]?.restriction).toBe("read-only");
+      }),
+      Effect.provide(
+        layerFor(home([{ origin: "companion", id: "phone", mode: "read-only" }]), dispatched),
+      ),
+    );
+  });
+
   // A Tot from before the list existed, with nothing set up by hand.
   it.effect.each([
     { label: "Tot to Tot on this machine", input: { senderThreadId: otherTotThread } },

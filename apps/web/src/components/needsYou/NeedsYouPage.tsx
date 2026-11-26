@@ -17,6 +17,7 @@ import {
   BotMessageSquareIcon,
   ArrowUpRightIcon,
   CalendarXIcon,
+  ScanSearchIcon,
   CircleStopIcon,
   CircleXIcon,
   InboxIcon,
@@ -54,6 +55,7 @@ const KIND_ICONS = {
   stopped_run: CircleStopIcon,
   scheduled_failure: CalendarXIcon,
   companion: BotMessageSquareIcon,
+  sweep_attention: ScanSearchIcon,
 } as const;
 
 function reportResult(title: string, result: AtomCommandResult<unknown, unknown>) {
@@ -213,6 +215,7 @@ function NeedsYouRow(props: {
     stopped_run: gt("Stopped run"),
     scheduled_failure: gt("Scheduled run failed"),
     companion: gt("Companion"),
+    sweep_attention: gt("Look around found something"),
   }[item.kind];
   return (
     <li

@@ -371,6 +371,15 @@ function scheduledTaskSummary(task: ScheduledTask, mayRun: boolean): Orchestrato
             task.lastSkip.detail === null ? "" : `: ${task.lastSkip.detail}`
           }`,
         }),
+    ...(task.readOnly === true ? { readOnly: true } : {}),
+    ...(task.lastSweep === undefined
+      ? {}
+      : {
+          lastSweep: [
+            `${task.lastSweep.at} ${task.lastSweep.status}`,
+            ...task.lastSweep.findings,
+          ].join("; "),
+        }),
     ...(task.webhook?.url == null || !mayRun || task.blockedByPolicy !== undefined
       ? {}
       : { webhookUrl: task.webhook.url }),
@@ -2588,7 +2597,10 @@ const make = Effect.gen(function* () {
         enabled: input.enabled ?? true,
         schedule: input.schedule,
         projectId,
-        threadId: bindToCurrentThread && parent !== undefined ? parent.thread.id : null,
+        threadId:
+          bindToCurrentThread && parent !== undefined && input.readOnly !== true
+            ? parent.thread.id
+            : null,
         threadMode: input.freshSession
           ? "fresh_session"
           : bindToCurrentThread
@@ -2607,6 +2619,7 @@ const make = Effect.gen(function* () {
         ...(input.missedRunGraceMinutes === undefined
           ? {}
           : { missedRunGraceMinutes: input.missedRunGraceMinutes }),
+        ...(input.readOnly === undefined ? {} : { readOnly: input.readOnly }),
       };
       // A replayed key rewrites the task it created, which its user may since have raised or
       // rebound: that is an edit of the task as it now stands.
@@ -2740,6 +2753,7 @@ const make = Effect.gen(function* () {
           ...(input.missedRunGraceMinutes === undefined
             ? {}
             : { missedRunGraceMinutes: input.missedRunGraceMinutes }),
+          ...(input.readOnly === undefined ? {} : { readOnly: input.readOnly }),
         };
         const { task } = yield* scheduledTasks
           .upsert(upsertInput)

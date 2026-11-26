@@ -78,6 +78,8 @@ const harness = (
         }),
     }),
     Layer.mock(ThreadManagement.ThreadManagementService)({
+      // An unrestricted run, so Tot callers keep full access.
+      getProjectThreadRecords: () => Effect.succeed({ runs: [] } as never),
       getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
     }),
     Layer.mock(OrchestratorMcpService.OrchestratorMcpService)({
@@ -211,6 +213,8 @@ const sendHarness = (startedBy: StartedBy) => {
         Effect.succeed(startedBy.reportFrom?.includes(threadId) === true),
     }),
     Layer.mock(ThreadManagement.ThreadManagementService)({
+      // An unrestricted run, so Tot callers keep full access.
+      getProjectThreadRecords: () => Effect.succeed({ runs: [] } as never),
       getThreadShell: (threadId) =>
         Effect.succeed({ ...liveThreadShell(threadId), activeRunId: runId, latestRunId: runId }),
       getThreadRecords: (() =>
@@ -355,6 +359,8 @@ const objectiveHarness = (capped: boolean) => {
         }),
     }),
     Layer.mock(ThreadManagement.ThreadManagementService)({
+      // An unrestricted run, so Tot callers keep full access.
+      getProjectThreadRecords: () => Effect.succeed({ runs: [] } as never),
       getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
     }),
     Layer.mock(OrchestratorMcpService.OrchestratorMcpService)({
