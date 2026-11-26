@@ -9,6 +9,7 @@ import {
   type ModelSelection,
   type Tot,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -56,12 +57,12 @@ const harness = (
           {
             id: ThreadId.make("tot-launched:home:fix-ci"),
             title: "Fix the nightly build",
-            settledAt: "2026-11-24T18:00:00.000Z",
+            settledAt: DateTime.makeUnsafe("2026-11-24T18:00:00.000Z"),
           },
           {
             id: ThreadId.make("tot-launched:other:x"),
             title: "Someone else's work",
-            settledAt: "2026-11-24T18:00:00.000Z",
+            settledAt: DateTime.makeUnsafe("2026-11-24T18:00:00.000Z"),
           },
         ] as never),
     }),
@@ -73,7 +74,7 @@ const harness = (
   );
   const run = <A, E>(
     body: (
-      tidy: (tot: Tot) => Effect.Effect<boolean, unknown>,
+      tidy: Effect.Success<typeof TotMemoryTidyJob.makeTotMemoryTidyJob>["tidy"],
       folder: string,
     ) => Effect.Effect<A, E, FileSystem.FileSystem>,
   ) =>
@@ -191,6 +192,7 @@ it.effect("refuses the full GLM and does not call a model when nothing changed",
 });
 
 it("finds the latest 03:30 slot in local time", () => {
+  // @effect-diagnostics globalDate:off - local wall-clock slots need the platform timezone.
   const at = new Date(2026, 10, 25, 3, 29).getTime();
   expect(TotMemoryTidyJob.latestTidySlot(at)).toBe(new Date(2026, 10, 24, 3, 30).getTime());
   const later = new Date(2026, 10, 25, 9, 0).getTime();
