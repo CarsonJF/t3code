@@ -330,17 +330,24 @@ export const either = <P, A, E, R, A2, E2, R2>(
 
 /**
  * `declaration`, whose result from a linked environment then goes through
- * `forwarded` here, for what this environment records about the call.
+ * `forwarded` here, for what this environment records about the call. `before`
+ * also runs here before a call goes, for what this environment may refuse.
  */
-export const afterForwarding = <P, A, E, R, E2, R2>(
+export const afterForwarding = <P, A, E, R, E2, R2, R3 = never>(
   declaration: Declaration<(params: P) => Effect.Effect<A, E, R>>,
   forwarded: Forwarded<P, A, E2, R2>,
-) =>
-  declare(
-    checkedHandler(declaration) as (params: P) => Effect.Effect<A, E | E2, R | R2>,
-    remoteCheckOf(declaration) as RemoteCheck<P> | undefined,
+  before?: (params: P) => Effect.Effect<unknown, OrchestratorMcpFailure, R3>,
+) => {
+  const remote = remoteCheckOf(declaration) as RemoteCheck<P> | undefined;
+  return declare(
+    checkedHandler(declaration) as (params: P) => Effect.Effect<A, E | E2, R | R2 | R3>,
+    remote === undefined || before === undefined
+      ? remote
+      : // `before` needs only services a handler here has, which every call provides.
+        (((params: P) => remote(params).pipe(Effect.andThen(before(params)))) as RemoteCheck<P>),
     forwarded,
   );
+};
 
 const fullAccessRequired =
   "Changing projects or environment settings needs a live full-access/default calling thread or a full-access client.";
@@ -482,8 +489,10 @@ const routed = Effect.fn("McpToolAccess.routed")(function* <Tools extends Record
         if (scope.linkedEnvironments === false) return yield* PeerForwarding.linkedEnvironmentsOff;
         yield* (remote as RemoteCheck<typeof params>)(params);
         if (Option.isNone(forwarding)) return yield* linksUnavailable;
+        // An objective belongs to the calling Tot's work list here, not to the other side.
+        const { objective: _objective, ...forwardedParams } = params as { objective?: unknown };
         const result = yield* forwarding.value.call(scope, tool, target, {
-          ...params,
+          ...forwardedParams,
           environmentId,
         });
         return forwarded === undefined ? result : yield* forwarded(params, target, result);

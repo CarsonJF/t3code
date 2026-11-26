@@ -46,6 +46,7 @@ import {
   resolveRuntimeMode,
 } from "../../delegatedTaskModes.ts";
 import { readTotCaller, refuseTots } from "../../totCaller.ts";
+import { checkObjective, forwardedObjectiveTarget, recordAttempt } from "../../totWork.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as OrchestrationMcp from "../../OrchestratorMcpService.ts";
@@ -344,6 +345,8 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
           const launchedModel =
             launched === null || launched.deletedAt !== null ? undefined : launched.modelSelection;
           const replaying = launchedModel !== undefined;
+          // A replay was recorded when it was accepted.
+          const objective = replaying ? undefined : yield* checkObjective(input.objective);
           if (launched !== null && replaying && launched.projectId !== projectId)
             return yield* new OrchestratorMcpFailure({
               code: "invalid_request",
@@ -588,6 +591,12 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
           );
           const thread = result.projection.thread;
           const run = result.projection.runs.find((run) => run.userMessageId === messageId);
+          const recorded = yield* recordAttempt(objective, {
+            kind: "launch",
+            environmentId: scope.environmentId,
+            threadId: thread.id,
+            runId: run?.id ?? null,
+          });
           return {
             threadId: thread.id,
             link: McpInvocationContext.threadLinkFor(scope, thread.id, thread.title),
@@ -595,13 +604,14 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
             modelSelection: thread.modelSelection,
             runId: run?.id ?? null,
             status: run?.status ?? null,
+            ...recorded,
           };
         }),
       // The launched thread carries the caller's link, if it has one.
       "stamped",
     ),
     // A Tot here hears about what it launched on a linked environment too.
-    (_params, environmentId, result) =>
+    (params, environmentId, result) =>
       Effect.gen(function* () {
         const tot = yield* readTotCaller();
         if (Option.isSome(tot) && tot.value.via === "local")
@@ -612,8 +622,15 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
               reason: "launched",
             })
             .pipe(Effect.mapError(unavailable));
-        return result;
+        const recorded = yield* recordAttempt(yield* forwardedObjectiveTarget(params.objective), {
+          kind: "launch",
+          environmentId,
+          threadId: result.threadId,
+          runId: result.runId,
+        });
+        return { ...result, ...recorded };
       }),
+    (params) => checkObjective(params.objective),
   ),
   t3_project_list: McpToolAccess.reads((input) =>
     Effect.gen(function* () {

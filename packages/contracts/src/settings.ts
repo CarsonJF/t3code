@@ -45,6 +45,7 @@ import {
   TotsSetting,
   TotStallMinutes,
 } from "./tots.ts";
+import { DEFAULT_TOT_OBJECTIVE_RETRY_CAP, TotObjectiveRetryCap } from "./totWork.ts";
 import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
 import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
 import {
@@ -1584,6 +1585,10 @@ export const ServerSettings = Schema.Struct({
   totStallMinutes: TotStallMinutes.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOT_STALL_MINUTES)),
   ),
+  /** Failed or stopped attempts at one Tot objective before it needs a person; 0 is off. */
+  totObjectiveRetryCap: TotObjectiveRetryCap.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOT_OBJECTIVE_RETRY_CAP)),
+  ),
   snoozeLimitedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   autoResumeLimitedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /**
@@ -2083,6 +2088,7 @@ export const ServerSettingsPatch = Schema.Struct({
   totIdleCompaction: Schema.optionalKey(Schema.Boolean),
   totReportBatchSeconds: Schema.optionalKey(TotReportBatchSeconds),
   totStallMinutes: Schema.optionalKey(TotStallMinutes),
+  totObjectiveRetryCap: Schema.optionalKey(TotObjectiveRetryCap),
   sidebarAutoSettleKeepPullRequests: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   autoResumeLimitedThreads: Schema.optionalKey(Schema.Boolean),

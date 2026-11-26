@@ -31,6 +31,8 @@ import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TotService from "./TotService.ts";
 import * as TotWatchService from "./TotWatchService.ts";
+import * as TotWorkService from "./TotWorkService.ts";
+import type { WatchedThreadState } from "./totWatchTransitions.ts";
 
 const environmentId = EnvironmentId.make("asuna-env");
 const promini = EnvironmentId.make("promini-env");
@@ -438,6 +440,41 @@ it.effect("a thread a Tot launched reports once when it completes", () => {
     expect(reports).toHaveLength(1);
   }).pipe(Effect.provide(layer));
 });
+
+it.effect(
+  "each look at a thread with open Tot work reaches the work list, with the last words",
+  () => {
+    const launched = ThreadId.make("tot-launched:home:w1");
+    const untracked = ThreadId.make("tot-launched:home:w2");
+    const seen: Array<{
+      threadId: ThreadId;
+      status: WatchedThreadState["status"];
+      said: string | null;
+    }> = [];
+    const { layer, step, finalMessages } = makeHarness([
+      home({ watches: [watch(launched, "launched"), watch(untracked, "launched")] }),
+    ]);
+    const work = Layer.mock(TotWorkService.TotWorkService)({
+      tracks: (_environmentId, threadId) => threadId === launched,
+      observe: (_environmentId, threadId, state, outcome) =>
+        outcome.pipe(
+          Effect.map((said) => {
+            seen.push({ threadId, status: state.status, said });
+          }),
+        ),
+    });
+    return Effect.gen(function* () {
+      finalMessages.set("run-1", "Fixed the login page.");
+      yield* step(shell(launched, "running"));
+      yield* step(shell(untracked, "completed"));
+      yield* step(shell(launched, "completed"));
+      expect(seen).toEqual([
+        { threadId: launched, status: "running", said: "Fixed the login page." },
+        { threadId: launched, status: "completed", said: "Fixed the login page." },
+      ]);
+    }).pipe(Effect.provide(layer.pipe(Layer.provide(work))));
+  },
+);
 
 it.effect("a run that ends while awaited background work remains reports it is waiting", () => {
   const launched = ThreadId.make("tot-launched:home:c5");
