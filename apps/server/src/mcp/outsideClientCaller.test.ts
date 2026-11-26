@@ -26,6 +26,11 @@ it.each([
     { caller: { origin: "companion", id: "discord-tot-bridge" } },
   ],
   [
+    "a registered External Companion by its id",
+    client({ companionId: "demo" }),
+    { caller: { origin: "companion", id: "demo", label: "discord-tot-bridge" } },
+  ],
+  [
     "the Discord user the bridge relays for",
     client({ onBehalfOf: { service: "discord", userId: "111" } }),
     { caller: { origin: "discord", id: "111", label: "discord-tot-bridge" } },

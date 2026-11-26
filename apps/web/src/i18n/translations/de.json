@@ -13263,7 +13263,6 @@
   "39fd01a80e88ee2a": "Konnte nicht zurückgeholt werden",
   "1b7c524fccf06537": "Braucht dich",
   "7c5a3071fb7d9f14": "Nichts braucht dich",
-  "2843b91a4c4a5e98": "Freigaben, Fragen und fehlgeschlagene Läufe aller Tots und verknüpften Rechner erscheinen hier.",
   "2df485ee15283e6b": "Dieser Rechner konnte nicht gelesen werden:",
   "5eb5603f5b29900d": "Threads",
   "df1fb90eb9a77fbf": "Geplante Aufgaben",
@@ -13349,5 +13348,103 @@
   "8ed8b1e465719f27": "Nur du kannst in {name} Runden starten.",
   "d078947fa2c00d7e": "Herkunft des Aufrufers",
   "d951fe94dcf0553f": "Zugriff",
-  "85c730fca701f640": "Aufrufer entfernen"
+  "85c730fca701f640": "Aufrufer entfernen",
+  "27a6e8500eda7c2b": "Ältere Nachrichten konnten nicht geladen werden",
+  "0980674e69d501f1": "Die Nachricht konnte nicht gesendet werden",
+  "02af338d7b3c0808": "Nachricht an {name}",
+  "bb081b4501ebd5a7": "Senden",
+  "d4a50d7c02a35383": "Dieser Begleiter ist nicht registriert",
+  "9bec74fe0017bac6": "Füge ihn unter Einstellungen → Externe Begleiter hinzu.",
+  "c5e19e2d69c5207f": "Verbindung wird hergestellt",
+  "3974a1c8d27fb8b9": "Ältere Nachrichten laden",
+  "6c8cf04cdc23eaba": "Die Unterhaltung konnte nicht gelesen werden. Sie wird wieder geladen, sobald der Begleiter erreichbar ist.",
+  "83b364ee20adb1f7": [
+    "Noch keine Nachrichten mit ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "."
+  ],
+  "868cf870dcb75675": "Beantwortet",
+  "cf84573e22244b27": [
+    "Beantwortet: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "01f1b7ea80a6d537": "Deine Antwort",
+  "0ef416c08f583e40": "{count, plural, one {{count} ungelesen} other {{count} ungelesen}}",
+  "02e4bb298880af45": "Kinder",
+  "1a8ed8aebc5ac91e": "Externe Begleiter",
+  "017954af6e4e5255": "Kinder",
+  "50385e4a29e78714": "Externe Begleiter",
+  "3fb9f5581a8d4614": "Begleiter",
+  "adf5eb437f367152": "Freigaben, Fragen und fehlgeschlagene Läufe von jedem Tot, Begleiter und verknüpften Rechner erscheinen hier.",
+  "9a1b199e16600d74": [
+    "Verbinde diese App mit ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ", um die Begleiter hier zu beantworten."
+  ],
+  "b3c8e21b5dfc586d": "Begleiter öffnen",
+  "b0dc2c9ea1ec6d90": "Vor dem Handeln fragen",
+  "1cf02e750ba6251a": "Änderungen akzeptieren",
+  "e2e55cb2dd4d1344": "Die Begleiter konnten nicht gespeichert werden",
+  "3d493ff28b5fba22": "Die Berechtigung konnte nicht widerrufen werden",
+  "8b4eabdfc58b5fa0": "Bearbeiten",
+  "2c5674665579a329": "Entfernen",
+  "ffb1eb468eaf0b06": "Token",
+  "30a56f7e1ff009f1": "Die Berechtigung konnte nicht ausgestellt werden",
+  "74202565bb77aaf0": "Verbinde eine Umgebung, um ihre Begleiter zu verwalten.",
+  "a6b7d9df094eb2f8": "Begleiter hinzufügen",
+  "ee38a3adf88fb3c2": "Begleiter",
+  "09b910ec70f5ee9e": "Agent-Dienste, die du anderswo betreibst und die External Companion Protocol v1 sprechen. Dieser Server kommuniziert mit ihnen, deshalb bleiben ihre Tokens hier.",
+  "63db50d72e72da95": "Noch keine Begleiter",
+  "276075eb99f582cf": "Füge einen mit seiner URL und seinem Token hinzu.",
+  "66b483d78b1f69ec": [
+    "MCP-Berechtigung ausgestellt (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "); es wird darauf gewartet, dass der Begleiter seinen Einrichtungscode einlöst."
+  ],
+  "be5f0a14a8adf8b8": [
+    "MCP-Zugriff: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ". Erneuert sich selbst, solange er genutzt wird."
+  ],
+  "7982df88795fbe87": "MCP-Berechtigung",
+  "bed9d3e3cecc6be7": "MCP widerrufen",
+  "4e856401b998933c": "Einen Begleiter hinzufügen",
+  "cd21c76abe888449": "Begleiter bearbeiten",
+  "3f71baf70aad6a38": "T3 liest sein Manifest von der Basis-URL und sendet das Token als Bearer-Token.",
+  "95df1da03d0347d1": "Ein neuer Ursprung braucht das Token erneut: Ein gespeichertes Token geht nur dorthin, wofür es gespeichert wurde.",
+  "22b961ed5aca6afa": [
+    "MCP-Berechtigung für ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "8d4ca23f01876a58": "Der Begleiter tauscht einen Einrichtungscode gegen einstündigen MCP-Zugriff ein, den er selbst erneuert, und zwar nur von diesem Rechner aus. Du kannst ihn hier jederzeit widerrufen.",
+  "f0578e109081ffe8": "Zugriff",
+  "27979116f8b1fcd8": "Gib dem Begleiter diesen Einrichtungscode. Er funktioniert einmal, innerhalb von zehn Minuten, und wird nicht erneut angezeigt.",
+  "c851cde8a524f926": "Kopiert.",
+  "7a8677489fabed40": "Token-Endpunkt:",
+  "652118d78a932e2a": "Einrichtungscode ausstellen",
+  "5f5ca02947c8abb1": "Begleiter Agent Dienst Bearer Token MCP Berechtigung Kinder"
 }

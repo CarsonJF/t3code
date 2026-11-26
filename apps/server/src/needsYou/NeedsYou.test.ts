@@ -29,6 +29,7 @@ import * as ScheduledTasks from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as TotService from "../tots/TotService.ts";
+import * as ExternalCompanions from "../companions/ExternalCompanions.ts";
 import * as NeedsYou from "./NeedsYou.ts";
 import { runItem } from "./needsYouItems.ts";
 
@@ -137,9 +138,31 @@ interface Harness {
   readonly prompts: Array<string>;
 }
 
+const companionItem: NeedsYouItem = {
+  key: "companion:demo:n-1",
+  kind: "companion",
+  threadId: null,
+  title: "Demo Companion",
+  summary: "Deploy now?",
+  at: "2026-11-25T08:00:00.000Z",
+  totId: null,
+  companion: {
+    companionId: "demo",
+    name: "Demo Companion",
+    needsYouId: "n-1",
+    channel: "main",
+    kind: "approval",
+    options: [],
+  },
+};
+
 const run = <A, E>(
   body: (service: NeedsYou.NeedsYou["Service"], harness: Harness) => Effect.Effect<A, E>,
-  options: { readonly peerDown?: boolean; readonly model?: string } = {},
+  options: {
+    readonly peerDown?: boolean;
+    readonly model?: string;
+    readonly companions?: ReadonlyArray<NeedsYouItem>;
+  } = {},
 ) =>
   Effect.gen(function* () {
     const harness: Harness = { dispatched: [], peerCalls: [], prompts: [] };
@@ -234,6 +257,12 @@ const run = <A, E>(
               }),
           }),
           Layer.mock(ProviderRegistry.ProviderRegistry)({ getProviders: Effect.succeed([]) }),
+          options.companions === undefined
+            ? Layer.empty
+            : Layer.mock(ExternalCompanions.ExternalCompanions)({
+                needsYouItems: Effect.succeed(options.companions),
+                needsYouChanges: Stream.empty,
+              }),
           Layer.succeed(SecureRandom.SecureRandom, {
             uuidV4: () => Effect.succeed("00000000-0000-4000-8000-000000000000"),
           } as never),
@@ -280,6 +309,19 @@ describe("NeedsYou", () => {
           ]);
         }),
       ),
+  );
+
+  it.effect("lists what companions wait on as their own source, next to the threads", () =>
+    run(
+      (service) =>
+        Effect.gen(function* () {
+          const inbox = yield* service.list({ linked: false });
+          const companion = inbox.environments[0]!.items.find((item) => item.kind === "companion");
+          assert.deepEqual(companion, companionItem);
+          assert.lengthOf(inbox.environments[0]!.items, 5);
+        }),
+      { companions: [companionItem] },
+    ),
   );
 
   it.effect("shows a linked environment that did not answer with its error, keeping the rest", () =>
