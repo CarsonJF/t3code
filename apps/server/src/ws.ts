@@ -1,4 +1,9 @@
-import { GitCommandError, OrchestrationDispatchCommandError, TotError } from "@t3tools/contracts";
+import {
+  ExternalCompanionError,
+  GitCommandError,
+  OrchestrationDispatchCommandError,
+  TotError,
+} from "@t3tools/contracts";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- A synchronous digest inside the pure provider mapping.
 import * as NodeCrypto from "node:crypto";
 import * as FeatureFlags from "@t3tools/shared/FeatureFlags";
@@ -208,6 +213,9 @@ import { invalidateSettingsSecrets } from "./sourceControl/sourceControlHostSecr
 import * as GroupChatService from "./tots/GroupChatService.ts";
 import * as AvatarFigureDesigner from "./tots/AvatarFigureDesigner.ts";
 import * as NeedsYou from "./needsYou/NeedsYou.ts";
+import * as ExternalCompanions from "./companions/ExternalCompanions.ts";
+import { COMPANION_TOKEN_ROUTE } from "./companions/http.ts";
+import { loopbackBindAddress } from "./auth/utils.ts";
 import * as TotService from "./tots/TotService.ts";
 import * as TotWorkService from "./tots/TotWorkService.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
@@ -1611,6 +1619,14 @@ export const layerWsRpc = (
       const noTotWork = new TotError({ message: "This server keeps no Tot work list." });
       const avatarDesigner = yield* AvatarFigureDesigner.AvatarFigureDesigner;
       const needsYou = yield* NeedsYou.NeedsYou;
+      const companions = Option.getOrUndefined(
+        yield* Effect.serviceOption(ExternalCompanions.ExternalCompanions),
+      );
+      const noCompanions = new ExternalCompanionError({
+        message: "This server has no External Companions.",
+      });
+      const companionLoopback = loopbackBindAddress(config.host) ?? "127.0.0.1";
+      const companionTokenEndpoint = `http://${companionLoopback.includes(":") ? `[${companionLoopback}]` : companionLoopback}:${config.port}${COMPANION_TOKEN_ROUTE}`;
       const groupChats = yield* GroupChatService.GroupChatService;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
@@ -2912,6 +2928,26 @@ export const layerWsRpc = (
         [WS_METHODS.needsYouRestore]: (input) => needsYou.restore(input),
         [WS_METHODS.needsYouSuggest]: (input) => needsYou.suggest(input),
         [WS_METHODS.needsYouRespond]: (input) => needsYou.respond(input),
+        [WS_METHODS.companionsSubscribe]: () =>
+          companions === undefined ? Stream.succeed({ companions: [] }) : companions.state,
+        [WS_METHODS.companionsTest]: (input) =>
+          companions === undefined ? Effect.fail(noCompanions) : companions.test(input),
+        [WS_METHODS.companionsChannel]: (input) =>
+          companions === undefined ? Stream.fail(noCompanions) : companions.channel(input),
+        [WS_METHODS.companionsHistory]: (input) =>
+          companions === undefined ? Effect.fail(noCompanions) : companions.history(input),
+        [WS_METHODS.companionsSend]: (input) =>
+          companions === undefined ? Effect.fail(noCompanions) : companions.send(input),
+        [WS_METHODS.companionsRespond]: (input) =>
+          companions === undefined ? Effect.fail(noCompanions) : companions.respond(input),
+        [WS_METHODS.companionsGrantIssue]: (input) =>
+          companions === undefined
+            ? Effect.fail(noCompanions)
+            : companions.issueGrant(input, companionTokenEndpoint),
+        [WS_METHODS.companionsGrantRevoke]: (input) =>
+          companions === undefined
+            ? Effect.fail(noCompanions)
+            : companions.revokeGrant(input.companionId),
         [WS_METHODS.groupChatsCreate]: (input) => groupChats.create(input),
         [WS_METHODS.groupChatsUpdate]: (input) => groupChats.update(input),
         [WS_METHODS.groupChatsRemove]: (input) => groupChats.remove(input.id),
@@ -3862,6 +3898,17 @@ export const layer = Layer.unwrap(
     const totService = yield* TotService.TotService;
     const avatarDesigner = yield* AvatarFigureDesigner.AvatarFigureDesigner;
     const needsYou = yield* NeedsYou.NeedsYou;
+    // Optional services reach the handlers only when forwarded here.
+    const optionalServices = Layer.mergeAll(
+      Option.match(yield* Effect.serviceOption(ExternalCompanions.ExternalCompanions), {
+        onNone: () => Layer.empty,
+        onSome: (service) => Layer.succeed(ExternalCompanions.ExternalCompanions, service),
+      }),
+      Option.match(yield* Effect.serviceOption(TotWorkService.TotWorkService), {
+        onNone: () => Layer.empty,
+        onSome: (service) => Layer.succeed(TotWorkService.TotWorkService, service),
+      }),
+    );
     const groupChatService = yield* GroupChatService.GroupChatService;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const issues = yield* IssueService.IssueService;
@@ -3967,6 +4014,7 @@ export const layer = Layer.unwrap(
                   Layer.succeed(TotService.TotService, totService),
                   Layer.succeed(AvatarFigureDesigner.AvatarFigureDesigner, avatarDesigner),
                   Layer.succeed(NeedsYou.NeedsYou, needsYou),
+                  optionalServices,
                 ),
               ),
               Layer.provide(Layer.succeed(GroupChatService.GroupChatService, groupChatService)),

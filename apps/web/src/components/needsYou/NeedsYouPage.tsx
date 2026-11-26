@@ -14,6 +14,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { T, useGT, Var } from "gt-react";
 import {
   AlarmClockIcon,
+  BotMessageSquareIcon,
   ArrowUpRightIcon,
   CalendarXIcon,
   CircleStopIcon,
@@ -43,6 +44,7 @@ import { SidebarInset } from "../ui/sidebar";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { CompanionNeedsYouActions } from "../companions/CompanionNeedsYouActions";
 import { useNeedsYou } from "./useNeedsYou";
 
 const KIND_ICONS = {
@@ -51,6 +53,7 @@ const KIND_ICONS = {
   failed_run: CircleXIcon,
   stopped_run: CircleStopIcon,
   scheduled_failure: CalendarXIcon,
+  companion: BotMessageSquareIcon,
 } as const;
 
 function reportResult(title: string, result: AtomCommandResult<unknown, unknown>) {
@@ -97,8 +100,8 @@ export function NeedsYouPage() {
                   </EmptyTitle>
                   <EmptyDescription>
                     <T>
-                      Approvals, questions and failed runs from every Tot and linked machine show up
-                      here.
+                      Approvals, questions and failed runs from every Tot, companion and linked
+                      machine show up here.
                     </T>
                   </EmptyDescription>
                 </EmptyHeader>
@@ -141,7 +144,7 @@ function MachineGroup(props: {
         </p>
       )}
       {machine.sections.map((section) => (
-        <div key={section.totId ?? ""} className="flex flex-col gap-2">
+        <div key={section.companionId ?? section.totId ?? ""} className="flex flex-col gap-2">
           <h3 className="text-sm font-medium text-foreground">
             {section.totName ?? <T context="items not from any Tot">Threads</T>}
           </h3>
@@ -159,6 +162,14 @@ function MachineGroup(props: {
 function useOpenItem(machine: NeedsYouMachine) {
   const navigate = useNavigate();
   return (item: NeedsYouItem) => {
+    if (item.companion !== undefined) {
+      void navigate({
+        to: "/companions/$environmentId/$companionId",
+        params: { environmentId: machine.environmentId, companionId: item.companion.companionId },
+        search: { channel: item.companion.channel },
+      });
+      return;
+    }
     if (item.threadId === null) {
       void navigate({ to: "/settings/scheduled-tasks" });
       return;
@@ -201,6 +212,7 @@ function NeedsYouRow(props: {
     failed_run: gt("Failed run"),
     stopped_run: gt("Stopped run"),
     scheduled_failure: gt("Scheduled run failed"),
+    companion: gt("Companion"),
   }[item.kind];
   return (
     <li
@@ -229,10 +241,31 @@ function NeedsYouRow(props: {
       {item.kind === "question" && item.questions !== undefined ? (
         <QuestionAnswer item={item} questions={item.questions} machine={machine} />
       ) : null}
+      {item.companion === undefined ? null : machine.connected ? (
+        <CompanionNeedsYouActions
+          environmentId={machine.environmentId}
+          companionId={item.companion.companionId}
+          needsYouId={item.companion.needsYouId}
+          kind={item.companion.kind}
+          options={item.companion.options}
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          <T>
+            Connect this app to <Var>{machine.label}</Var> to answer its companions here.
+          </T>
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-1">
         <Button size="compact" variant="ghost-muted" onClick={() => open(item)}>
           <ArrowUpRightIcon />
-          {item.threadId === null ? <T>Scheduled tasks</T> : <T>Open thread</T>}
+          {item.companion !== undefined ? (
+            <T>Open companion</T>
+          ) : item.threadId === null ? (
+            <T>Scheduled tasks</T>
+          ) : (
+            <T>Open thread</T>
+          )}
         </Button>
         <Menu>
           <MenuTrigger

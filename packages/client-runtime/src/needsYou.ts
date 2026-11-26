@@ -16,6 +16,8 @@ export interface NeedsYouSource {
 export interface NeedsYouSection {
   readonly totId: TotId | null;
   readonly totName: string | null;
+  /** Set for an External Companion's own section; `totName` then holds its name. */
+  readonly companionId: string | null;
   readonly items: ReadonlyArray<NeedsYouItem>;
 }
 
@@ -36,24 +38,45 @@ export interface MergedNeedsYou {
   readonly count: number;
 }
 
-const sectionsOf = (environment: NeedsYouEnvironment, items: ReadonlyArray<NeedsYouItem>) => {
+const sectionsOf = (
+  environment: NeedsYouEnvironment,
+  items: ReadonlyArray<NeedsYouItem>,
+): ReadonlyArray<NeedsYouSection> => {
   const byTot = new Map<TotId | null, NeedsYouItem[]>();
+  const byCompanion = new Map<string, NeedsYouItem[]>();
   for (const item of items) {
+    if (item.companion !== undefined) {
+      const list = byCompanion.get(item.companion.companionId) ?? [];
+      list.push(item);
+      byCompanion.set(item.companion.companionId, list);
+      continue;
+    }
     const list = byTot.get(item.totId) ?? [];
     list.push(item);
     byTot.set(item.totId, list);
   }
   const name = (totId: TotId | null) =>
     totId === null ? null : (environment.tots.find((tot) => tot.id === totId)?.name ?? totId);
-  return [...byTot.entries()]
-    .map(([totId, sectionItems]) => ({ totId, totName: name(totId), items: sectionItems }))
-    .sort((left, right) =>
-      left.totName === null
-        ? 1
-        : right.totName === null
-          ? -1
-          : left.totName.localeCompare(right.totName),
-    );
+  return [
+    ...[...byTot.entries()].map(([totId, sectionItems]) => ({
+      totId,
+      totName: name(totId),
+      companionId: null,
+      items: sectionItems,
+    })),
+    ...[...byCompanion.entries()].map(([companionId, sectionItems]) => ({
+      totId: null,
+      totName: sectionItems[0]?.companion?.name ?? companionId,
+      companionId,
+      items: sectionItems,
+    })),
+  ].sort((left, right) =>
+    left.totName === null
+      ? 1
+      : right.totName === null
+        ? -1
+        : left.totName.localeCompare(right.totName),
+  );
 };
 
 /**
