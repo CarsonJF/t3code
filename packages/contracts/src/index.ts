@@ -2,6 +2,7 @@ export * from "./baseSchemas.ts";
 export * from "./groupChats.ts";
 export * from "./tots.ts";
 export * from "./avatarLibrary.ts";
+export * from "./needsYou.ts";
 export * from "./assistantCitations.ts";
 export * from "./composerContext.ts";
 export * from "./composerContextClipboard.ts";
