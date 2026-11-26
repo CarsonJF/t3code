@@ -4,7 +4,7 @@ import type {
 } from "@t3tools/contracts";
 
 import type { Question } from "./answers.ts";
-import type { T3Client } from "./t3Client.ts";
+import type { T3CallOptions, T3Client } from "./t3Client.ts";
 import type { ChannelMessage, ChannelPort } from "./turns.ts";
 
 export interface ScriptFrame {
@@ -52,7 +52,11 @@ export interface FakeT3Options {
 
 export interface FakeT3 {
   readonly client: T3Client;
-  readonly calls: Array<{ readonly tool: string; readonly args: Record<string, unknown> }>;
+  readonly calls: Array<{
+    readonly tool: string;
+    readonly args: Record<string, unknown>;
+    readonly options?: T3CallOptions | undefined;
+  }>;
   readonly callsOf: (tool: string) => ReadonlyArray<Record<string, unknown>>;
   readonly polls: () => number;
 }
@@ -127,7 +131,7 @@ const page = (input: {
  * return what the visible frame's answer gained since the offset.
  */
 export const createFakeT3 = (options: FakeT3Options): FakeT3 => {
-  const calls: Array<{ readonly tool: string; readonly args: Record<string, unknown> }> = [];
+  const calls: FakeT3["calls"] = [];
   let frameIndex = 0;
   let visible: ScriptFrame = { status: "running" };
   let polls = 0;
@@ -136,8 +140,12 @@ export const createFakeT3 = (options: FakeT3Options): FakeT3 => {
       status: "running",
     };
 
-  const call = async <A>(tool: string, args: Record<string, unknown>): Promise<A> => {
-    calls.push({ tool, args });
+  const call = async <A>(
+    tool: string,
+    args: Record<string, unknown>,
+    callOptions?: T3CallOptions,
+  ): Promise<A> => {
+    calls.push({ tool, args, options: callOptions });
     switch (tool) {
       case "t3_tot_list":
         return { tots: options.tots ?? defaultTots } as A;

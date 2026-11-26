@@ -18,6 +18,7 @@ import {
   totSlug,
   totAvatarStyleOf,
   totThreadId,
+  totAskDecision,
   totWatchReportsOf,
   type Tot as TotRecord,
 } from "./tots.ts";
@@ -272,5 +273,65 @@ describe("isTotWorkerMessage", () => {
     expect(isTotWorkerMessage("thread:plain", { ...fromAgent, senderThreadId: yuiThread })).toBe(
       false,
     );
+  });
+});
+
+describe("totAskDecision", () => {
+  const tot = {
+    whoCanAsk: [
+      { origin: "discord", id: "*", mode: "read-only" },
+      { origin: "discord", id: "111", mode: "full" },
+      { origin: "webhook", id: "hook", mode: "ask" },
+    ],
+  } as const;
+
+  it.each([
+    [
+      { origin: "discord", id: "111" },
+      { kind: "allow", restriction: undefined },
+    ],
+    [
+      { origin: "discord", id: "222" },
+      { kind: "allow", restriction: "read-only" },
+    ],
+    [
+      { origin: "webhook", id: "hook" },
+      { kind: "allow", restriction: "ask" },
+    ],
+    [{ origin: "webhook", id: "other" }, { kind: "refuse" }],
+    [{ origin: "tot", id: "111" }, { kind: "refuse" }],
+  ] as const)("decides %o", (caller, expected) => {
+    expect(totAskDecision(tot, caller)).toEqual(expected);
+  });
+
+  it("refuses everyone outside when the list is empty", () => {
+    expect(totAskDecision({ whoCanAsk: [] }, { origin: "tot", id: "home" })).toEqual({
+      kind: "refuse",
+    });
+  });
+
+  it.each([
+    [
+      { origin: "tot", id: "home" },
+      { kind: "allow", restriction: undefined },
+    ],
+    [
+      { origin: "linked", id: "env" },
+      { kind: "allow", restriction: undefined },
+    ],
+    [
+      { origin: "webhook", id: "hook" },
+      { kind: "allow", restriction: undefined },
+    ],
+    [{ origin: "discord", id: "111" }, { kind: "refuse" }],
+    [{ origin: "companion", id: "phone" }, { kind: "refuse" }],
+    [{ origin: "agent", id: "thread:x" }, { kind: "refuse" }],
+  ] as const)("a Tot from before the list decides %o by the defaults", (caller, expected) => {
+    expect(totAskDecision({}, caller)).toEqual(expected);
+  });
+
+  it("decodes a Tot saved before the list existed", () => {
+    const decoded = decodeTot(DEFAULT_HOME_TOT);
+    expect(decoded.whoCanAsk).toBeUndefined();
   });
 });

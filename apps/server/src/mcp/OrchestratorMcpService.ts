@@ -68,6 +68,7 @@ import {
   parseTotThreadId,
   resolveProjectProviderInstanceEnabled,
   SECRET_REQUEST_UNSAVED_NOTE,
+  type TurnCaller,
 } from "@t3tools/contracts";
 import { getProviderOptionCurrentValue, withLegacyUltracodeEffort } from "@t3tools/shared/model";
 import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
@@ -284,6 +285,8 @@ export function threadManagementFailure(error: unknown): OrchestratorMcpFailure 
       );
     case "ThreadManagementRunOutputRejectedError":
       return failure("invalid_request", error.message);
+    case "ThreadManagementCallerRefusedError":
+      return failure("capability_denied", error.message);
     case "ThreadManagementThreadNotInterruptibleError":
       return failure("thread_not_interruptible", error.message);
     case "ThreadManagementProjectionLoadError":
@@ -293,6 +296,28 @@ export function threadManagementFailure(error: unknown): OrchestratorMcpFailure 
     case "ThreadManagementProviderInstanceDisabledError":
       return failure("invalid_request", error.message);
   }
+}
+
+/**
+ * The outside client a send comes from, when nothing else names it: a thread here and a peer
+ * link's sender thread do. The Discord bridge names the Discord user it relays for.
+ */
+export function outsideClientCaller(
+  scope: McpInvocationScope,
+  parent: unknown,
+): { readonly caller?: TurnCaller } {
+  const client = scope.client;
+  if (parent !== undefined || scope.thread !== undefined || client === undefined) return {};
+  const label = client.label.trim().slice(0, 200) || client.sessionId;
+  // A peer link names its sender thread; one that names none is still that link.
+  if (client.linked === true) {
+    return client.senderThread === undefined
+      ? { caller: { origin: "linked", id: label, label } }
+      : {};
+  }
+  return client.onBehalfOf === undefined
+    ? { caller: { origin: "companion", id: label } }
+    : { caller: { origin: "discord", id: client.onBehalfOf.userId, label } };
 }
 
 // Without a reason, a Stop reads as the user's (see RunExecutionService.USER_STOP_REASON).
@@ -3886,6 +3911,7 @@ const make = Effect.gen(function* () {
           mode,
           ...(input.freshContext ? { freshContext: true } : {}),
           ...(input.outputSchema === undefined ? {} : { outputSchema: input.outputSchema }),
+          ...outsideClientCaller(scope, parent),
           createdBy: "agent",
           creationSource: "mcp",
         })

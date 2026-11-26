@@ -1,6 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import {
   DEFAULT_HOME_TOT,
+  TOT_DEFAULT_WHO_CAN_ASK,
+  TotId,
   EnvironmentId,
   HOME_TOT_ID,
   ProjectId,
@@ -156,6 +158,31 @@ it.effect("brings every set-up Tot's folder up to date at start and when the Tot
     yield* tots.create({ name: "Work", avatar, scope: "all", instructions: "", modelSelection });
     // Home's list of fellow Tots now names Work; Work has no folder until it is turned on.
     expect(ensured).toEqual([{ id: "home", siblings: ["home", "work"] }]);
+  }).pipe(Effect.provide(layer));
+});
+
+it.effect("seeds the default Who can ask list once, for Tots from before it, and new Tots", () => {
+  const kept = [{ origin: "discord", id: "111", mode: "ask" }] as const;
+  const { layer } = makeTots({
+    tots: [
+      { ...DEFAULT_HOME_TOT, projectId: totProjectId },
+      { ...DEFAULT_HOME_TOT, id: TotId.make("work"), name: "Work", whoCanAsk: kept },
+    ],
+  });
+  return Effect.gen(function* () {
+    const tots = yield* TotService.TotService;
+    const [home, work] = yield* tots.list;
+    expect(home?.whoCanAsk).toEqual(TOT_DEFAULT_WHO_CAN_ASK);
+    // A list a person already set, even an empty one, is never reseeded.
+    expect(work?.whoCanAsk).toEqual(kept);
+    const created = yield* tots.create({
+      name: "Yui",
+      avatar,
+      scope: "all",
+      instructions: "",
+      modelSelection,
+    });
+    expect(created.whoCanAsk).toEqual(TOT_DEFAULT_WHO_CAN_ASK);
   }).pipe(Effect.provide(layer));
 });
 

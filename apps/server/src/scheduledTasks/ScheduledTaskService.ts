@@ -29,6 +29,7 @@ import {
   scheduledTaskListenerMode,
   scheduledTaskThreadMode,
   managedRuntimeModeDenial,
+  type TurnCaller,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -1222,6 +1223,13 @@ export const layer = Layer.effect(
 
         yield* notifyChanged;
 
+        // A delivery comes from whoever holds the URL; a schedule another Tot made is that Tot's ask.
+        const turnCaller: { readonly caller?: TurnCaller } =
+          webhook !== undefined
+            ? { caller: { origin: "webhook", id: active.id, label: active.title.slice(0, 200) } }
+            : active.createdByTotId !== undefined
+              ? { caller: { origin: "tot", id: active.createdByTotId } }
+              : {};
         const fireKey =
           webhook === undefined
             ? `${active.id}:${DateTime.toEpochMillis(startedAt)}:${trigger}`
@@ -1245,6 +1253,7 @@ export const layer = Layer.effect(
               threadId,
               messageId,
               scheduledTaskId: active.id,
+              ...turnCaller,
               text: prompt,
               attachments: [],
               mode: "queue",
