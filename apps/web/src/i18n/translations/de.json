@@ -13477,5 +13477,25 @@
   "ea0097edaa06817b": "Nur werktags",
   "e7e9762bbb8514c4": "Vorabprüfung (optional)",
   "4e4eca8f36ff7d92": "Ein Shell-Befehl, der zuerst im Ordner des Tot läuft; ein Exit-Code ungleich null überspringt diesen Rundgang.",
-  "7ada5fe78b59c87a": "Umschauen hat etwas gefunden"
+  "7ada5fe78b59c87a": "Umschauen hat etwas gefunden",
+  "a59436c0eebf13af": "Erneuter Versuch mit diesem Konto fehlgeschlagen",
+  "de52f30cce176b8c": "Mit {account} erneut versuchen",
+  "13629f8216661033": [
+    "Verbinde diese App mit ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ", um es hier mit einem anderen Konto erneut zu versuchen, oder öffne den Thread dort."
+  ],
+  "1012470564ed461f": [
+    "Mit ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " erneut versuchen"
+  ]
 }
