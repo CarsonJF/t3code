@@ -30,6 +30,8 @@ import {
   TOT_REPORT_MESSAGE_ID_PREFIX,
   TotError,
   parseTotThreadId,
+  LOOK_AROUND_DEFAULT_SCHEDULE,
+  LOOK_AROUND_TITLE,
   scheduledTaskThreadMode,
   totSlug,
   totThreadId,
@@ -291,6 +293,7 @@ const make = Effect.gen(function* () {
           task.threadId === null &&
           task.createdByTotId === tot.id &&
           task.projectId === projectId &&
+          task.readOnly !== true &&
           scheduledTaskThreadMode(task) !== "new_thread";
         if (!unboundTemplateRoutine) {
           if (task.threadId === null || task.threadId === threadId) continue;
@@ -403,10 +406,31 @@ const make = Effect.gen(function* () {
   /** A template's suggested routines, paused, in the Tot's folder; its first thread binds them. */
   const addTemplateRoutines = Effect.fn("TotService.addTemplateRoutines")(function* (
     tot: Tot,
-    routines: NonNullable<ReturnType<typeof findTotTemplate>>["scheduledTasks"],
+    template: NonNullable<ReturnType<typeof findTotTemplate>>,
   ) {
-    if (routines.length === 0 || tot.modelSelection === null) return;
+    const routines = template.scheduledTasks;
+    if ((routines.length === 0 && template.lookAround === undefined) || tot.modelSelection === null)
+      return;
     const { projectId } = yield* ensureProject(tot);
+    if (template.lookAround !== undefined) {
+      yield* scheduledTasks
+        .upsert({
+          title: LOOK_AROUND_TITLE,
+          prompt: template.lookAround.focus,
+          enabled: false,
+          schedule: LOOK_AROUND_DEFAULT_SCHEDULE,
+          projectId,
+          readOnly: true,
+          workspaceStrategy: { type: "root" },
+          modelSelection: tot.modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          createdBy: "user",
+          creationSource: "server",
+          createdByTotId: tot.id,
+        })
+        .pipe(Effect.mapError((error) => fail(error.message)));
+    }
     for (const routine of routines) {
       yield* scheduledTasks
         .upsert({
@@ -455,7 +479,7 @@ const make = Effect.gen(function* () {
     };
     yield* writeTots((current) => [...current, tot]);
     yield* refreshFolders();
-    if (template !== undefined) yield* addTemplateRoutines(tot, template.scheduledTasks);
+    if (template !== undefined) yield* addTemplateRoutines(tot, template);
     return tot;
   }, locked);
 

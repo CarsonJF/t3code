@@ -3,6 +3,7 @@ import {
   MessageId,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   type ProjectId,
+  type RunId,
   ScheduledTask,
   ScheduledTaskError,
   ScheduledTaskId,
@@ -30,6 +31,10 @@ import {
   scheduledTaskThreadMode,
   managedRuntimeModeDenial,
   type TurnCaller,
+  LOOK_AROUND_OUTPUT_SCHEMA,
+  LookAroundResult,
+  ScheduledTaskLastSweep,
+  lookAroundThreadId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -282,6 +287,8 @@ interface ScheduledTaskRow {
   readonly last_skipped_at: string | null;
   readonly last_skip_reason: string | null;
   readonly last_skip_detail: string | null;
+  readonly read_only: number;
+  readonly last_sweep_json: string | null;
 }
 
 interface WebhookDeliveryRow {
@@ -442,6 +449,43 @@ function webhookEndpoint(
   };
 }
 
+const LastSweepJson = Schema.fromJsonString(ScheduledTaskLastSweep);
+const decodeLastSweep = Schema.decodeUnknownOption(LastSweepJson);
+const encodeLastSweep = Schema.encodeEffect(LastSweepJson);
+
+/** A stored sweep result that no longer decodes is dropped rather than failing the whole row. */
+function lastSweepField(json: string | null): { readonly lastSweep?: ScheduledTaskLastSweep } {
+  if (json === null) return {};
+  const decoded = decodeLastSweep(json);
+  return Option.isSome(decoded) ? { lastSweep: decoded.value } : {};
+}
+
+const decodeLookAroundResult = Schema.decodeUnknownOption(LookAroundResult);
+
+/** The sweep's verdict; a run that submitted nothing usable asks for attention rather than staying quiet. */
+function lookAroundVerdict(output: unknown): LookAroundResult {
+  const decoded = decodeLookAroundResult(output);
+  if (Option.isNone(decoded)) {
+    return { status: "attention", findings: ["The sweep finished without a result."] };
+  }
+  return {
+    status: decoded.value.status,
+    findings: decoded.value.findings
+      .map((finding) => finding.trim())
+      .filter(Boolean)
+      .slice(0, 10),
+  };
+}
+
+/** The turn a sweep runs: its focus, framed so the agent knows it can only look. */
+function lookAroundPrompt(focus: string): string {
+  return [
+    "Look around: a read-only sweep. You can read files, run read-only commands and use T3 Code's read tools. Anything that changes files, git, threads or scheduled tasks is refused, so do not try to fix anything.",
+    `What to check: ${focus}`,
+    "Finish with `ok` when nothing needs the user. Otherwise use `attention`, with one short line per finding that says what is wrong and where.",
+  ].join("\n\n");
+}
+
 // Runs per task row; list and lookup operations already own the span.
 const decodeRow = Effect.fnUntraced(
   function* (row: ScheduledTaskRow, origin: WebhookOrigin | null = null) {
@@ -487,6 +531,8 @@ const decodeRow = Effect.fnUntraced(
               detail: row.last_skip_detail,
             },
           }),
+      ...(row.read_only === 1 ? { readOnly: true } : {}),
+      ...lastSweepField(row.last_sweep_json),
     });
   },
   (effect, row, _origin?) =>
@@ -624,7 +670,9 @@ export const layer = Layer.effect(
         missed_run_grace_minutes,
         last_skipped_at,
         last_skip_reason,
-        last_skip_detail
+        last_skip_detail,
+        read_only,
+        last_sweep_json
       FROM scheduled_tasks
       -- Not updated_at: toggles, runs and edits rewrite it, and clients render
       -- this order as-is, so rows would move under the pointer.
@@ -673,7 +721,9 @@ export const layer = Layer.effect(
         missed_run_grace_minutes,
         last_skipped_at,
         last_skip_reason,
-        last_skip_detail
+        last_skip_detail,
+        read_only,
+        last_sweep_json
       FROM scheduled_tasks
       WHERE task_id = ${id}
     `.pipe(NodeSqliteClient.readOnly);
@@ -757,7 +807,8 @@ export const layer = Layer.effect(
           webhook_token,
           webhook_secret,
           precheck,
-          missed_run_grace_minutes
+          missed_run_grace_minutes,
+          read_only
         )
         SELECT
           ${task.id},
@@ -786,7 +837,8 @@ export const layer = Layer.effect(
           ${webhook.token},
           ${webhook.secret},
           ${task.precheck ?? null},
-          ${task.missedRunGraceMinutes ?? null}
+          ${task.missedRunGraceMinutes ?? null},
+          ${task.readOnly === true ? 1 : 0}
         WHERE ${requireExisting ? 0 : 1} = 1
            OR EXISTS (SELECT 1 FROM scheduled_tasks WHERE task_id = ${task.id})
         ON CONFLICT (task_id)
@@ -836,7 +888,8 @@ export const layer = Layer.effect(
             ELSE scheduled_tasks.webhook_secret
           END,
           precheck = excluded.precheck,
-          missed_run_grace_minutes = excluded.missed_run_grace_minutes
+          missed_run_grace_minutes = excluded.missed_run_grace_minutes,
+          read_only = excluded.read_only
         RETURNING task_id
       `.pipe(
         Effect.mapError((cause) =>
@@ -1033,6 +1086,33 @@ export const layer = Layer.effect(
       return { run: terminal, failure: latestRootProviderFailure(run, turnItems) };
     });
 
+    // A sweep that finds nothing only records it; one that finds something tells its Tot.
+    const recordSweep = Effect.fn("ScheduledTaskService.recordSweep")(function* (
+      task: ScheduledTask,
+      startedAtIso: string,
+      thread: { readonly projectId: ProjectId; readonly threadId: ThreadId },
+      runId: RunId,
+    ) {
+      const { runs } = yield* threadManagement.getProjectThreadRecords(thread, ["runs"]);
+      const verdict = lookAroundVerdict(runs.find((run) => run.id === runId)?.output?.value);
+      const lastSweepJson = yield* encodeLastSweep({ at: iso(yield* localNow), ...verdict });
+      const updated = yield* sql`
+        UPDATE scheduled_tasks SET last_sweep_json = ${lastSweepJson}
+        WHERE task_id = ${task.id} AND last_run_at = ${startedAtIso}
+        RETURNING task_id
+      `;
+      yield* notifyChanged;
+      if (updated.length === 0 || verdict.status === "ok") return;
+      yield* alerts.notifySweepAttention({
+        taskId: task.id,
+        title: task.title,
+        ownerTotId: task.createdByTotId ?? null,
+        startedAtIso,
+        findings: verdict.findings,
+        threadId: thread.threadId,
+      });
+    });
+
     // The provider can still reject an accepted dispatch, so follow the run. A usage limit gets
     // one fallback retry, whose outcome stands for the occurrence. A spent one-time task is
     // removed on success and turned off on failure. A paused task also has a NULL next_run_at.
@@ -1076,6 +1156,9 @@ export const layer = Layer.effect(
         );
       }
       const { run, failure } = outcome;
+      if (run.status === "completed" && task.readOnly === true) {
+        yield* recordSweep(task, startedAtIso, thread, run.id);
+      }
       if (run.status === "completed") {
         yield* sql`
           DELETE FROM scheduled_tasks
@@ -1236,8 +1319,18 @@ export const layer = Layer.effect(
             : `${active.id}:webhook:${webhook.deliveryId}`;
         const commandId = CommandId.make(`scheduled-task:${fireKey}`);
         const messageId = MessageId.make(`scheduled-task-message:${fireKey}`);
-        const prompt = webhook?.prompt ?? active.prompt;
+        const prompt = active.readOnly
+          ? lookAroundPrompt(active.prompt)
+          : (webhook?.prompt ?? active.prompt);
         const threadMode = scheduledTaskThreadMode(active);
+        const sweepThreadId = lookAroundThreadId(active.id);
+        const output = active.readOnly ? { outputSchema: LOOK_AROUND_OUTPUT_SCHEMA } : {};
+        // A sweep never runs in any thread but its own, whatever the row says.
+        const boundThreadId = active.readOnly
+          ? active.threadId === sweepThreadId
+            ? sweepThreadId
+            : null
+          : active.threadId;
 
         // A bound thread can move to another project (No project to a project) while
         // this fires. Follow it; one move needs at most two retries. Same ids replay safely.
@@ -1259,6 +1352,7 @@ export const layer = Layer.effect(
               mode: "queue",
               ...(active.modelPinned === true ? { modelSelection: active.modelSelection } : {}),
               ...(threadMode === "fresh_session" ? { freshContext: true } : {}),
+              ...output,
               createdBy: active.createdBy,
               creationSource: active.creationSource,
             })
@@ -1280,15 +1374,16 @@ export const layer = Layer.effect(
 
         // Capture defects and interrupts too so dispatch failures still reach markCompleted.
         const result =
-          active.threadId === null
+          boundThreadId === null
             ? yield* Effect.exit(
                 threadLaunch
                   .launch({
                     commandId,
+                    ...(active.readOnly ? { threadId: sweepThreadId, titleRenamed: true } : {}),
                     projectId: active.projectId,
                     title: active.title,
                     modelSelection: active.modelSelection,
-                    runtimeMode: active.runtimeMode,
+                    runtimeMode: active.readOnly ? "approval-required" : active.runtimeMode,
                     interactionMode: active.interactionMode,
                     workspaceStrategy: active.workspaceStrategy,
                     initialMessage: {
@@ -1296,6 +1391,7 @@ export const layer = Layer.effect(
                       scheduledTaskId: active.id,
                       text: prompt,
                       attachments: [],
+                      ...output,
                     },
                     createdBy: active.createdBy,
                     creationSource: active.creationSource,
@@ -1310,8 +1406,8 @@ export const layer = Layer.effect(
             : yield* Effect.exit(
                 // The stored selection only seeds fresh threads. A bound run
                 // follows the thread's current provider unless the task pins its model.
-                sendBound(ThreadId.make(active.threadId), active.projectId, 2).pipe(
-                  Effect.as(ThreadId.make(active.threadId)),
+                sendBound(ThreadId.make(boundThreadId), active.projectId, 2).pipe(
+                  Effect.as(ThreadId.make(boundThreadId)),
                 ),
               );
 
@@ -1719,9 +1815,21 @@ export const layer = Layer.effect(
       // keep their run history, and so real load failures propagate instead
       // of silently resetting an existing row.
       const existingTask = yield* findTask(id);
-      const threadMode = resolveThreadMode(input, existingTask);
-      const keptThreadId =
-        input.threadId ?? (input.unbindThread === true ? null : (existingTask?.threadId ?? null));
+      // A sweep runs only in its own thread, which the server keeps read-only.
+      const readOnly = input.readOnly ?? existingTask?.readOnly ?? false;
+      const sweepThreadId = lookAroundThreadId(id);
+      if (readOnly && input.threadId != null && input.threadId !== sweepThreadId) {
+        return yield* taskError("A Look around sweep runs in its own read-only thread.", {
+          taskId: id,
+        });
+      }
+      const threadMode = readOnly ? "fresh_session" : resolveThreadMode(input, existingTask);
+      const keptThreadId = readOnly
+        ? existingTask?.threadId === sweepThreadId
+          ? sweepThreadId
+          : null
+        : (input.threadId ??
+          (input.unbindThread === true ? null : (existingTask?.threadId ?? null)));
       // A bound thread belongs to its project, so moving the task leaves it for a new one.
       const movedOffThread =
         existingTask !== null &&
@@ -1742,7 +1850,7 @@ export const layer = Layer.effect(
       // thread runs in that thread's mode, which the orchestrator checks instead. Checked before
       // the save consumes a webhook secret.
       const modeDenial =
-        input.enabled && threadId === null
+        input.enabled && threadId === null && !readOnly
           ? managedRuntimeModeDenial(managedPolicy.summary, input.runtimeMode)
           : undefined;
       if (modeDenial !== undefined) return yield* taskError(modeDenial, { taskId: id });
@@ -1867,9 +1975,10 @@ export const layer = Layer.effect(
           : { token: null, secret: null, secretChanged: true };
       // A folder that is not a Git repository, Scratch included, cannot hold a worktree.
       const workspaceStrategy: ScheduledTask["workspaceStrategy"] =
-        input.workspaceStrategy.type === "worktree" &&
+        readOnly ||
+        (input.workspaceStrategy.type === "worktree" &&
         ((yield* managedFolders.isScratchProject(input.projectId)) ||
-          (yield* threadLaunch.isNonGitProject(input.projectId)))
+            (yield* threadLaunch.isNonGitProject(input.projectId))))
           ? { type: "root" }
           : input.workspaceStrategy;
       const scheduleUnchanged =
@@ -1906,7 +2015,7 @@ export const layer = Layer.effect(
         modelSelection: modelPinned ? input.modelSelection : (boundModel ?? input.modelSelection),
         ...(modelPinned ? { modelPinned: true } : {}),
         runtimeMode: input.runtimeMode,
-        interactionMode: input.interactionMode,
+        interactionMode: readOnly ? "default" : input.interactionMode,
         createdBy: existingTask?.createdBy ?? input.createdBy ?? "user",
         creationSource: input.creationSource ?? "web",
         ...(createdByTotId === undefined ? {} : { createdByTotId }),
@@ -1921,12 +2030,16 @@ export const layer = Layer.effect(
         runCount: existingTask?.runCount ?? 0,
         ...(precheck === undefined ? {} : { precheck }),
         ...(missedRunGraceMinutes === undefined ? {} : { missedRunGraceMinutes }),
+        ...(readOnly ? { readOnly: true } : {}),
+        ...(existingTask?.lastSweep === undefined ? {} : { lastSweep: existingTask.lastSweep }),
       };
       yield* saveTask(
         task,
         input.requireExisting === true,
         scheduleUnchanged ? existingTask.schedule : null,
-        threadId === null && input.unbindThread === true ? (existingTask?.threadId ?? null) : null,
+        threadId === null && (input.unbindThread === true || readOnly)
+          ? (existingTask?.threadId ?? null)
+          : null,
         webhook,
       );
       yield* notifyChanged;

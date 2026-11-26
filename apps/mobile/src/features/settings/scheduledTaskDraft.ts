@@ -63,6 +63,11 @@ export type ScheduleDraft = {
   readonly runAt: string;
   readonly weekdays: ReadonlyArray<number>;
   readonly intervalMinutes: string;
+  /** An interval's days and hours, which this form does not edit but keeps. */
+  readonly intervalLimits?: Pick<
+    Extract<ScheduledTask["schedule"], { type: "interval" }>,
+    "weekdays" | "activeHours"
+  >;
   readonly signature: ScheduledTaskWebhookSignature | null;
   readonly maxDeliveryAgeMinutes: string;
   readonly replayKey: string;
@@ -105,6 +110,12 @@ export function scheduleDraftForTask(task: Pick<ScheduledTask, "schedule">): Sch
         ...DEFAULT_SCHEDULE,
         mode: "interval",
         intervalMinutes: String(Math.max(1, task.schedule.everyMs / 60_000)),
+        intervalLimits: {
+          ...(task.schedule.weekdays === undefined ? {} : { weekdays: task.schedule.weekdays }),
+          ...(task.schedule.activeHours === undefined
+            ? {}
+            : { activeHours: task.schedule.activeHours }),
+        },
       };
     case "webhook":
       return {
@@ -184,7 +195,9 @@ export function scheduleFromDraft(draft: ScheduleDraft): ScheduledTaskUpsertSche
   if (draft.mode === "interval") {
     const minutes = parseIntervalMinutes(draft.intervalMinutes);
     const everyMs = Math.round(minutes * 60_000);
-    return minutes >= 1 && Number.isSafeInteger(everyMs) ? { type: "interval", everyMs } : null;
+    return minutes >= 1 && Number.isSafeInteger(everyMs)
+      ? { type: "interval", everyMs, ...draft.intervalLimits }
+      : null;
   }
   const weekdays = [...new Set(draft.weekdays)].sort((a, b) => a - b);
   if (

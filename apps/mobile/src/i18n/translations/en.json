@@ -5737,5 +5737,14 @@
   "25bdaed653d3d2c3": "A template's suggested routines are created paused.",
   "fc72809a59128290": "Blank",
   "6eb33caef72a98a1": "Around 03:30 a cheap model dedupes and condenses its {memory}. The previous copy is kept as {backup}.",
-  "4b3694d90784a5be": "Nightly memory tidy-up"
+  "4b3694d90784a5be": "Nightly memory tidy-up",
+  "8b84d7ff5492dd87": "No sweep yet.",
+  "43ed1e8b6f94d851": "Last sweep: ok, {time}",
+  "bc1a710d973c4857": "Last sweep needs attention: {findings}",
+  "94c00ff3d1c9116e": "Look around",
+  "8f71572fc417cde3": "This Tot's provider cannot keep a sweep read-only. Pick a Codex or Claude model.",
+  "e5cc1c6a5c6457cf": "A read-only sweep on a schedule; the server refuses every change. Quiet when all is fine. Change its schedule and precheck on desktop or web.",
+  "cd79fe8de4c658c9": "Turn the Tot on once to set up its sweep.",
+  "f4e1531edae9a180": "What to check, such as CI on the fork or container health",
+  "deeeb2f9f7e0f73e": "What to check"
 }

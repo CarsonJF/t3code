@@ -395,6 +395,10 @@
       "types": "./src/tots/totEditor.ts",
       "default": "./src/tots/totEditor.ts"
     },
+    "./tots/look-around": {
+      "types": "./src/tots/lookAround.ts",
+      "default": "./src/tots/lookAround.ts"
+    },
     "./tots/shapes": {
       "types": "./src/tots/shapes.ts",
       "default": "./src/tots/shapes.ts"

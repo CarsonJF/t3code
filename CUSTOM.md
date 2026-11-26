@@ -83,9 +83,10 @@ the `.4941` custom build failed: it moved `ScheduledTaskCreatedByTot` from 99 to
 every database that had recorded 99 refused to start.
 
 - 99 is `ScheduledTaskCreatedByTot`, 113 is `ScheduledTaskModelPinned`, 122 is
-  `ScheduledTaskPrecheck` and 123 is `TotObjectives`. Upstream's migrations 99 to 111 sit one id
-  higher here (upstream 099 is our 100, and so on); upstream 112 to 119 sit two higher; from
-  upstream 120 on they sit four higher. When a rebase brings a new upstream migration, rename
+  `ScheduledTaskPrecheck`, 123 is `TotObjectives` and 124 is `ScheduledTaskReadOnly`.
+  Upstream's migrations 99 to 111 sit one id higher here (upstream 099 is our 100, and so on);
+  upstream 112 to 119 sit two higher; from upstream 120 on they sit five higher. When a rebase
+  brings a new upstream migration, rename
   its file and manifest entry to its id here, append it after ours, and update any test that
   names its id.
 - Every migration from 99 on must be idempotent (`IF NOT EXISTS`, a column check, or a

@@ -8,6 +8,8 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   type RuntimeMode,
+  ScheduledTaskId,
+  lookAroundThreadId,
   type ServerProvider,
   ThreadId,
 } from "@t3tools/contracts";
@@ -38,8 +40,9 @@ function makeThread(input: {
   readonly now: DateTime.Utc;
   readonly worktreePath: string | null;
   readonly runtimeMode?: RuntimeMode;
+  readonly id?: ThreadId;
 }): OrchestrationV2AppThread {
-  const threadId = ThreadId.make("thread:runtime-policy");
+  const threadId = input.id ?? ThreadId.make("thread:runtime-policy");
   return {
     createdBy: "user",
     creationSource: "web",
@@ -186,12 +189,42 @@ it.layer(layerTest)("RuntimePolicyV2", (it) => {
         restriction: "read-only",
       });
       assert.deepInclude(readOnly, RuntimePolicy.READ_ONLY_RUN_POLICY);
-      // Under Claude: nothing to approve, and no tool that writes.
+      // Under Claude: nothing to approve, no tool that writes, and every shell command checked.
       const claude = ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy(readOnly);
       assert.isFalse(claude.installPermissionCallback);
+      assert.isTrue(claude.guardShell);
       for (const tool of ["Write", "Edit", "NotebookEdit", "Bash"]) {
         assert.notInclude(claude.allowedTools ?? [], tool);
+      }
+      for (const tool of ["Write", "Edit", "NotebookEdit"]) {
         assert.notInclude((claude.tools as ReadonlyArray<string> | undefined) ?? [], tool);
+      }
+    }),
+  );
+
+  const sweepThreadId = lookAroundThreadId(ScheduledTaskId.make("task:look-around"));
+
+  it.effect("runs a Look around thread read-only whatever mode the thread has", () =>
+    Effect.gen(function* () {
+      const policy = yield* RuntimePolicy.RuntimePolicyV2;
+      const now = yield* DateTime.now;
+      const resolved = yield* policy.resolve({
+        thread: makeThread({
+          now,
+          worktreePath: null,
+          runtimeMode: "full-access",
+          id: sweepThreadId,
+        }),
+        modelSelection,
+      });
+      assert.deepInclude(resolved, RuntimePolicy.READ_ONLY_RUN_POLICY);
+      // The same thread under Claude: no approvals, read tools and read-only shell rules only.
+      const claude = ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy(resolved);
+      assert.equal(claude.permissionMode, "dontAsk");
+      assert.isFalse(claude.installPermissionCallback);
+      assert.isTrue(claude.guardShell);
+      for (const tool of ["Write", "Edit", "NotebookEdit", "Bash(git push:*)", "Bash"]) {
+        assert.notInclude(claude.allowedTools ?? [], tool);
       }
     }),
   );
@@ -208,6 +241,15 @@ it.layer(layerTest)("RuntimePolicyV2", (it) => {
         })
         .pipe(Effect.flip);
       assert.equal(refused._tag, "RuntimePolicyReadOnlyUnsupportedError");
+      // A Look around thread is read-only without a restriction on the run.
+      const sweep = yield* policy
+        .resolve({
+          thread: makeThread({ now, worktreePath: null, id: sweepThreadId }),
+          modelSelection: { instanceId: grokInstanceId, model: "grok-5" },
+        })
+        .pipe(Effect.flip);
+      assert.equal(sweep._tag, "RuntimePolicyReadOnlyUnsupportedError");
+      assert.include(sweep.message, "cannot enforce");
     }),
   );
 
