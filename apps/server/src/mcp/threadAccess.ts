@@ -11,9 +11,11 @@ import {
   type ProviderInstanceId,
   type ProviderInteractionMode,
   type RuntimeMode,
+  parseTotThreadId,
   ThreadId,
   type OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
+import { latestExecutedRun } from "@t3tools/shared/orchestrationV2ThreadError";
 import {
   hasThreadLinks,
   parseThreadLinkHref,
@@ -215,6 +217,40 @@ export function assertLiveCaller({ caller, scope }: Caller) {
         }),
       );
 }
+
+/**
+ * The limit on the run a Tot's thread is calling from: an outside caller's turn. A background
+ * task that outlives its run keeps that run's limit.
+ */
+const callerRunRestriction = Effect.fn("mcp.callerRunRestriction")(function* (context: Caller) {
+  const shell = context.caller;
+  if (shell === undefined || parseTotThreadId(shell.id) === null) return undefined;
+  const active = shell.activeRunId;
+  const { runs } = yield* context.threads
+    .getProjectThreadRecords(
+      { projectId: shell.projectId, threadId: shell.id },
+      ["runs"],
+      active === null
+        ? { runStatuses: ["running"], includeLatestExecutedRun: true }
+        : { runIds: [active] },
+    )
+    .pipe(Effect.mapError(unavailable));
+  const run =
+    active === null ? latestExecutedRun(runs) : runs.find((candidate) => candidate.id === active);
+  return run?.restriction;
+});
+
+/** T3 Code's own tools that change things refuse an outside caller's limited turn. */
+export const refuseRestrictedRun = Effect.fn("mcp.refuseRestrictedRun")(function* (
+  context: Caller,
+) {
+  const restriction = yield* callerRunRestriction(context);
+  if (restriction === undefined) return;
+  return yield* new OrchestratorMcpFailure({
+    code: "capability_denied",
+    message: `This turn came from an outside caller allowed ${restriction === "ask" ? "Ask" : "read-only"} access, so T3 Code's tools that change things are off for it. Say what you would do in your reply; the user can do it in the app.`,
+  });
+});
 
 export const assertFullAccess = (context: Caller, message: string) =>
   context.limits.runtimeMode === "full-access" && context.limits.interactionMode === "default"

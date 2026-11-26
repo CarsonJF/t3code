@@ -117,6 +117,18 @@ describe("createTurnRunner", () => {
     });
   });
 
+  it("names the Discord user so the Tot can check its own Who can ask list", async () => {
+    const { deps, fake } = build({
+      frames: [{ status: "completed", text: "Hi.", appears: true }],
+    });
+
+    await createTurnRunner(deps).run(request(false));
+
+    expect(fake.calls.find((entry) => entry.tool === "t3_thread_send")?.options).toEqual({
+      discordUserId: request(false).userId,
+    });
+  });
+
   it("reports the failure text when a turn fails without an answer", async () => {
     const { deps, channel } = build({
       frames: [{ status: "running" }, { status: "failed" }],

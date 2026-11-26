@@ -94,6 +94,13 @@ is not running and your id is not allowlisted.
 In Discord, **Settings → Advanced → Developer Mode** on, then right-click your
 name and **Copy User ID**. That number goes in `DISCORD_ALLOWED_USER_IDS`.
 
+The bridge passes that id on with every message, and each Tot checks it against
+its own **Who can ask** list too (see [Tots](user/tots.md#who-can-ask)). T3 Code
+cannot see the bridge's `.env`, so no Discord id is trusted by default: in each
+Tot you want to reach from Discord, open its settings, **Who can ask → Add**, pick
+**Discord user**, paste the same id and choose how far those turns go. A Tot that
+does not list you answers with a refusal.
+
 ### 4. Mint a T3 token
 
 The bridge signs in to a machine's MCP endpoint the same way any outside agent

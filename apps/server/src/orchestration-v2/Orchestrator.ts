@@ -7805,9 +7805,23 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         cause: schemaProblem,
       });
     }
-    const output = outputSchema === undefined ? {} : { outputSchema };
+    const continuedRun =
+      continuedRunId === undefined
+        ? undefined
+        : projection.runs.find((run) => run.id === continuedRunId);
+    const caller = command.caller ?? continuedRun?.caller;
+    const restriction = command.restriction ?? continuedRun?.restriction;
+    const output = {
+      ...(outputSchema === undefined ? {} : { outputSchema }),
+      ...(caller === undefined ? {} : { caller }),
+      ...(restriction === undefined ? {} : { restriction }),
+    };
+    // An outside caller's message runs as its own turn, so its limits stay its own.
     if (
-      (freshContext || command.outputSchema !== undefined) &&
+      (freshContext ||
+        command.outputSchema !== undefined ||
+        command.caller !== undefined ||
+        command.restriction !== undefined) &&
       (dispatchMode.type === "steer_active" || dispatchMode.type === "restart_active")
     ) {
       dispatchMode = { type: "queue_after_active" };
@@ -12334,6 +12348,13 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         commandId: command.commandId,
         commandType: command.type,
         cause: "A message that starts a fresh session can't steer the current turn.",
+      });
+    }
+    if (queuedRun.caller !== undefined || queuedRun.restriction !== undefined) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: "A message from an outside caller runs as its own turn and can't steer.",
       });
     }
     // Steering joins a turn that was not asked for this message's result, so it would be lost.
