@@ -31,7 +31,7 @@ import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as TotService from "../tots/TotService.ts";
 import * as ExternalCompanions from "../companions/ExternalCompanions.ts";
 import * as NeedsYou from "./NeedsYou.ts";
-import { runItem } from "./needsYouItems.ts";
+import { runItem, sweepItem } from "./needsYouItems.ts";
 
 const here = EnvironmentId.make("env-asuna");
 const box = EnvironmentId.make("env-box");
@@ -497,5 +497,29 @@ describe("runItem", () => {
     );
     assert.equal(runItem(shell({ ...failed, status: "interrupted" }))?.kind, "stopped_run");
     assert.isNull(runItem(shell({ ...failed, status: "completed" })));
+  });
+});
+
+describe("sweepItem", () => {
+  const sweep = {
+    id: "task:look-around",
+    title: "Look around",
+    threadId: "look-around:task:look-around",
+    createdByTotId: "ci",
+  } as unknown as Parameters<typeof sweepItem>[0];
+  it("lists a sweep that needs attention until a quiet sweep replaces it", () => {
+    const at = "2026-11-25T13:00:00.000Z";
+    const item = sweepItem({
+      ...sweep,
+      lastSweep: { at, status: "attention", findings: ["nightly failed", "PR #101 stale"] },
+    });
+    assert.deepInclude(item, {
+      key: `sweep:task:look-around:${at}`,
+      kind: "sweep_attention",
+      totId: TotId.make("ci"),
+      summary: "nightly failed; PR #101 stale",
+    });
+    assert.isNull(sweepItem({ ...sweep, lastSweep: { at, status: "ok", findings: [] } }));
+    assert.isNull(sweepItem(sweep));
   });
 });

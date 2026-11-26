@@ -422,7 +422,8 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
       }),
     ),
   ),
-  t3_submit_output: McpToolAccess.actsAsCaller((input) =>
+  t3_submit_output: McpToolAccess.actsAsCaller(
+    (input) =>
     Effect.gen(function* () {
       const { scope, threads } = yield* readCaller();
       if (scope.thread === undefined) return yield* unavailable();
@@ -444,6 +445,7 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
           ),
         );
     }),
+    { restrictedRuns: "allowed" },
   ),
   t3_queue: McpToolAccess.either(
     (input) => input.action === "list" || input.action === "read",

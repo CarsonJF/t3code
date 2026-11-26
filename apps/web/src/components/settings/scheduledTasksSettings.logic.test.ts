@@ -212,6 +212,23 @@ describe("fixed-time scheduled tasks", () => {
     // A native time input reports "" when it is cleared or only partly filled.
     expect(scheduleFromDraft({ ...draft, timeOfDay: "" })).toBeNull();
   });
+
+  it("keeps an interval's weekdays and hours, which this form does not edit", () => {
+    const schedule = {
+      type: "interval",
+      everyMs: 4 * 60 * 60_000,
+      weekdays: [1, 2, 3, 4, 5],
+      activeHours: { from: "08:00", to: "20:00" },
+    } as const;
+    const draft = taskToDraft({ ...legacyTask, schedule });
+    expect(scheduleFromDraft({ ...draft, intervalMinutes: "120" })).toEqual({
+      ...schedule,
+      everyMs: 2 * 60 * 60_000,
+    });
+    expect(scheduleLabel(schedule, "24-hour")).toBe(
+      `Every 240 min, weekdays, ${clock(false, 8, 0)}–${clock(false, 20, 0)}`,
+    );
+  });
 });
 
 describe("scheduled task destination", () => {

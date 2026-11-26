@@ -50,6 +50,7 @@ import {
   requestItems,
   runItem,
   scheduledItem,
+  sweepItem,
 } from "./needsYouItems.ts";
 
 /**
@@ -191,10 +192,9 @@ const make = Effect.gen(function* () {
       Effect.map((result) => result.tasks),
       Effect.orElseSucceed(() => []),
     );
-    const failedTasks = tasks.flatMap((task) => {
-      const item = scheduledItem(task);
-      return item === null ? [] : [item];
-    });
+    const failedTasks = tasks.flatMap((task) =>
+      [scheduledItem(task), sweepItem(task)].filter((item) => item !== null),
+    );
     const totList = yield* tots.list;
     const companionItems = companions === undefined ? [] : yield* companions.needsYouItems;
     return {
