@@ -13293,8 +13293,6 @@
   ],
   "6e96ce482c3d701e": "Dispensado",
   "9bd31b8911a11607": "Trazer de volta",
-  "338ce4267d4f180c": "Precisa de você ({count})",
-  "d25661576338fcf0": "Precisa de você",
   "16b243a1f0fff69b": "Planejado",
   "a41f47e1573c46f2": "Em andamento",
   "141121e1748a73d3": "Aguardando",
@@ -13486,6 +13484,16 @@
   ],
   "1012470564ed461f": [
     "Tentar novamente com ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "708f9144bda073a1": "Abrir Precisa de você",
+  "d6c5494cf45ad5e7": "Abrir Precisa de você",
+  "9353579fe56bdf6e": [
+    "Ver os ",
     {
       "i": 1,
       "k": "_gt_value_1",
