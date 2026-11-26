@@ -44,6 +44,6 @@ A companion that calls T3 Code's MCP server (`/mcp`), for example to launch thre
 
    Each refresh token works once and is replaced by the new one; store the newest. A refresh token unused for 30 days lapses, and then the companion needs a new setup code. Presenting a refresh token that was already used ends the grant, since that means someone else holds a copy.
 
-The grant and its tokens are accepted only from the machine T3 Code runs on: from loopback or this machine's own address, straight to the server, never through Tailscale Serve, a tunnel or another proxy. A companion in a container needs host networking. The access level is one an outside MCP client could be approved for, capped by a [managed policy](./managed-policy.md) if one applies. What the companion starts through `/mcp` is recorded as coming from that companion.
+The grant and its tokens are accepted only from the machine T3 Code runs on: from loopback or this machine's own address, straight to the server, never through Tailscale Serve, a tunnel or another proxy. A companion in a container needs host networking. The access level is one an outside MCP client could be approved for, capped by a [managed policy](./managed-policy.md) if one applies. What the companion sends through `/mcp` is recorded as coming from that companion, by its id in Settings, so a Tot's [Who can ask](./tots.md#who-can-ask) list can name it.
 
 Select **Revoke MCP** to end the grant at once. Removing the companion ends it too.
