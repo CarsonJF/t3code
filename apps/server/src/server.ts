@@ -985,9 +985,12 @@ const layerMakeRoutes = Layer.mergeAll(
   ),
   Layer.provide(PreviewBrowser.layer),
   Layer.provide(
-    Layer.mergeAll(TotWatchService.layer, GroupChatService.layer, TotMemoryTidyJob.layer, NeedsYou.layer).pipe(
-      Layer.provideMerge(TotService.layer),
-    ),
+    Layer.mergeAll(
+      TotWatchService.layer,
+      GroupChatService.layer,
+      TotMemoryTidyJob.layer,
+      NeedsYou.layer,
+    ).pipe(Layer.provideMerge(TotService.layer)),
   ),
   Layer.provide(AvatarFigureDesigner.layer),
   // Links to other environments, shared by clients (WebSocket) and agents (/mcp).
