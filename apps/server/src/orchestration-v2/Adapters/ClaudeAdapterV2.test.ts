@@ -95,6 +95,8 @@ import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderS
 import { PreviewControlsToolkit } from "../../mcp/toolkits/previewControls/tools.ts";
 import { HtmlToolkit } from "../../mcp/toolkits/html/tools.ts";
 import { MessageToolkit } from "../../mcp/toolkits/message/tools.ts";
+import { PullRequestsToolkit } from "../../mcp/toolkits/pullRequests/tools.ts";
+import { IssuesToolkit } from "../../mcp/toolkits/issues/tools.ts";
 import { EnvironmentToolkit } from "../../mcp/toolkits/environment/tools.ts";
 import { ThemeToolkit } from "../../mcp/toolkits/theme/tools.ts";
 import { ProjectToolkit } from "../../mcp/toolkits/project/tools.ts";
@@ -628,10 +630,22 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
 
     assert.deepEqual(queryPolicy, {
       permissionMode: "dontAsk",
-      tools: ClaudeAdapterV2.CLAUDE_READ_ONLY_ALLOWED_TOOLS,
-      allowedTools: ClaudeAdapterV2.CLAUDE_READ_ONLY_ALLOWED_TOOLS,
+      tools: [...ClaudeAdapterV2.CLAUDE_READ_ONLY_ALLOWED_TOOLS, "Bash"],
+      allowedTools: [
+        ...ClaudeAdapterV2.CLAUDE_READ_ONLY_ALLOWED_TOOLS,
+        ...ClaudeAdapterV2.CLAUDE_READ_ONLY_BASH_RULES,
+      ],
       installPermissionCallback: false,
     });
+  });
+
+  it("pre-approves only reading shell commands for a read-only turn", () => {
+    const writes =
+      /\b(merge|close|comment|create|edit|delete|rerun|push|commit|restart|rm|stop|start|kill|exec|api)\b|--output|vacuum|rotate/;
+    for (const rule of ClaudeAdapterV2.CLAUDE_READ_ONLY_BASH_RULES) {
+      assert.match(rule, /^Bash\([a-z -]+:\*\)$/);
+      assert.notMatch(rule, writes);
+    }
   });
 
   it("does not auto-allow reads for canonical restricted read-only never policy", () => {
@@ -818,6 +832,8 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
       ...Object.values(PreviewControlsToolkit.tools),
       ...Object.values(HtmlToolkit.tools),
       ...Object.values(MessageToolkit.tools),
+      ...Object.values(PullRequestsToolkit.tools),
+      ...Object.values(IssuesToolkit.tools),
     ]
       .filter((tool) => Context.get(tool.annotations, Tool.Readonly))
       .map((tool) => `mcp__t3-code__${tool.name}`)

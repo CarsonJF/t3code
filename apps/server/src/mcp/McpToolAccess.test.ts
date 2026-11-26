@@ -6,7 +6,9 @@ import {
   ProviderInstanceId,
   ProviderInteractionMode,
   RuntimeMode,
+  ScheduledTaskId,
   ThreadId,
+  lookAroundThreadId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -33,6 +35,7 @@ const backgroundThreadId = ThreadId.make("thread:background");
 const oldProviderThreadId = ThreadId.make("thread:old-provider-background");
 const archivedThreadId = ThreadId.make("thread:archived-background");
 const unknownOwnerThreadId = ThreadId.make("thread:unknown-background-owner");
+const sweepThreadId = lookAroundThreadId(ScheduledTaskId.make("task:look-around"));
 
 const backgroundShell = (threadId: ThreadId, providerInstanceId: ProviderInstanceId) => ({
   ...liveThreadShell(threadId, { activeRunId: null }),
@@ -48,6 +51,8 @@ const shells = new Map([
     liveThreadShell(planThreadId, { runtimeMode: "approval-required", interactionMode: "plan" }),
   ],
   [fullAccessThreadId, liveThreadShell(fullAccessThreadId)],
+  // Even a sweep thread stored in Full access stays read-only.
+  [sweepThreadId, liveThreadShell(sweepThreadId)],
   [endedThreadId, liveThreadShell(endedThreadId, { activeRunId: null })],
   [backgroundThreadId, backgroundShell(backgroundThreadId, ProviderInstanceId.make("codex"))],
   [oldProviderThreadId, backgroundShell(oldProviderThreadId, ProviderInstanceId.make("claude"))],
@@ -123,6 +128,10 @@ const ProbeToolkit = Toolkit.make(
     McpSchema.EnabledWhen,
     McpInvocationContext.hiddenFromOutsideClients,
   ),
+  Tool.make("submits_output", probe).annotate(
+    McpSchema.EnabledWhen,
+    McpInvocationContext.hiddenFromOutsideClients,
+  ),
   Tool.make("writes", probe),
   Tool.make("writes_with_capability", probe),
   Tool.make("writes_threads", {
@@ -144,6 +153,7 @@ const probeHandlers: McpToolAccess.Handlers<typeof ProbeToolkit.tools> = {
   reads: McpToolAccess.reads(() => ran),
   reads_as_caller: McpToolAccess.readsAsCaller(() => ran),
   acts_as_caller: McpToolAccess.actsAsCaller(() => ran),
+  submits_output: McpToolAccess.actsAsCaller(() => ran, { readOnlySweeps: "allowed" }),
   writes: McpToolAccess.writes(() => ran),
   writes_with_capability: McpToolAccess.writesWithCapability(() => ran),
   writes_threads: McpToolAccess.writesThreads(
@@ -191,6 +201,7 @@ export const refusedAtCompileTime = () => {
       reads: unchecked,
       reads_as_caller: unchecked,
       acts_as_caller: unchecked,
+      submits_output: unchecked,
       writes: unchecked,
       writes_with_capability: unchecked,
       writes_threads: unchecked,
@@ -232,6 +243,7 @@ const supervised = threadCaller(supervisedThreadId);
 const plan = threadCaller(planThreadId);
 const fullAccess = threadCaller(fullAccessThreadId);
 const ended = threadCaller(endedThreadId);
+const sweep = threadCaller(sweepThreadId);
 const background = threadCaller(backgroundThreadId);
 const oldProviderBackground = threadCaller(oldProviderThreadId);
 const archivedBackground = threadCaller(archivedThreadId);
@@ -272,6 +284,19 @@ it.effect.each([
   ["writes_threads", readOnlyClient, { threadId: supervisedThreadId }, "capability_denied"],
   ["starts_threads", readOnlyClient, {}, "capability_denied"],
   ["writes_environment", readOnlyClient, {}, "capability_denied"],
+
+  // A Look around sweep reads and hands back its result; every change is refused.
+  ["reads", sweep, {}, "ran"],
+  ["reads_as_caller", sweep, {}, "ran"],
+  ["submits_output", sweep, {}, "ran"],
+  ["submits_output", fullAccess, {}, "ran"],
+  ["acts_as_caller", sweep, {}, "capability_denied"],
+  ["writes", sweep, {}, "capability_denied"],
+  ["writes_with_capability", sweep, {}, "capability_denied"],
+  ["writes_threads", sweep, { threadId: supervisedThreadId }, "capability_denied"],
+  ["starts_threads", sweep, {}, "capability_denied"],
+  ["writes_environment", sweep, {}, "capability_denied"],
+  ["writes_owner_work", sweep, {}, "capability_denied"],
 
   ["reads_as_caller", ended, {}, "ran"],
   ["acts_as_caller", supervised, {}, "ran"],

@@ -738,6 +738,31 @@ export type ClaudeAgentSdkQueryTools = ClaudeAgentSdkQueryToolList | ClaudeAgent
 
 export const CLAUDE_READ_ONLY_ALLOWED_TOOLS = ["Read", "Glob", "Grep"] as const;
 
+/**
+ * Shell commands a read-only turn that may read anywhere can run without asking. Each prefix
+ * only reads; Claude matches every part of a compound command, and `dontAsk` denies the rest.
+ * Leave out anything with a writing flag, such as `git diff --output` or `journalctl --vacuum`.
+ */
+export const CLAUDE_READ_ONLY_BASH_RULES: ReadonlyArray<string> = [
+  "Bash(gh pr list:*)",
+  "Bash(gh pr view:*)",
+  "Bash(gh pr checks:*)",
+  "Bash(gh pr diff:*)",
+  "Bash(gh run list:*)",
+  "Bash(gh run view:*)",
+  "Bash(gh issue list:*)",
+  "Bash(gh issue view:*)",
+  "Bash(git status:*)",
+  "Bash(docker ps:*)",
+  "Bash(docker inspect:*)",
+  "Bash(docker logs:*)",
+  "Bash(docker compose ps:*)",
+  "Bash(docker compose ls:*)",
+  "Bash(docker compose logs:*)",
+  "Bash(systemctl status:*)",
+  "Bash(systemctl list-units:*)",
+];
+
 function claudeAgentSdkQueryToolsForSdk(
   tools: ClaudeAgentSdkQueryTools,
 ): NonNullable<ClaudeQueryOptions["tools"]> {
@@ -2845,6 +2870,14 @@ export const CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS: ReadonlyArray<string> = [
   "mcp__t3-code__html_render",
   "mcp__t3-code__send_to_user",
   "mcp__t3-code__t3_submit_output",
+  "mcp__t3-code__list_thread_pull_requests",
+  "mcp__t3-code__read_pull_request_guide",
+  "mcp__t3-code__pull_request_read",
+  "mcp__t3-code__pull_request_list",
+  "mcp__t3-code__ci_logs",
+  "mcp__t3-code__list_issues",
+  "mcp__t3-code__read_issue",
+  "mcp__t3-code__list_thread_issues",
 ];
 
 // The name this adapter registers T3's MCP server under, and so the one Claude gives for it.
@@ -3810,14 +3843,16 @@ export function claudeRuntimeQueryPolicyForRuntimePolicy(
       ? "default"
       : "auto"
     : requestedMode;
-  const readOnlyTools =
-    sandboxPolicyKindForClaudeRuntimePolicy(runtimePolicy) === "readOnly"
-      ? CLAUDE_READ_ONLY_ALLOWED_TOOLS
-      : undefined;
-  const allowedTools =
-    readOnlyTools !== undefined && readOnlyPolicyAllowsGlobalReads(runtimePolicy)
-      ? readOnlyTools
-      : undefined;
+  const readOnly = sandboxPolicyKindForClaudeRuntimePolicy(runtimePolicy) === "readOnly";
+  const globalReads = readOnly && readOnlyPolicyAllowsGlobalReads(runtimePolicy);
+  const readOnlyTools = !readOnly
+    ? undefined
+    : globalReads
+      ? [...CLAUDE_READ_ONLY_ALLOWED_TOOLS, "Bash"]
+      : CLAUDE_READ_ONLY_ALLOWED_TOOLS;
+  const allowedTools = globalReads
+    ? [...CLAUDE_READ_ONLY_ALLOWED_TOOLS, ...CLAUDE_READ_ONLY_BASH_RULES]
+    : undefined;
   // acceptEdits approves edits before the callback; the callback must ask for everything else.
   const installPermissionCallback =
     downgraded ||

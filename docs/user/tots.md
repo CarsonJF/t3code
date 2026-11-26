@@ -28,6 +28,17 @@ Tots always run in full access, and they can approve requests in your other thre
 - Tots never delete threads or projects. They archive or settle them.
 - A scheduled task that fails tells the Tot that created it, or Home, with the task, the error and a link to the run.
 
+### Look around
+
+**Look around**, in a Tot's panel, is an opt-in sweep that only looks. On a schedule (every 4 hours from 08:00 to 20:00 on weekdays unless you change it), the Tot checks what you tell it to, such as "CI on the fork, stale PRs, container health", in a thread of its own.
+
+- The sweep cannot change anything. T3 Code runs it in a read-only sandbox and refuses every tool that writes files, touches git, sends to or starts threads, or edits scheduled tasks. It can read files, use T3 Code's read tools (threads, pull requests, CI logs, issues) and, on Claude, run a short list of read commands such as `gh pr list`, `docker ps` and `systemctl status`. On Codex, shell commands run without network access.
+- When everything is fine it says nothing; the panel shows **Last sweep: ok** and when. When something needs you, the Tot gets a short message in its own thread listing what was found, and it shows in **Needs you** until a later sweep comes back ok.
+- Only Codex and Claude models can keep a sweep read-only. On any other provider the switch stays off and says why.
+- An optional precheck, a shell command run in the Tot's folder first, skips a sweep when it exits non-zero, as for other scheduled tasks.
+
+The stack watch and CI sitter templates set up a sweep with a focus for their job. It stays off until you turn it on.
+
 ### Usage-limit fallback
 
 When a thread a Tot started, or a scheduled task, stops on a provider's usage limit, T3 Code can run it again once on another model. List the models in order as `usageLimitFallbackModels` in the server's `settings.json`; a Tot's own `usageLimitFallbackModels` replaces that list for its work, and an empty list turns the fallback off for it. The thread says when this happened. Models in `usageLimitFallbackDeniedModels` are never used, and full `opencode-go/glm-5.3` is never used whatever that list says. A one-time task that still fails is turned off and shown as failed.

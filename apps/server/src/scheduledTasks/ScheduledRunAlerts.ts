@@ -1,5 +1,6 @@
 import {
   CommandId,
+  type EnvironmentId,
   MessageId,
   type ScheduledTaskId,
   type ThreadId,
@@ -28,6 +29,23 @@ export interface ScheduledRunFailure {
   readonly threadId: ThreadId | null;
 }
 
+export interface LookAroundAttention {
+  readonly taskId: ScheduledTaskId;
+  readonly title: string;
+  readonly ownerTotId: TotId | null;
+  /** With the task id it names the sweep, so a replay sends nothing new. */
+  readonly startedAtIso: string;
+  readonly findings: ReadonlyArray<string>;
+  readonly threadId: ThreadId;
+}
+
+const formatLookAroundAttention = (attention: LookAroundAttention, link: string) =>
+  [
+    `Look around found something: "${attention.title}"`,
+    ...attention.findings.map((finding) => `- ${finding}`),
+    `Sweep: ${link}`,
+  ].join("\n");
+
 const formatScheduledRunFailure = (failure: ScheduledRunFailure, link: string | null) =>
   [
     `Scheduled task failed: "${failure.title}"`,
@@ -36,11 +54,18 @@ const formatScheduledRunFailure = (failure: ScheduledRunFailure, link: string | 
     `Run: ${link ?? "no thread was started"}`,
   ].join("\n");
 
-/** Tells the owning Tot, or Home, that a scheduled run failed. Without the live layer, nothing. */
+/**
+ * Tells the owning Tot, or Home, that a scheduled run failed or a sweep found something.
+ * Without the live layer, nothing.
+ */
 export class ScheduledRunAlerts extends Context.Reference<{
   readonly notifyFailure: (failure: ScheduledRunFailure) => Effect.Effect<void>;
+  readonly notifySweepAttention: (attention: LookAroundAttention) => Effect.Effect<void>;
 }>("t3/scheduledTasks/ScheduledRunAlerts", {
-  defaultValue: () => ({ notifyFailure: () => Effect.void }),
+  defaultValue: () => ({
+    notifyFailure: () => Effect.void,
+    notifySweepAttention: () => Effect.void,
+  }),
 }) {}
 
 export const layer = Layer.effect(
@@ -49,6 +74,51 @@ export const layer = Layer.effect(
     const threads = yield* ThreadManagement.ThreadManagementService;
     const settingsService = yield* ServerSettingsService.ServerSettingsService;
     const environment = yield* ServerEnvironment.ServerEnvironment;
+    const sendToTot = Effect.fn("ScheduledRunAlerts.sendToTot")(function* (
+      ownerTotId: TotId | null,
+      id: string,
+      text: (environmentId: EnvironmentId) => string,
+    ) {
+      const settings = yield* settingsService.getSettings;
+      const target = failureNoticeTotThread(settings, ownerTotId);
+      if (target === null) return;
+      const shell = yield* threads.getThreadShell(target);
+      if (shell === null || shell.deletedAt != null || shell.archivedAt !== null) return;
+      const environmentId = yield* environment.getEnvironmentId;
+      yield* threads.sendToThread({
+        projectId: shell.projectId,
+        commandId: CommandId.make(id),
+        threadId: target,
+        messageId: MessageId.make(id),
+        text: text(environmentId),
+        attachments: [],
+        mode: "auto",
+        createdBy: "system",
+        creationSource: "server",
+      });
+    });
+    const notifySweepAttention = Effect.fn("ScheduledRunAlerts.notifySweepAttention")(
+      function* (attention: LookAroundAttention) {
+        yield* sendToTot(
+          attention.ownerTotId,
+          `look-around-attention:${attention.taskId}:${attention.startedAtIso}`,
+          (environmentId) =>
+            formatLookAroundAttention(
+              attention,
+              formatThreadLink({ environmentId, threadId: attention.threadId }, attention.title),
+            ),
+        );
+      },
+      (effect, attention) =>
+        effect.pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Could not report what a sweep found", {
+              taskId: attention.taskId,
+              cause,
+            }),
+          ),
+        ),
+    );
     const notifyFailure = Effect.fn("ScheduledRunAlerts.notifyFailure")(
       function* (failure: ScheduledRunFailure) {
         const settings = yield* settingsService.getSettings;
@@ -85,6 +155,6 @@ export const layer = Layer.effect(
           ),
         ),
     );
-    return ScheduledRunAlerts.of({ notifyFailure });
+    return ScheduledRunAlerts.of({ notifyFailure, notifySweepAttention });
   }),
 );

@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { TotTemplateLookAround } from "./lookAround.ts";
 import { ScheduledTaskUpsertSchedule } from "./scheduledTask.ts";
 import { TotAvatar } from "./tots.ts";
 
@@ -27,5 +28,6 @@ export const TotTemplate = Schema.Struct({
   avatar: TotAvatar,
   instructions: Schema.String.check(Schema.isMaxLength(20_000)),
   scheduledTasks: Schema.Array(TotTemplateScheduledTask).check(Schema.isMaxLength(5)),
+  lookAround: Schema.optional(TotTemplateLookAround),
 });
 export type TotTemplate = typeof TotTemplate.Type;

@@ -1,4 +1,6 @@
 import {
+  canEnforceReadOnly,
+  isLookAroundThread,
   isRuntimeModeAbove,
   managedRuntimeModeCeilingMessage,
   ModelSelection,
@@ -64,7 +66,7 @@ export class RuntimePolicyReadOnlyUnsupportedError extends Schema.TaggedError<Ru
   },
 ) {
   override get message(): string {
-    return `This turn came from an outside caller allowed read-only, and ${this.providerInstanceId} cannot enforce that. Pick a Codex or Claude model for this Tot.`;
+    return `This turn runs read-only (a Look around sweep, or an outside caller allowed read-only), and ${this.providerInstanceId} cannot enforce that. Pick a Codex or Claude model for this Tot.`;
   }
 }
 
@@ -96,9 +98,6 @@ export class RuntimePolicyV2 extends Context.Service<RuntimePolicyV2, RuntimePol
   "t3/orchestration-v2/RuntimePolicy/RuntimePolicyV2",
 ) {}
 
-/** Drivers whose adapters enforce a read-only sandbox with no approval prompts. */
-const READ_ONLY_DRIVERS: ReadonlyArray<string> = ["codex", "claudeAgent"];
-
 /**
  * A read-only run: a sandbox that may read anywhere, no network, and no approval prompts, so
  * anything else is refused rather than asked.
@@ -127,6 +126,14 @@ function restrictRuntimePolicy(
     ...rest,
     runtimeMode: "approval-required",
   });
+}
+
+/** A Look around sweep's thread is read-only on every run, whatever restriction the run has. */
+export function effectiveRestriction(
+  thread: Pick<OrchestrationV2AppThread, "id">,
+  restriction: RunRestriction | undefined,
+): RunRestriction | undefined {
+  return isLookAroundThread(thread.id) ? "read-only" : restriction;
 }
 
 export function providerRuntimeMode(
@@ -198,9 +205,10 @@ export const layerFromProjectStore: Layer.Layer<
       resolve: Effect.fn("RuntimePolicyV2.resolve")(function* (input) {
         yield* refuseAboveCeiling(managedPolicy, input.thread);
         const instance = yield* providerInstances.getInstance(input.modelSelection.instanceId);
+        const restriction = effectiveRestriction(input.thread, input.restriction);
         if (
-          input.restriction === "read-only" &&
-          (instance === undefined || !READ_ONLY_DRIVERS.includes(instance.driverKind))
+          restriction === "read-only" &&
+          (instance === undefined || !canEnforceReadOnly(instance.driverKind))
         ) {
           return yield* new RuntimePolicyReadOnlyUnsupportedError({
             threadId: input.thread.id,
@@ -257,7 +265,7 @@ export const layerFromProjectStore: Layer.Layer<
             ...(maxRuntimeMode === undefined ? {} : { maxRuntimeMode }),
             ...(workspace === undefined || workspace.folders.length === 0 ? {} : { workspace }),
           }),
-          input.restriction,
+          restriction,
         );
       }),
     });

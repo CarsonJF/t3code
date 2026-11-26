@@ -126,6 +126,25 @@ export const scheduledItem = (task: ScheduledTask): NeedsYouItem | null =>
         summary: oneLine(`Scheduled run failed: ${task.lastRunError ?? "no error recorded"}`),
       };
 
+/** A Look around sweep that found something; the next quiet sweep clears it. */
+export const sweepItem = (task: ScheduledTask): NeedsYouItem | null =>
+  task.lastSweep?.status !== "attention"
+    ? null
+    : {
+        key: `sweep:${task.id}:${task.lastSweep.at}`,
+        kind: "sweep_attention",
+        threadId: task.threadId,
+        title: task.title,
+        at: task.lastSweep.at,
+        totId: task.createdByTotId ?? null,
+        scheduledTaskId: task.id,
+        summary: oneLine(
+          task.lastSweep.findings.length === 0
+            ? "Look around found something"
+            : task.lastSweep.findings.join("; "),
+        ),
+      };
+
 export interface HiddenEntry {
   readonly environmentId: string;
   readonly key: string;

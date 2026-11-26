@@ -1,5 +1,6 @@
 import {
   type EnvironmentId,
+  isLookAroundThread,
   type OrchestrationV2LinkOrigin,
   OrchestratorMcpEnvironmentTarget,
   OrchestratorMcpFailure,
@@ -120,19 +121,32 @@ export class Declaration<out Handler> {
   }
 }
 
-const refuseReadOnlyClient = McpInvocationContext.McpInvocationContext.pipe(
-  Effect.flatMap((scope) =>
-    scope.client?.access === "read-only"
-      ? Effect.fail(
-          new OrchestratorMcpFailure({
-            code: "capability_denied",
-            message:
-              "This tool changes the environment, and this MCP client was approved for read-only access.",
-          }),
-        )
-      : Effect.void,
-  ),
-);
+const refuseReadOnlyCaller = (sweeps: "refused" | "allowed") =>
+  McpInvocationContext.McpInvocationContext.pipe(
+    Effect.flatMap((scope) =>
+      scope.client?.access === "read-only"
+        ? Effect.fail(
+            new OrchestratorMcpFailure({
+              code: "capability_denied",
+              message:
+                "This tool changes the environment, and this MCP client was approved for read-only access.",
+            }),
+          )
+        : sweeps === "refused" &&
+            scope.thread !== undefined &&
+            isLookAroundThread(scope.thread.threadId)
+          ? Effect.fail(
+              new OrchestratorMcpFailure({
+                code: "capability_denied",
+                message:
+                  "This tool changes something, and a Look around sweep is read-only. Report it in your result instead.",
+              }),
+            )
+          : Effect.void,
+    ),
+  );
+
+const refuseReadOnlyClient = refuseReadOnlyCaller("refused");
 
 const writingCaller = refuseReadOnlyClient.pipe(
   Effect.andThen(loadCaller()),
@@ -159,11 +173,24 @@ export const reads = <P, A, E, R>(handle: (params: P) => Effect.Effect<A, E, R>)
 export const readsAsCaller = <P, A, E, R>(handle: (params: P) => Effect.Effect<A, E, R>) =>
   declare((params: P) => requireThreadCaller.pipe(Effect.flatMap(() => handle(params))), undefined);
 
-export const actsAsCaller = <P, A, E, R>(handle: (params: P) => Effect.Effect<A, E, R>) =>
+export const actsAsCaller = <P, A, E, R>(
+  handle: (params: P) => Effect.Effect<A, E, R>,
+  options?: {
+    /** Whether a read-only sweep may call it, as it must to hand back its result. */
+    readonly readOnlySweeps?: "allowed";
+  },
+) =>
   declare(
     (params: P) =>
       requireThreadCaller.pipe(
-        Effect.andThen(writingCaller),
+        Effect.andThen(
+          options?.readOnlySweeps === "allowed"
+            ? refuseReadOnlyCaller("allowed").pipe(
+                Effect.andThen(loadCaller()),
+                Effect.tap(assertLiveCaller),
+              )
+            : writingCaller,
+        ),
         Effect.flatMap(() => handle(params)),
       ),
     undefined,
