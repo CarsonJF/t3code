@@ -13245,7 +13245,6 @@
   "39fd01a80e88ee2a": "Could not bring it back",
   "1b7c524fccf06537": "Needs you",
   "7c5a3071fb7d9f14": "Nothing needs you",
-  "2843b91a4c4a5e98": "Approvals, questions and failed runs from every Tot and linked machine show up here.",
   "2df485ee15283e6b": "Could not read this machine:",
   "5eb5603f5b29900d": "Threads",
   "df1fb90eb9a77fbf": "Scheduled tasks",
@@ -13331,5 +13330,103 @@
   "8ed8b1e465719f27": "Only you can start turns in {name}.",
   "d078947fa2c00d7e": "Caller origin",
   "d951fe94dcf0553f": "Access",
-  "85c730fca701f640": "Remove caller"
+  "85c730fca701f640": "Remove caller",
+  "27a6e8500eda7c2b": "Could not load older messages",
+  "0980674e69d501f1": "Could not send the message",
+  "02af338d7b3c0808": "Message {name}",
+  "bb081b4501ebd5a7": "Send",
+  "d4a50d7c02a35383": "This companion is not registered",
+  "9bec74fe0017bac6": "Add it in Settings → External Companions.",
+  "c5e19e2d69c5207f": "Connecting",
+  "3974a1c8d27fb8b9": "Load older messages",
+  "6c8cf04cdc23eaba": "The conversation could not be read. It loads again when the companion is back.",
+  "83b364ee20adb1f7": [
+    "No messages with ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " yet."
+  ],
+  "868cf870dcb75675": "Answered",
+  "cf84573e22244b27": [
+    "Answered: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "01f1b7ea80a6d537": "Your answer",
+  "0ef416c08f583e40": "{count, plural, one {{count} unread} other {{count} unread}}",
+  "02e4bb298880af45": "Children",
+  "1a8ed8aebc5ac91e": "External Companions",
+  "017954af6e4e5255": "Children",
+  "50385e4a29e78714": "External Companions",
+  "3fb9f5581a8d4614": "Companion",
+  "adf5eb437f367152": "Approvals, questions and failed runs from every Tot, companion and linked machine show up here.",
+  "9a1b199e16600d74": [
+    "Connect this app to ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " to answer its companions here."
+  ],
+  "b3c8e21b5dfc586d": "Open companion",
+  "b0dc2c9ea1ec6d90": "Ask before acting",
+  "1cf02e750ba6251a": "Accept edits",
+  "e2e55cb2dd4d1344": "Could not save the companions",
+  "3d493ff28b5fba22": "Could not revoke the grant",
+  "8b4eabdfc58b5fa0": "Edit",
+  "2c5674665579a329": "Remove",
+  "ffb1eb468eaf0b06": "Token",
+  "30a56f7e1ff009f1": "Could not issue the grant",
+  "74202565bb77aaf0": "Connect an environment to manage its companions.",
+  "a6b7d9df094eb2f8": "Add companion",
+  "ee38a3adf88fb3c2": "Companions",
+  "09b910ec70f5ee9e": "Agent services you run elsewhere that speak External Companion Protocol v1. This server talks to them, so their tokens stay here.",
+  "63db50d72e72da95": "No companions yet",
+  "276075eb99f582cf": "Add one with its URL and token.",
+  "66b483d78b1f69ec": [
+    "MCP grant issued (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "), waiting for the companion to exchange its setup code."
+  ],
+  "be5f0a14a8adf8b8": [
+    "MCP access: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ". Renews itself while used."
+  ],
+  "7982df88795fbe87": "MCP grant",
+  "bed9d3e3cecc6be7": "Revoke MCP",
+  "4e856401b998933c": "Add a companion",
+  "cd21c76abe888449": "Edit companion",
+  "3f71baf70aad6a38": "T3 reads its manifest from the base URL and sends the token as a bearer token.",
+  "95df1da03d0347d1": "A new origin needs the token again: a saved token only goes where it was saved for.",
+  "22b961ed5aca6afa": [
+    "MCP grant for ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "8d4ca23f01876a58": "The companion trades a setup code for one-hour MCP access that it renews itself, only from this machine. Revoke it here at any time.",
+  "f0578e109081ffe8": "Access",
+  "27979116f8b1fcd8": "Give the companion this setup code. It works once, within ten minutes, and is not shown again.",
+  "c851cde8a524f926": "Copied.",
+  "7a8677489fabed40": "Token endpoint:",
+  "652118d78a932e2a": "Issue setup code",
+  "5f5ca02947c8abb1": "companion agent service bearer token mcp grant children"
 }

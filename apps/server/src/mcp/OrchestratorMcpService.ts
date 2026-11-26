@@ -315,6 +315,10 @@ export function outsideClientCaller(
       ? { caller: { origin: "linked", id: label, label } }
       : {};
   }
+  // A registered External Companion is named by its stable id, which allowlists can match.
+  if (client.companionId !== undefined) {
+    return { caller: { origin: "companion", id: client.companionId, label } };
+  }
   return client.onBehalfOf === undefined
     ? { caller: { origin: "companion", id: label } }
     : { caller: { origin: "discord", id: client.onBehalfOf.userId, label } };

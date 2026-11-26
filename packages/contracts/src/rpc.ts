@@ -525,6 +525,22 @@ import {
   NeedsYouRespondInput,
   NeedsYouSuggestResult,
 } from "./needsYou.ts";
+import {
+  CompanionManifest,
+  CompanionPostResult,
+  ExternalCompanionChannelEvent,
+  ExternalCompanionChannelRef,
+  ExternalCompanionError,
+  ExternalCompanionGrantIssueInput,
+  ExternalCompanionGrantIssueResult,
+  ExternalCompanionHistoryInput,
+  ExternalCompanionHistoryResult,
+  ExternalCompanionRef,
+  ExternalCompanionRespondInput,
+  ExternalCompanionSendInput,
+  ExternalCompanionsState,
+  ExternalCompanionTestInput,
+} from "./externalCompanions.ts";
 import { VcsError } from "./vcs.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
@@ -673,6 +689,14 @@ export const WS_METHODS = {
   needsYouRestore: "needsYou.restore",
   needsYouSuggest: "needsYou.suggest",
   needsYouRespond: "needsYou.respond",
+  companionsSubscribe: "companions.subscribe",
+  companionsTest: "companions.test",
+  companionsChannel: "companions.channel",
+  companionsHistory: "companions.history",
+  companionsSend: "companions.send",
+  companionsRespond: "companions.respond",
+  companionsGrantIssue: "companions.grantIssue",
+  companionsGrantRevoke: "companions.grantRevoke",
   groupChatsCreate: "groupChats.create",
   groupChatsUpdate: "groupChats.update",
   groupChatsRemove: "groupChats.remove",
@@ -1179,6 +1203,48 @@ const WsNeedsYouSuggestRpc = Rpc.make(WS_METHODS.needsYouSuggest, {
 const WsNeedsYouRespondRpc = Rpc.make(WS_METHODS.needsYouRespond, {
   payload: NeedsYouRespondInput,
   error: needsYouError,
+});
+const companionError = Schema.Union([ExternalCompanionError, EnvironmentAuthorizationError]);
+/** Every companion's connection, face and children, again whenever one changes. */
+const WsCompanionsSubscribeRpc = Rpc.make(WS_METHODS.companionsSubscribe, {
+  payload: Schema.Struct({}),
+  success: ExternalCompanionsState,
+  error: companionError,
+  stream: true,
+});
+const WsCompanionsTestRpc = Rpc.make(WS_METHODS.companionsTest, {
+  payload: ExternalCompanionTestInput,
+  success: CompanionManifest,
+  error: companionError,
+});
+const WsCompanionsChannelRpc = Rpc.make(WS_METHODS.companionsChannel, {
+  payload: ExternalCompanionChannelRef,
+  success: ExternalCompanionChannelEvent,
+  error: companionError,
+  stream: true,
+});
+const WsCompanionsHistoryRpc = Rpc.make(WS_METHODS.companionsHistory, {
+  payload: ExternalCompanionHistoryInput,
+  success: ExternalCompanionHistoryResult,
+  error: companionError,
+});
+const WsCompanionsSendRpc = Rpc.make(WS_METHODS.companionsSend, {
+  payload: ExternalCompanionSendInput,
+  success: CompanionPostResult,
+  error: companionError,
+});
+const WsCompanionsRespondRpc = Rpc.make(WS_METHODS.companionsRespond, {
+  payload: ExternalCompanionRespondInput,
+  error: companionError,
+});
+const WsCompanionsGrantIssueRpc = Rpc.make(WS_METHODS.companionsGrantIssue, {
+  payload: ExternalCompanionGrantIssueInput,
+  success: ExternalCompanionGrantIssueResult,
+  error: companionError,
+});
+const WsCompanionsGrantRevokeRpc = Rpc.make(WS_METHODS.companionsGrantRevoke, {
+  payload: ExternalCompanionRef,
+  error: companionError,
 });
 const WsTotsWorkSubscribeRpc = Rpc.make(WS_METHODS.totsWorkSubscribe, {
   payload: TotWorkSubscribeInput,
@@ -2748,6 +2814,14 @@ export const WsRpcGroup = RpcGroup.make(
   WsNeedsYouRestoreRpc,
   WsNeedsYouSuggestRpc,
   WsNeedsYouRespondRpc,
+  WsCompanionsSubscribeRpc,
+  WsCompanionsTestRpc,
+  WsCompanionsChannelRpc,
+  WsCompanionsHistoryRpc,
+  WsCompanionsSendRpc,
+  WsCompanionsRespondRpc,
+  WsCompanionsGrantIssueRpc,
+  WsCompanionsGrantRevokeRpc,
   WsGroupChatsCreateRpc,
   WsGroupChatsUpdateRpc,
   WsGroupChatsRemoveRpc,

@@ -51,6 +51,10 @@
       "types": "./src/workflows.ts",
       "default": "./src/workflows.ts"
     },
+    "./companions": {
+      "types": "./src/companions.ts",
+      "default": "./src/companions.ts"
+    },
     "./needs-you": {
       "types": "./src/needsYou.ts",
       "default": "./src/needsYou.ts"

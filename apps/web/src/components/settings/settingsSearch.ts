@@ -35,6 +35,7 @@ export type SettingsPath =
   | "/settings/scheduled-tasks"
   | "/settings/tots"
   | "/settings/avatar-library"
+  | "/settings/external-companions"
   | "/settings/source-control"
   | "/settings/worktrees"
   | "/settings/connections"
@@ -116,6 +117,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/scheduled-tasks": msg("Scheduled tasks"),
   "/settings/tots": msg("Tots"),
   "/settings/avatar-library": msg("Avatar library"),
+  "/settings/external-companions": msg("External Companions"),
   "/settings/source-control": msg("Source control & issues"),
   "/settings/worktrees": msg("Worktrees"),
   "/settings/connections": msg("Environments"),
@@ -169,6 +171,7 @@ const ALL_SETTINGS_NAV_GROUPS: ReadonlyArray<SettingsNavGroup> = [
       "/settings/scheduled-tasks",
       "/settings/tots",
       "/settings/avatar-library",
+      "/settings/external-companions",
     ],
   },
   {
@@ -1203,6 +1206,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("tot face open bot figure shape theme describe import export")],
   },
   {
+    id: "external-companions",
+    title: msg("External Companions"),
+    to: "/settings/external-companions",
+    searchTerms: [msg("companion agent service bearer token mcp grant children")],
+  },
+  {
     id: "avatar-design-model",
     title: msg("Shape model"),
     to: "/settings/avatar-library",
@@ -1644,6 +1653,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/scheduled-tasks": null,
   "/settings/tots": null,
   "/settings/avatar-library": null,
+  "/settings/external-companions": null,
   "/settings/maintenance": null,
   "/settings/labs": null,
   "/settings/about": null,
