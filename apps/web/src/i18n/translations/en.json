@@ -13306,8 +13306,6 @@
   ],
   "6e96ce482c3d701e": "Dismissed",
   "9bd31b8911a11607": "Bring back",
-  "338ce4267d4f180c": "Needs you ({count})",
-  "d25661576338fcf0": "Needs you",
   "16b243a1f0fff69b": "Planned",
   "a41f47e1573c46f2": "Working",
   "141121e1748a73d3": "Waiting",
@@ -13499,6 +13497,16 @@
   ],
   "1012470564ed461f": [
     "Retry on ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "708f9144bda073a1": "Open Needs you",
+  "d6c5494cf45ad5e7": "Open Needs you",
+  "9353579fe56bdf6e": [
+    "See all ",
     {
       "i": 1,
       "k": "_gt_value_1",

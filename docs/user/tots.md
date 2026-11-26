@@ -6,7 +6,7 @@ A Tot is an agent you talk to in one thread. It starts threads, checks on them, 
 
 ## Start a Tot
 
-Open **Settings → Tots** and turn on Home, or create a new Tot with **New Tot**: next to Usage at the bottom of the sidebar, in the command palette, or in the **Tots** tab on mobile. Give it:
+Open **Settings → Tots** and turn on Home, or create a new Tot with **New Tot**: in Tots settings, in the command palette, or in the **Tots** tab on mobile. Give it:
 
 - a name and a face;
 - a scope: everything, or the projects it owns;
@@ -94,7 +94,7 @@ A Tot lives on one machine. To move it, open **Edit**, choose another machine un
 
 ## In the sidebar
 
-Tots sit under the search bar. Each row shows what the Tot is doing (working, needs you, failed, off) and a filled dot when it has replied since you last looked. Right-click a Tot to open, edit, open its memory, start fresh, turn it off or delete it. The **Tots** button at the bottom opens Tots settings.
+Tots sit under the search bar. Each row shows what the Tot is doing (working, needs you, failed, off) and a filled dot when it has replied since you last looked. Right-click a Tot to open, edit, open its memory, start fresh, turn it off or delete it. **Settings → Tots** holds the rest of their settings.
 
 Click the section header to fold the list; its count stays visible while folded. Drag a Tot onto another Tot to reorder the section. The order is saved on that device rather than on the server, so each device can arrange the list differently, and rearranging never moves a Tot between machines. Group chats share the section and stay below the Tots.
 
@@ -104,7 +104,7 @@ A Tot's replies are drawn in its color, with its face and name beside them.
 
 ## Needs you
 
-The **Needs you** button (the inbox icon at the bottom of the sidebar) collects everything waiting on you, from every Tot and every linked machine: approvals, questions, runs that failed or stopped since you last opened their thread, and failed scheduled runs. A count on the button shows how many.
+**Needs you** collects everything waiting on you, from every Tot and every linked machine: approvals, questions, runs that failed or stopped since you last opened their thread, and failed scheduled runs. While anything is waiting, a **Needs you** section with a count sits at the top of the sidebar, one line per item. Click an item to answer or approve it right there, or fold the section with its header. **Open Needs you** at the bottom of the section, or **Open Needs you** in the command palette, opens the full list.
 
 Items are grouped by machine and by Tot. Approve or decline, pick an option or type an answer, or open the thread. Answers go through the same path as the thread itself. When a question has no options, a few **Suggested** replies appear as chips; they only fill in the answer, and nothing is sent until you press **Send answer**. Suggestions use the text generation model, or the `replySuggestionModelSelection` setting when it is set.
 
