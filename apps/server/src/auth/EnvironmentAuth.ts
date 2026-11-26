@@ -653,6 +653,8 @@ export class EnvironmentAuth extends Context.Service<
       readonly access: AuthMcpClientAccess;
       readonly peerLink: boolean;
       readonly client: AuthClientMetadata;
+      /** Shorter than the usual 30 days for a grant that refreshes itself. Never longer. */
+      readonly ttl?: Duration.Duration;
       /**
        * `otherSessionRevocationCount` read before the sign-in was approved. The session is
        * refused when "revoke all others" has run since.
@@ -1714,7 +1716,10 @@ export const make = Effect.gen(function* () {
         subject: MCP_CLIENT_SUBJECT,
         method: "bearer-access-token",
         scopes: mcpClientScopes(input.access),
-        ttl: MCP_CLIENT_SESSION_TTL,
+        ttl:
+          input.ttl === undefined
+            ? MCP_CLIENT_SESSION_TTL
+            : Duration.min(input.ttl, MCP_CLIENT_SESSION_TTL),
         ...(input.access === "read-only" ? {} : { runtimeModeCeiling: input.access }),
         peerLink: input.peerLink,
         client: { ...input.client, label: input.label, deviceType: "bot" },

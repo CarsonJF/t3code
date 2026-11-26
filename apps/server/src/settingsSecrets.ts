@@ -4,6 +4,7 @@ import {
   CloudSpeechCredentials,
   CodexSettings,
   EasDeviceHostConfig,
+  ExternalCompanionConfig,
   type ProviderInstanceConfig,
   type ServerSettings,
   type SettingsSecretValue,
@@ -51,6 +52,7 @@ const textGeneratorSecretFields = secretSettingsFields(TextGeneratorConfig);
 const voiceSecretFields = secretSettingsFields(CloudSpeechCredentials);
 const easDeviceHostSecretFields = secretSettingsFields(EasDeviceHostConfig);
 const simlockDeviceHostSecretFields = secretSettingsFields(SimlockDeviceHostConfig);
+const externalCompanionSecretFields = secretSettingsFields(ExternalCompanionConfig);
 const encode = (value: string) => Buffer.from(value, "utf8").toString("base64url");
 
 export interface SettingsSecret {
@@ -247,6 +249,17 @@ function mapSecretFieldGroups(
       ) as SimlockDeviceHostConfig,
   );
 
+  const externalCompanions = settings.externalCompanions.map(
+    (companion) =>
+      mapFields(
+        companion,
+        externalCompanionSecretFields,
+        (field, serverHost) =>
+          `external-companion-${encode(companion.id)}-${encode(field)}` +
+          (serverHost === null ? "" : `-${encode(serverHost)}`),
+      ) as ExternalCompanionConfig,
+  );
+
   return {
     ...settings,
     cloudSpeechCredentials: mapFields(
@@ -260,6 +273,7 @@ function mapSecretFieldGroups(
     textGenerators,
     easDeviceHosts,
     simlockDeviceHosts,
+    externalCompanions,
   };
 }
 
@@ -295,23 +309,36 @@ export function withoutRemovedSecretProviderReferences(
 
 const gatewayOrigin = (url: string) => (URL.canParse(url) ? new URL(url).origin : url);
 
+const keptSecret = (token: SettingsSecretValue, savedToken: SettingsSecretValue) =>
+  token === SECRET_REDACTED ||
+  (isSecretReference(token) &&
+    isSecretReference(savedToken) &&
+    token.provider === savedToken.provider &&
+    token.reference === savedToken.reference);
+
 /**
- * `next` with a Simlock host's kept token cleared when its gateway moved to another origin: a
- * saved token goes only to the gateway it was saved for. A newly entered token stays.
+ * `next` with a Simlock host's or companion's kept token cleared when its URL moved to another
+ * origin: a saved token goes only to the server it was saved for. A newly entered token stays.
  */
 export function withoutRedirectedSimlockTokens(
   current: ServerSettings,
   next: ServerSettings,
 ): ServerSettings {
   const saved = new Map(current.simlockDeviceHosts.map((host) => [host.id, host]));
-  const kept = (token: SettingsSecretValue, savedToken: SettingsSecretValue) =>
-    token === SECRET_REDACTED ||
-    (isSecretReference(token) &&
-      isSecretReference(savedToken) &&
-      token.provider === savedToken.provider &&
-      token.reference === savedToken.reference);
+  const kept = keptSecret;
+  const companions = new Map(
+    current.externalCompanions.map((companion) => [companion.id, companion]),
+  );
   return {
     ...next,
+    externalCompanions: next.externalCompanions.map((companion) => {
+      const previous = companions.get(companion.id);
+      return previous &&
+        gatewayOrigin(previous.baseUrl) !== gatewayOrigin(companion.baseUrl) &&
+        kept(companion.token, previous.token)
+        ? { ...companion, token: "" }
+        : companion;
+    }),
     simlockDeviceHosts: next.simlockDeviceHosts.map((host) => {
       const previous = saved.get(host.id);
       return previous &&
