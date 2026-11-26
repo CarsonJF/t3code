@@ -1,4 +1,4 @@
-import { RunId } from "@t3tools/contracts";
+import { ProviderInstanceId, RunId } from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import { describe, expect, it, vi } from "vite-plus/test";
 
@@ -22,6 +22,30 @@ function bannerItem(resetAt: Date, timestampFormat: TimestampFormat = "24-hour")
 }
 
 describe("usageLimitRecoveryBannerItem", () => {
+  it("offers a retry on another account even when there is no reset to wait for", () => {
+    const item = (
+      retryAccounts: ReadonlyArray<{ instanceId: ProviderInstanceId; label: string }>,
+    ) =>
+      usageLimitRecoveryBannerItem({
+        runId: RunId.make("run-1"),
+        errorCode: null,
+        resetAt: null,
+        stoppedAt: stoppedAt.toISOString(),
+        settled: false,
+        requestPending: false,
+        snoozedUntil: null,
+        recovery: null,
+        timestampFormat: "24-hour",
+        onChange: async () => {},
+        retryAccounts,
+        onRetryOnAccount: async () => {},
+      });
+    expect(item([]).actions).toBeNull();
+    expect(
+      item([{ instanceId: ProviderInstanceId.make("claudeAgent_work"), label: "Work" }]).actions,
+    ).not.toBeNull();
+  });
+
   it.each([
     ["12-hour", "Resets 5:30 PM"],
     ["24-hour", "Resets 17:30"],

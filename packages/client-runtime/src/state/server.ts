@@ -2176,6 +2176,10 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:needs-you:respond",
       tag: WS_METHODS.needsYouRespond,
     }),
+    retryOnAccount: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:usage-limit:retry-on-account",
+      tag: WS_METHODS.usageLimitRetryOnAccount,
+    }),
     writeTotMemory: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:tots:write-memory",
       tag: WS_METHODS.totsWriteMemory,

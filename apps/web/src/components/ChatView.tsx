@@ -8,7 +8,7 @@ import {
 } from "./chat/runtimeModeConfig";
 import { workspaceAreaProps } from "../lib/workspaceFocus";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
+import { otherProviderAccounts, resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
 import { queuedRunEditBlockedReason } from "@t3tools/client-runtime/queued-run-edit";
 import { ScrollToEndButton, WorkspaceFileDropOverlay } from "./chat/TimelineOverlays";
 import { usePasteToFocusComposer } from "./chat/usePasteToFocusComposer";
@@ -510,6 +510,9 @@ export default function ChatView(props: ChatViewProps) {
     };
   }, [routeThreadKey]);
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
+    reportFailure: false,
+  });
+  const retryOnAccount = useAtomCommand(serverEnvironment.retryOnAccount, {
     reportFailure: false,
   });
   const canWriteSourceControl = useEnvironmentScope(environmentId, AuthSourceControlWriteScope);
@@ -2797,6 +2800,18 @@ export default function ChatView(props: ChatViewProps) {
             const result = await updateThreadMetadata({
               environmentId,
               input: { threadId: activeThreadShell.id, limitRecovery },
+            });
+            if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+          },
+          // Accounts belong to the thread's machine; another machine's list says nothing here.
+          retryAccounts:
+            providerEnvironmentId === environmentId
+              ? otherProviderAccounts(providerStatuses, activeThreadShell.modelSelection.instanceId)
+              : [],
+          onRetryOnAccount: async (instanceId) => {
+            const result = await retryOnAccount({
+              environmentId,
+              input: { threadId: activeThreadShell.id, runId: limitRecoveryRun.runId, instanceId },
             });
             if (result._tag === "Failure") throw squashAtomCommandFailure(result);
           },

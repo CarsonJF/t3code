@@ -8,6 +8,7 @@ import {
   type ProviderInstanceId,
   type ProviderConsumeResetCreditInput,
   type ServerProviderSlashCommand,
+  defaultInstanceIdForDriver,
   isProviderAvailable,
   PROVIDER_DISPLAY_NAMES,
   type ServerProvider,
@@ -1087,4 +1088,39 @@ export function collectProviderUsageLimits(
     }
   }
   return { createdAt: DateTime.formatIso(DateTime.makeUnsafe(now)), accounts, notices };
+}
+
+export const providerAccountLabel = (provider: ServerProvider): string =>
+  provider.displayName ??
+  (provider.instanceId === defaultInstanceIdForDriver(provider.driver)
+    ? PROVIDER_DISPLAY_NAMES[provider.driver]
+    : undefined) ??
+  provider.instanceId;
+
+/**
+ * The other accounts a run on `instanceId` can move to: enabled, signed-in instances of the same
+ * driver. One that shares its continuation group reads the same login folder, so it is the same
+ * account under another name.
+ */
+export function otherProviderAccounts(
+  providers: ReadonlyArray<ServerProvider>,
+  instanceId: ProviderInstanceId,
+): ReadonlyArray<{ readonly instanceId: ProviderInstanceId; readonly label: string }> {
+  const current = providers.find((provider) => provider.instanceId === instanceId);
+  if (current === undefined) return [];
+  const group = current.continuation?.groupKey;
+  return providers
+    .filter(
+      (provider) =>
+        provider.instanceId !== instanceId &&
+        provider.driver === current.driver &&
+        provider.enabled &&
+        isProviderAvailable(provider) &&
+        provider.auth.status !== "unauthenticated" &&
+        (group === undefined || provider.continuation?.groupKey !== group),
+    )
+    .map((provider) => ({
+      instanceId: provider.instanceId,
+      label: providerAccountLabel(provider),
+    }));
 }
