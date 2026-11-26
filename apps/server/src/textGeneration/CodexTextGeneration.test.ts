@@ -771,6 +771,7 @@ it.effect.each(PREFLIGHT_PRIMARY_STATES)("text generation preflight: %s", (prima
           generateReviewGuide: () => Effect.die("unused"),
           generateTranscriptionPostProcessing: () => Effect.die("unused"),
           generateAvatarFigure: () => Effect.die("unused"),
+          generateMemoryTidy: () => Effect.die("unused"),
           generateThreadTitle: (input) =>
             Effect.sync(() => {
               calls.push(input.modelSelection);
@@ -883,6 +884,7 @@ it.effect(
           generateThreadTitle: () => Effect.die("unused"),
           generateTranscriptionPostProcessing: () => Effect.die("unused"),
           generateAvatarFigure: () => Effect.die("unused"),
+          generateMemoryTidy: () => Effect.die("unused"),
           generateReviewGuide: (input) =>
             Effect.sync(() => {
               calls.push(input.modelSelection);
