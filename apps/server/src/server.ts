@@ -2,6 +2,7 @@ import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEve
 import * as DatabaseMigrationProgress from "./persistence/DatabaseMigrationProgress.ts";
 import * as GroupChatService from "./tots/GroupChatService.ts";
 import * as AvatarFigureDesigner from "./tots/AvatarFigureDesigner.ts";
+import * as NeedsYou from "./needsYou/NeedsYou.ts";
 import * as TotService from "./tots/TotService.ts";
 import * as TotWatchService from "./tots/TotWatchService.ts";
 import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
@@ -987,9 +988,12 @@ const layerMakeRoutes = Layer.mergeAll(
   ),
   Layer.provide(PreviewBrowser.layer),
   Layer.provide(
-    Layer.mergeAll(TotWatchService.layer, GroupChatService.layer, TotMemoryTidyJob.layer).pipe(
-      Layer.provideMerge(TotService.layer),
-    ),
+    Layer.mergeAll(
+      TotWatchService.layer,
+      GroupChatService.layer,
+      TotMemoryTidyJob.layer,
+      NeedsYou.layer,
+    ).pipe(Layer.provideMerge(TotService.layer)),
   ),
   Layer.provide(AvatarFigureDesigner.layer),
   // Links to other environments, shared by clients (WebSocket) and agents (/mcp).

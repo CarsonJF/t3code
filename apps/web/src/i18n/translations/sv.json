@@ -13244,5 +13244,50 @@
   "7dcbf66bc26f10ae": "Nattlig minnesstädning för {name}",
   "0c9b03a0a40b461f": "Ångrar…",
   "0c7b8cd7ce14bb5f": "Ångra senaste städningen",
-  "81a0dfe96d155888": "Nattlig minnesstädning"
+  "81a0dfe96d155888": "Nattlig minnesstädning",
+  "6a1390b1f63ef634": "Kunde inte dölja den",
+  "cd3bf273c74438c2": "Godkännande",
+  "5c8772e727c04218": "Fråga",
+  "71a0d291605ff58d": "Misslyckad körning",
+  "85c9954de7b4cee7": "Stoppad körning",
+  "3ffa3898db62ec7e": "Schemalagd körning misslyckades",
+  "93e6e9252bdccfa1": "Kunde inte skicka beslutet",
+  "4e430d5ea01c249b": "Kunde inte skicka svaret",
+  "070babcc726100d9": "Skriv ett svar",
+  "39fd01a80e88ee2a": "Kunde inte ta tillbaka den",
+  "1b7c524fccf06537": "Behöver dig",
+  "7c5a3071fb7d9f14": "Inget behöver dig",
+  "2843b91a4c4a5e98": "Godkännanden, frågor och misslyckade körningar från alla Tots och länkade datorer visas här.",
+  "2df485ee15283e6b": "Kunde inte läsa den här datorn:",
+  "5eb5603f5b29900d": "Trådar",
+  "df1fb90eb9a77fbf": "Schemalagda uppgifter",
+  "39b4070d872d2028": "Snooza",
+  "a30ccddf9846901f": "I en timme",
+  "05c315b2aeaf837c": "I fyra timmar",
+  "2ac68b6da5c86403": "Till i morgon bitti",
+  "3a364fe01dd16636": [
+    "Anslut appen till ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " för att godkänna här, eller öppna tråden där."
+  ],
+  "77ada50f836c7878": "Förslag",
+  "cfea388d49c84ed1": "Funderar på svar…",
+  "5536b6ffc0e02e95": "Skicka svar",
+  "5bd55126073a21cb": [
+    "Snoozade och avfärdade (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ")"
+  ],
+  "6e96ce482c3d701e": "Avfärdad",
+  "9bd31b8911a11607": "Ta tillbaka",
+  "338ce4267d4f180c": "Behöver dig ({count})",
+  "d25661576338fcf0": "Behöver dig"
 }

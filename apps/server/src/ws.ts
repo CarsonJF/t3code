@@ -207,6 +207,7 @@ import * as ServerSettings from "./serverSettings.ts";
 import { invalidateSettingsSecrets } from "./sourceControl/sourceControlHostSecrets.ts";
 import * as GroupChatService from "./tots/GroupChatService.ts";
 import * as AvatarFigureDesigner from "./tots/AvatarFigureDesigner.ts";
+import * as NeedsYou from "./needsYou/NeedsYou.ts";
 import * as TotService from "./tots/TotService.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
@@ -751,6 +752,7 @@ const SPLIT_WS_RPC_PREFIXES = [
   "orchestration",
   "tots",
   "groupChats",
+  "needsYou",
 ] as const;
 type SplitWsRpc = Extract<
   ServerWsRpc,
@@ -1603,6 +1605,7 @@ export const layerWsRpc = (
       const peerClientPairing = yield* PeerClientPairing.PeerClientPairing;
       const tots = yield* TotService.TotService;
       const avatarDesigner = yield* AvatarFigureDesigner.AvatarFigureDesigner;
+      const needsYou = yield* NeedsYou.NeedsYou;
       const groupChats = yield* GroupChatService.GroupChatService;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
@@ -2895,6 +2898,11 @@ export const layerWsRpc = (
         [WS_METHODS.totsDescribeAvatarFigure]: (input) =>
           avatarDesigner.describe(input.description),
         [WS_METHODS.totsDesignAvatar]: (input) => tots.askForAvatar(input.id, input.prompt),
+        [WS_METHODS.needsYouSubscribe]: (input) => needsYou.changes(input),
+        [WS_METHODS.needsYouHide]: (input) => needsYou.hide(input),
+        [WS_METHODS.needsYouRestore]: (input) => needsYou.restore(input),
+        [WS_METHODS.needsYouSuggest]: (input) => needsYou.suggest(input),
+        [WS_METHODS.needsYouRespond]: (input) => needsYou.respond(input),
         [WS_METHODS.groupChatsCreate]: (input) => groupChats.create(input),
         [WS_METHODS.groupChatsUpdate]: (input) => groupChats.update(input),
         [WS_METHODS.groupChatsRemove]: (input) => groupChats.remove(input.id),
@@ -3844,6 +3852,7 @@ export const layer = Layer.unwrap(
     const npmRelease = yield* NpmRelease.NpmRelease;
     const totService = yield* TotService.TotService;
     const avatarDesigner = yield* AvatarFigureDesigner.AvatarFigureDesigner;
+    const needsYou = yield* NeedsYou.NeedsYou;
     const groupChatService = yield* GroupChatService.GroupChatService;
     const pullRequests = yield* PullRequestService.PullRequestService;
     const issues = yield* IssueService.IssueService;
@@ -3948,6 +3957,7 @@ export const layer = Layer.unwrap(
                 Layer.mergeAll(
                   Layer.succeed(TotService.TotService, totService),
                   Layer.succeed(AvatarFigureDesigner.AvatarFigureDesigner, avatarDesigner),
+                  Layer.succeed(NeedsYou.NeedsYou, needsYou),
                 ),
               ),
               Layer.provide(Layer.succeed(GroupChatService.GroupChatService, groupChatService)),

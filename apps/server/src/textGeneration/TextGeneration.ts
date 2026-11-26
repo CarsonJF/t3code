@@ -51,7 +51,8 @@ type TextGenerationOp =
   | "generateReviewGuide"
   | "generateTranscriptionPostProcessing"
   | "generateAvatarFigure"
-  | "generateMemoryTidy";
+  | "generateMemoryTidy"
+  | "generateReplySuggestions";
 
 const resolveInstance = (
   registry: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"],
@@ -234,6 +235,17 @@ export const make = Effect.gen(function* () {
         service.generateMemoryTidy({ ...input, modelSelection }),
       );
     }),
+    generateReplySuggestions: Effect.fn("TextGeneration.generateReplySuggestions")(
+      function (input) {
+        return generate(
+          "generateReplySuggestions",
+          input.modelSelection,
+          null,
+          (service, modelSelection) =>
+            service.generateReplySuggestions({ ...input, modelSelection }),
+        );
+      },
+    ),
     generateThreadTitle: Effect.fn("TextGeneration.generateThreadTitle")(function (input) {
       return generate(
         "generateThreadTitle",
