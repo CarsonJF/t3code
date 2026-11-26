@@ -81,9 +81,21 @@ const failureText = (result: T3ToolResult): string => {
   return text !== undefined && text.length > 0 ? text : "The tool call failed.";
 };
 
+export interface T3CallOptions {
+  /**
+   * The Discord user this call relays for, sent as `T3-On-Behalf-Of`. A Tot checks it on its
+   * own Who can ask list, on top of this bridge's allowlist.
+   */
+  readonly discordUserId?: string;
+}
+
 export interface T3Client {
   /** Calls one MCP tool and returns its structured result. */
-  readonly call: <A>(tool: string, args: Readonly<Record<string, unknown>>) => Promise<A>;
+  readonly call: <A>(
+    tool: string,
+    args: Readonly<Record<string, unknown>>,
+    options?: T3CallOptions,
+  ) => Promise<A>;
   readonly close: () => Promise<void>;
 }
 
@@ -118,12 +130,15 @@ export const createT3Client = (options: T3McpClientOptions): T3Client => {
     return mediaType === "text/event-stream" ? parseSse(body) : [JSON.parse(body) as unknown];
   };
 
-  const send = async (message: unknown): Promise<ReadonlyArray<unknown>> => {
+  const send = async (
+    message: unknown,
+    extraHeaders: Readonly<Record<string, string>> = {},
+  ): Promise<ReadonlyArray<unknown>> => {
     let response: Response;
     try {
       response = await doFetch(options.url, {
         method: "POST",
-        headers: { "content-type": "application/json", ...headers() },
+        headers: { "content-type": "application/json", ...headers(), ...extraHeaders },
         body: JSON.stringify(message),
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -144,10 +159,14 @@ export const createT3Client = (options: T3McpClientOptions): T3Client => {
     return payloads;
   };
 
-  const request = async (method: string, params: unknown): Promise<JsonRpcEnvelope> => {
+  const request = async (
+    method: string,
+    params: unknown,
+    extraHeaders?: Readonly<Record<string, string>>,
+  ): Promise<JsonRpcEnvelope> => {
     const id = `discord-tot-bridge-${nextId}`;
     nextId += 1;
-    const payloads = await send({ jsonrpc: "2.0", id, method, params });
+    const payloads = await send({ jsonrpc: "2.0", id, method, params }, extraHeaders);
     for (const payload of payloads) {
       const envelope = asEnvelope(payload);
       if (envelope === null) continue;
@@ -191,9 +210,18 @@ export const createT3Client = (options: T3McpClientOptions): T3Client => {
   };
 
   return {
-    call: async <A>(tool: string, args: Readonly<Record<string, unknown>>): Promise<A> => {
+    call: async <A>(
+      tool: string,
+      args: Readonly<Record<string, unknown>>,
+      callOptions?: T3CallOptions,
+    ): Promise<A> => {
       await ready();
-      const envelope = await request("tools/call", { name: tool, arguments: args });
+      const userId = callOptions?.discordUserId;
+      const envelope = await request(
+        "tools/call",
+        { name: tool, arguments: args },
+        userId === undefined ? undefined : { "t3-on-behalf-of": `discord/${userId}` },
+      );
       const result = asEnvelope(envelope.result);
       if (result === null) throw new T3McpError(`T3 MCP ${tool} returned no result.`, { tool });
       const toolResult = result as T3ToolResult;

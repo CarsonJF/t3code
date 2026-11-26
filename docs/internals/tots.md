@@ -76,3 +76,11 @@ A Tot stores its own theme on its record: `theme?: { css?: string; effect?: stri
 ## Instructions
 
 Instructions follow a looser rule because Home looks after the others: `t3_tot_instructions` lets a Tot read and replace its own, Home any Tot's, and a person at a client outside any thread any Tot's. Other agent threads are refused. The write goes through `TotService.update`, which re-renders `AGENTS.md`, so hand edits to the instructions block never stick.
+
+## Who can ask
+
+Every send into a Tot's current thread passes `ThreadManagementService.sendToThread`, which classifies the caller (`tots/totCallers.ts`) and checks the Tot's `whoCanAsk` list. The local user's client dispatches `message.dispatch` directly and never reaches it; `withCreationProvenance` strips `caller` and `restriction` from client commands so only the server sets them.
+
+- Fail closed: an MCP send that names no sender, thread or caller counts as an unknown outside client. A new entry point that starts turns for someone else must pass `caller`, or it is refused.
+- The limit lives on the run (`restriction`), not the thread, because one Tot thread mixes the user's turns with outside ones. `RuntimePolicy.resolve` lowers that run's policy, `McpToolAccess` refuses T3's write tools for it, and the Orchestrator never lets such a message steer or be promoted into another run. Continuations keep it.
+- The Discord bridge's user id arrives as `T3-On-Behalf-Of` from a non-linked client, so the model-facing `t3_thread_send` schema does not change. Any full-access client can claim it; the bridge's own allowlist is the first gate.

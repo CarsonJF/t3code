@@ -97,6 +97,28 @@ Items are grouped by machine and by Tot. Approve or decline, pick an option or t
 
 Tots can read the same list with `t3_needs_you`.
 
+## Who can ask
+
+A Tot takes turns from you and from T3 Code itself, such as its watch reports and its own
+scheduled tasks. Everyone else is refused unless you list them under **Who can ask** in the
+Tot's settings: Discord users (by user id), webhook listeners (by scheduled task id), other
+Tots, agent threads, linked machines and outside clients. `*` lists everyone from one origin.
+A refused caller gets an error that names the setting, and no turn starts.
+
+Each entry picks how far that caller's turns go:
+
+- **Full access** runs them like yours.
+- **Ask before changes** runs them in approval-required mode, so every change waits for
+  your approval in the thread or under **Needs you**. No Tot can answer those approvals.
+- **Read-only** lets the Tot look but change nothing. It needs a Codex or Claude model.
+
+Turns from outside callers never join a turn already running; they wait for their own. In
+an Ask or Read-only turn, T3 Code's own tools that change things (launching threads,
+scheduled tasks, messaging other Tots) are off. Only you can change the list; a Tot can read
+it with `t3_tot_instructions` but not widen it.
+
+A wake listener you set up before this setting existed needs its task id added here.
+
 ## Webhook listeners
 
 Ask a Tot to listen for something outside events, such as a doorbell, a CI job or a

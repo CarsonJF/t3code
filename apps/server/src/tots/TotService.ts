@@ -21,6 +21,7 @@ import {
   type TotMemoryFile,
   type TotThreadResult,
   type TotThemePatch,
+  type TotAskEntry,
   type TotUpdateInput,
   type TotWatch,
   TOT_BUILT_IN_THEMES,
@@ -478,6 +479,11 @@ const make = Effect.gen(function* () {
     }
   });
 
+  // One entry per caller: the last one written wins, as a settings form expects.
+  const dedupeAskEntries = (entries: ReadonlyArray<TotAskEntry>): ReadonlyArray<TotAskEntry> => [
+    ...new Map(entries.map((entry) => [`${entry.origin}\u0000${entry.id}`, entry])).values(),
+  ];
+
   const update = Effect.fn("TotService.update")(function* (input: TotUpdateInput) {
     const tot = yield* requireTot(input.id);
     if (input.theme !== undefined) {
@@ -513,6 +519,7 @@ const make = Effect.gen(function* () {
       ...(input.watchReports === undefined ? {} : { watchReports: input.watchReports }),
       ...(input.autoSettle === undefined ? {} : { autoSettle: input.autoSettle }),
       ...(input.memoryTidy === undefined ? {} : { memoryTidy: input.memoryTidy }),
+      ...(input.whoCanAsk === undefined ? {} : { whoCanAsk: dedupeAskEntries(input.whoCanAsk) }),
     };
     const next = input.theme === undefined ? base : withTheme(base, input.theme);
     yield* replace(next);

@@ -283,6 +283,23 @@ const withSenderThread = (
     : { ...invocation, client: { ...invocation.client, senderThread: decoded.value } };
 };
 
+/** Records the Discord user an outside client relays for; a malformed header names nobody. */
+const withOnBehalfOf = (
+  invocation: McpInvocationContext.McpInvocationScope,
+  request: HttpServerRequest.HttpServerRequest,
+): McpInvocationContext.McpInvocationScope => {
+  const header = request.headers[McpInvocationContext.ON_BEHALF_OF_HEADER];
+  const client = invocation.client;
+  if (header === undefined || client === undefined || client.linked === true) return invocation;
+  const match = /^discord\/(\d{1,32})$/u.exec(header.trim());
+  return match?.[1] === undefined
+    ? invocation
+    : {
+        ...invocation,
+        client: { ...client, onBehalfOf: { service: "discord", userId: match[1] } },
+      };
+};
+
 // The Linked environments beta is off here: links wait until it is on again.
 const linkedEnvironmentsOff = HttpServerResponse.jsonUnsafe(
   {
@@ -378,7 +395,10 @@ const makeMcpAuthMiddleware = Effect.gen(function* () {
         offerOAuth: Option.isSome(clients) && !looksLikeProviderToken(token),
       });
     }
-    const asked = withModeLimit(withSenderThread(invocation, request), request);
+    const asked = withModeLimit(
+      withOnBehalfOf(withSenderThread(invocation, request), request),
+      request,
+    );
     if (asked === undefined) return invalidModeLimit;
     const limited = McpInvocationContext.withRuntimeModeCeiling(asked, runtimeModeCeiling);
     const { linkedEnvironments, agentFeedback, workflows } = yield* settingsFlags;

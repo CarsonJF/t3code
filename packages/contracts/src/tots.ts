@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 
 import { EnvironmentId, ProjectId, RunId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { ModelSelection } from "./modelSelection.ts";
+import { type RunRestriction, type TurnCaller, TurnCallerOrigin } from "./turnCaller.ts";
 
 export const TotId = TrimmedNonEmptyString.check(
   Schema.isPattern(/^[a-z0-9][a-z0-9-]{0,31}$/),
@@ -181,6 +182,50 @@ export const DEFAULT_TOT_STALL_MINUTES = 10;
 /** Minutes a watched run may go quiet, or keep retrying, before its Tot hears it stalled; 0 is off. */
 export const TotStallMinutes = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 240 }));
 
+/** What an allowed outside caller's turn may do. */
+export const TOT_ASK_MODES = ["full", "ask", "read-only"] as const;
+export const TotAskMode = Schema.Literals(TOT_ASK_MODES);
+export type TotAskMode = typeof TotAskMode.Type;
+
+/** Matches every caller from its origin. */
+const TOT_ASK_ANYONE = "*";
+const TOT_MAX_ASK_ENTRIES = 100;
+
+/** One caller a Tot takes turns from, and how far those turns may go. */
+export const TotAskEntry = Schema.Struct({
+  origin: TurnCallerOrigin,
+  /** The caller's id for its origin, or `*` for everyone from it. */
+  id: TrimmedNonEmptyString.check(Schema.isMaxLength(200)),
+  mode: TotAskMode,
+  /** A name the person gave it, shown instead of the id. */
+  label: Schema.optional(Schema.String.check(Schema.isMaxLength(80))),
+});
+export type TotAskEntry = typeof TotAskEntry.Type;
+
+export const TotWhoCanAsk = Schema.Array(TotAskEntry).check(
+  Schema.isMaxLength(TOT_MAX_ASK_ENTRIES),
+);
+
+export type TotAskDecision =
+  | { readonly kind: "allow"; readonly restriction: RunRestriction | undefined }
+  | { readonly kind: "refuse" };
+
+/**
+ * Whether a Tot takes a turn from an outside caller, and how limited it runs. An exact entry
+ * wins over `*`; a caller on no entry is refused. The local user never reaches this.
+ */
+export const totAskDecision = (
+  tot: Pick<Tot, "whoCanAsk">,
+  caller: Pick<TurnCaller, "origin" | "id">,
+): TotAskDecision => {
+  const entries = (tot.whoCanAsk ?? []).filter((entry) => entry.origin === caller.origin);
+  const entry =
+    entries.find((candidate) => candidate.id === caller.id) ??
+    entries.find((candidate) => candidate.id === TOT_ASK_ANYONE);
+  if (entry === undefined) return { kind: "refuse" };
+  return { kind: "allow", restriction: entry.mode === "full" ? undefined : entry.mode };
+};
+
 export const Tot = Schema.Struct({
   id: TotId,
   name: TrimmedNonEmptyString.check(Schema.isMaxLength(40)),
@@ -212,6 +257,11 @@ export const Tot = Schema.Struct({
   stallMinutes: Schema.optional(TotStallMinutes),
   /** Opt-in nightly memory tidy-up. Absent or false: off. New Tots start with it on. */
   memoryTidy: Schema.optional(Schema.Boolean),
+  /**
+   * Outside callers this Tot takes turns from: other Tots and agents, linked environments,
+   * webhooks, Discord users and other clients. Absent or empty: none. Only a person widens it.
+   */
+  whoCanAsk: Schema.optional(TotWhoCanAsk),
 });
 export type Tot = typeof Tot.Type;
 
@@ -363,6 +413,8 @@ export const TotUpdateInput = Schema.Struct({
   /** Null drops the override, so the Tot follows the environment's setting again. */
   stallMinutes: Schema.optional(Schema.NullOr(TotStallMinutes)),
   memoryTidy: Schema.optional(Schema.Boolean),
+  /** Replaces the whole list. RPC only: no MCP tool takes it. */
+  whoCanAsk: Schema.optional(TotWhoCanAsk),
 });
 export type TotUpdateInput = typeof TotUpdateInput.Type;
 

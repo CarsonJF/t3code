@@ -5,6 +5,7 @@ import {
   type ScheduledTask,
   type ScheduledTaskWebhookFilter,
   type Tot,
+  type TotAskEntry,
   type TotAvatar,
   type TotScope,
   type TotWatchReports,
@@ -27,10 +28,11 @@ export interface TotSettingsDraft {
   /** Null follows the environment's Tot setting. */
   readonly idleCompaction: boolean | null;
   readonly memoryTidy: boolean;
+  readonly whoCanAsk: ReadonlyArray<TotAskEntry>;
 }
 
 export type TotSettingsDraftErrors = Partial<
-  Record<"name" | "color" | "scope" | "themeCss" | "themeEffect", string>
+  Record<"name" | "color" | "scope" | "themeCss" | "themeEffect" | "whoCanAsk", string>
 >;
 
 export function totSettingsDraftFromTot(tot: Tot): TotSettingsDraft {
@@ -44,6 +46,7 @@ export function totSettingsDraftFromTot(tot: Tot): TotSettingsDraft {
     autoSettle: tot.autoSettle === true,
     idleCompaction: tot.idleCompaction ?? null,
     memoryTidy: tot.memoryTidy === true,
+    whoCanAsk: tot.whoCanAsk ?? [],
   };
 }
 
@@ -85,6 +88,7 @@ export function totSettingsDraftKey(draft: TotSettingsDraft): string {
     autoSettle: draft.autoSettle,
     idleCompaction: draft.idleCompaction,
     memoryTidy: draft.memoryTidy,
+    whoCanAsk: draft.whoCanAsk,
   });
 }
 
@@ -107,6 +111,9 @@ export function totSettingsDraftErrors(draft: TotSettingsDraft): TotSettingsDraf
         ? `Keep the CSS under ${TOT_THEME_MAX_LENGTH.toLocaleString()} characters.`
         : "CSS cannot load files. Use data: or #id for url().";
   }
+  if (draft.whoCanAsk.some((entry) => entry.id.trim() === "")) {
+    errors.whoCanAsk = "Give every caller an id, or * for everyone from that origin.";
+  }
   if (draft.theme.effect.length > TOT_THEME_MAX_LENGTH) {
     errors.themeEffect = `Keep the effect under ${TOT_THEME_MAX_LENGTH.toLocaleString()} characters.`;
   }
@@ -124,6 +131,15 @@ export function totSettingsDraftUpdate(draft: TotSettingsDraft): TotSettingsDraf
     autoSettle: draft.autoSettle,
     idleCompaction: draft.idleCompaction,
     memoryTidy: draft.memoryTidy,
+    whoCanAsk: draft.whoCanAsk.map((entry) => {
+      const label = entry.label?.trim() ?? "";
+      return {
+        origin: entry.origin,
+        id: entry.id.trim(),
+        mode: entry.mode,
+        ...(label === "" ? {} : { label }),
+      };
+    }),
   };
 }
 

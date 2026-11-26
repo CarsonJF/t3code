@@ -315,3 +315,24 @@ describe("TotSettingsPanel work", () => {
       .toBeInTheDocument();
   });
 });
+
+describe("TotSettingsPanel Who can ask", () => {
+  it("adds a Discord caller in Ask mode and saves only once it has an id", async () => {
+    setup([]);
+    await using screen = await render(<Panel />);
+
+    await expect.element(screen.getByText("Only you can start turns in Yui.")).toBeInTheDocument();
+    await screen.getByRole("button", { name: "Add", exact: true }).click();
+    await expect
+      .element(screen.getByText("Give every caller an id, or * for everyone from that origin."))
+      .toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    await userEvent.fill(screen.getByRole("textbox", { name: "Discord user id" }), "111");
+    await expect.element(screen.getByText("Ask before changes")).toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    await screen.getByRole("button", { name: "Remove caller" }).click();
+    await expect.element(screen.getByText("Only you can start turns in Yui.")).toBeInTheDocument();
+  });
+});

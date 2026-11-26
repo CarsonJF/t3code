@@ -6,6 +6,7 @@ import {
   ProjectId,
   ProviderInstanceId,
   RuntimeMode,
+  type RunRestriction,
   ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -54,9 +55,23 @@ export class RuntimePolicyAboveCeilingError extends Schema.TaggedError<RuntimePo
 
 export const isRuntimePolicyAboveCeilingError = Schema.is(RuntimePolicyAboveCeilingError);
 
+/** A read-only run on a provider whose adapter cannot keep it read-only. */
+export class RuntimePolicyReadOnlyUnsupportedError extends Schema.TaggedError<RuntimePolicyReadOnlyUnsupportedError>()(
+  "RuntimePolicyReadOnlyUnsupportedError",
+  {
+    threadId: ThreadId,
+    providerInstanceId: ProviderInstanceId,
+  },
+) {
+  override get message(): string {
+    return `This turn came from an outside caller allowed read-only, and ${this.providerInstanceId} cannot enforce that. Pick a Codex or Claude model for this Tot.`;
+  }
+}
+
 export const RuntimePolicyV2Error = Schema.Union([
   RuntimePolicyResolveError,
   RuntimePolicyAboveCeilingError,
+  RuntimePolicyReadOnlyUnsupportedError,
 ]);
 export type RuntimePolicyV2Error = typeof RuntimePolicyV2Error.Type;
 
@@ -72,12 +87,47 @@ export interface RuntimePolicyV2Shape {
   readonly resolve: (input: {
     readonly thread: OrchestrationV2AppThread;
     readonly modelSelection: ModelSelection;
+    /** The run's own limit, below the thread's mode. */
+    readonly restriction?: RunRestriction;
   }) => Effect.Effect<ProviderAdapter.ProviderAdapterV2RuntimePolicy, RuntimePolicyV2Error>;
 }
 
 export class RuntimePolicyV2 extends Context.Service<RuntimePolicyV2, RuntimePolicyV2Shape>()(
   "t3/orchestration-v2/RuntimePolicy/RuntimePolicyV2",
 ) {}
+
+/** Drivers whose adapters enforce a read-only sandbox with no approval prompts. */
+const READ_ONLY_DRIVERS: ReadonlyArray<string> = ["codex", "claudeAgent"];
+
+/**
+ * A read-only run: a sandbox that may read anywhere, no network, and no approval prompts, so
+ * anything else is refused rather than asked.
+ */
+export const READ_ONLY_RUN_POLICY = {
+  runtimeMode: "approval-required",
+  interactionMode: "default",
+  approvalPolicy: "never",
+  sandboxPolicy: { type: "readOnly", access: { type: "fullAccess" }, networkAccess: false },
+} as const;
+
+/** Lays a run's restriction over the thread's policy. `ask` only lowers the mode to asking. */
+function restrictRuntimePolicy(
+  policy: ProviderAdapter.ProviderAdapterV2RuntimePolicy,
+  restriction: RunRestriction | undefined,
+): ProviderAdapter.ProviderAdapterV2RuntimePolicy {
+  if (restriction === undefined) return policy;
+  if (restriction === "read-only") {
+    return ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+      ...policy,
+      ...READ_ONLY_RUN_POLICY,
+    });
+  }
+  const { approvalPolicy: _approval, ...rest } = policy;
+  return ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+    ...rest,
+    runtimeMode: "approval-required",
+  });
+}
 
 export function providerRuntimeMode(
   runtimeMode: RuntimeMode,
@@ -148,6 +198,15 @@ export const layerFromProjectStore: Layer.Layer<
       resolve: Effect.fn("RuntimePolicyV2.resolve")(function* (input) {
         yield* refuseAboveCeiling(managedPolicy, input.thread);
         const instance = yield* providerInstances.getInstance(input.modelSelection.instanceId);
+        if (
+          input.restriction === "read-only" &&
+          (instance === undefined || !READ_ONLY_DRIVERS.includes(instance.driverKind))
+        ) {
+          return yield* new RuntimePolicyReadOnlyUnsupportedError({
+            threadId: input.thread.id,
+            providerInstanceId: input.modelSelection.instanceId,
+          });
+        }
         const supportedRuntimeModes =
           instance === undefined
             ? undefined
@@ -190,13 +249,16 @@ export const layerFromProjectStore: Layer.Layer<
               ),
             ),
           );
-        return ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
-          runtimeMode: providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes),
-          interactionMode: input.thread.interactionMode,
-          cwd,
-          ...(maxRuntimeMode === undefined ? {} : { maxRuntimeMode }),
-          ...(workspace === undefined || workspace.folders.length === 0 ? {} : { workspace }),
-        });
+        return restrictRuntimePolicy(
+          ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+            runtimeMode: providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes),
+            interactionMode: input.thread.interactionMode,
+            cwd,
+            ...(maxRuntimeMode === undefined ? {} : { maxRuntimeMode }),
+            ...(workspace === undefined || workspace.folders.length === 0 ? {} : { workspace }),
+          }),
+          input.restriction,
+        );
       }),
     });
   }),
@@ -216,10 +278,11 @@ export function layerWithOverride(
               ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
                 ...policy,
                 ...(override.cwd === undefined ? {} : { cwd: override.cwd }),
-                ...(override.approvalPolicy === undefined
+                // An override never loosens a restricted run.
+                ...(override.approvalPolicy === undefined || input.restriction !== undefined
                   ? {}
                   : { approvalPolicy: override.approvalPolicy }),
-                ...(override.sandboxPolicy === undefined
+                ...(override.sandboxPolicy === undefined || input.restriction !== undefined
                   ? {}
                   : { sandboxPolicy: override.sandboxPolicy }),
                 ...(override.reasoningEffort === undefined

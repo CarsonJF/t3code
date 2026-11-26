@@ -358,6 +358,26 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
             threadId: input.threadId,
             requestId,
           });
+          const runId = projection.turnItems.find(
+            (candidate) =>
+              candidate.type === "approval_request" && candidate.requestId === requestId,
+          )?.runId;
+          const { runs } =
+            runId === undefined || runId === null
+              ? { runs: [] }
+              : yield* threads
+                  .getProjectThreadRecords(
+                    { projectId: projection.thread.projectId, threadId: projection.thread.id },
+                    ["runs"],
+                    { runIds: [runId] },
+                  )
+                  .pipe(Effect.mapError(unavailable));
+          if (runs.some((run) => run.restriction !== undefined))
+            return yield* new OrchestratorMcpFailure({
+              code: "capability_denied",
+              message:
+                "This approval is for an outside caller's limited turn, so only the user answers it, in the app.",
+            });
           const approved = yield* threads
             .dispatch({
               type: "runtime-request.respond",

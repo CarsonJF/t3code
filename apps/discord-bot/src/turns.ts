@@ -174,6 +174,7 @@ const runTurn = async (deps: TurnDependencies, request: TurnRequest): Promise<Tu
     threadId,
     message: request.text,
     ...(request.fresh ? { fresh: true } : {}),
+    discordUserId: request.userId,
   });
   logger.info("turn.started", {
     userId: request.userId,

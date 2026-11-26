@@ -5,6 +5,7 @@ import {
   type ModelSelection,
   type OrchestrationV2AppThread,
   ProjectId,
+  ProviderDriverKind,
   ProviderInstanceId,
   type RuntimeMode,
   type ServerProvider,
@@ -21,6 +22,7 @@ import * as ServerSettings from "../serverSettings.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ProjectStore from "./ProjectStore.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
+import * as ClaudeAdapterV2 from "./Adapters/ClaudeAdapterV2.ts";
 import * as WorkspaceFolders from "../workspace/WorkspaceFolders.ts";
 import * as TaskFolderStore from "../workspace/TaskFolderStore.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -75,6 +77,7 @@ const supportedRuntimeModesByInstance = new Map<ProviderInstanceId, ReadonlyArra
 ]);
 const providerInstanceFor = (instanceId: ProviderInstanceId) =>
   ({
+    driverKind: ProviderDriverKind.make(instanceId),
     snapshot: {
       getSnapshot: Effect.succeed({
         supportedRuntimeModes: supportedRuntimeModesByInstance.get(instanceId),
@@ -166,6 +169,48 @@ const layerTaskFolderPolicy = layerWithPolicy(
 ).pipe(Layer.provideMerge(layerTaskFolderStore));
 
 it.layer(layerTest)("RuntimePolicyV2", (it) => {
+  it.effect("runs an outside caller's turn below the thread's mode", () =>
+    Effect.gen(function* () {
+      const policy = yield* RuntimePolicy.RuntimePolicyV2;
+      const now = yield* DateTime.now;
+      const thread = makeThread({ now, worktreePath: null, runtimeMode: "full-access" });
+      const codex = { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5-codex" };
+      const full = yield* policy.resolve({ thread, modelSelection: codex });
+      assert.equal(full.runtimeMode, "full-access");
+      const ask = yield* policy.resolve({ thread, modelSelection: codex, restriction: "ask" });
+      assert.equal(ask.runtimeMode, "approval-required");
+      assert.isUndefined(ask.sandboxPolicy);
+      const readOnly = yield* policy.resolve({
+        thread,
+        modelSelection: codex,
+        restriction: "read-only",
+      });
+      assert.deepInclude(readOnly, RuntimePolicy.READ_ONLY_RUN_POLICY);
+      // Under Claude: nothing to approve, and no tool that writes.
+      const claude = ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy(readOnly);
+      assert.isFalse(claude.installPermissionCallback);
+      for (const tool of ["Write", "Edit", "NotebookEdit", "Bash"]) {
+        assert.notInclude(claude.allowedTools ?? [], tool);
+        assert.notInclude((claude.tools as ReadonlyArray<string> | undefined) ?? [], tool);
+      }
+    }),
+  );
+
+  it.effect("refuses a read-only turn on a provider that cannot enforce it", () =>
+    Effect.gen(function* () {
+      const policy = yield* RuntimePolicy.RuntimePolicyV2;
+      const now = yield* DateTime.now;
+      const refused = yield* policy
+        .resolve({
+          thread: makeThread({ now, worktreePath: null }),
+          modelSelection: { instanceId: grokInstanceId, model: "grok-5" },
+          restriction: "read-only",
+        })
+        .pipe(Effect.flip);
+      assert.equal(refused._tag, "RuntimePolicyReadOnlyUnsupportedError");
+    }),
+  );
+
   it.effect("asks for Antigravity command approval when a stored Auto thread falls back", () =>
     Effect.gen(function* () {
       const policy = yield* RuntimePolicy.RuntimePolicyV2;

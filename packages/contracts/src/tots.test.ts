@@ -18,6 +18,7 @@ import {
   totSlug,
   totAvatarStyleOf,
   totThreadId,
+  totAskDecision,
   totWatchReportsOf,
   type Tot as TotRecord,
 } from "./tots.ts";
@@ -272,5 +273,43 @@ describe("isTotWorkerMessage", () => {
     expect(isTotWorkerMessage("thread:plain", { ...fromAgent, senderThreadId: yuiThread })).toBe(
       false,
     );
+  });
+});
+
+describe("totAskDecision", () => {
+  const tot = {
+    whoCanAsk: [
+      { origin: "discord", id: "*", mode: "read-only" },
+      { origin: "discord", id: "111", mode: "full" },
+      { origin: "webhook", id: "hook", mode: "ask" },
+    ],
+  } as const;
+
+  it.each([
+    [
+      { origin: "discord", id: "111" },
+      { kind: "allow", restriction: undefined },
+    ],
+    [
+      { origin: "discord", id: "222" },
+      { kind: "allow", restriction: "read-only" },
+    ],
+    [
+      { origin: "webhook", id: "hook" },
+      { kind: "allow", restriction: "ask" },
+    ],
+    [{ origin: "webhook", id: "other" }, { kind: "refuse" }],
+    [{ origin: "tot", id: "111" }, { kind: "refuse" }],
+  ] as const)("decides %o", (caller, expected) => {
+    expect(totAskDecision(tot, caller)).toEqual(expected);
+  });
+
+  it("refuses everyone outside when nothing is listed", () => {
+    expect(totAskDecision({}, { origin: "companion", id: "phone" })).toEqual({ kind: "refuse" });
+  });
+
+  it("decodes a Tot saved before the list existed", () => {
+    const decoded = decodeTot(DEFAULT_HOME_TOT);
+    expect(decoded.whoCanAsk).toBeUndefined();
   });
 });
