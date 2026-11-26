@@ -98,7 +98,7 @@ const DelegateTaskTool = Tool.make("delegate_task", {
   success: OrchestratorMcpDelegateTaskResult,
   failure: OrchestratorMcpFailure,
   failureMode: "return",
-  dependencies,
+  dependencies: [...dependencies, TotService.TotService],
 })
   .annotate(Tool.Title, "Delegate a child task")
   .annotate(Tool.Destructive, true)

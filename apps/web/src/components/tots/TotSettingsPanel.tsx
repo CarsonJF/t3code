@@ -56,6 +56,7 @@ import { toastManager } from "../ui/toast";
 import { TotAvatar } from "./TotAvatar";
 import { AvatarLibraryDialog } from "../settings/AvatarLibrarySettings";
 import { TotFaceEditor } from "./TotFaceEditor";
+import { TotWorkSection } from "./TotWorkSection";
 import {
   WATCH_REPORTS,
   finishedOneOffTasks,
@@ -250,6 +251,10 @@ function TotSettingsEditor(props: {
               onCheckedChange={(next) => void setEnabled(next)}
             />
           </div>
+
+          <Separator />
+
+          <TotWorkSection environmentId={environmentId} tot={tot} />
 
           <Separator />
 

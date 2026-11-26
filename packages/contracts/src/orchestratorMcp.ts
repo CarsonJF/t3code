@@ -35,6 +35,7 @@ import {
   ThreadPullRequestLinkSource,
 } from "./threadPullRequest.ts";
 import { secretRequestPageUrl } from "./secretRequest.ts";
+import { TotObjectiveId, TotObjectiveRefInput } from "./totWork.ts";
 import { hasOnlyPairedSurrogates } from "./threadMetadataMcp.ts";
 import { LastThreadTitleRegeneration, ThreadTitleRegeneration } from "./threadTitle.ts";
 import {
@@ -202,6 +203,7 @@ export const OrchestratorMcpDelegateTaskInput = Schema.Struct({
     }),
   ),
   interactionMode: Schema.optional(OrchestratorMcpInteractionMode),
+  objective: Schema.optional(TotObjectiveRefInput),
 });
 export type OrchestratorMcpDelegateTaskInput = typeof OrchestratorMcpDelegateTaskInput.Type;
 
@@ -257,6 +259,7 @@ export const OrchestratorMcpDelegateTaskResult = Schema.Struct({
     description: "True only on the timed-out wait call. The child keeps running.",
   }),
   next: Schema.optional(OrchestratorMcpRunningTaskNext),
+  objectiveId: Schema.optional(TotObjectiveId),
 });
 export type OrchestratorMcpDelegateTaskResult = typeof OrchestratorMcpDelegateTaskResult.Type;
 
@@ -571,6 +574,7 @@ export const OrchestratorMcpThreadSendInput = Schema.Struct({
     }),
   ),
   clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
+  objective: Schema.optional(TotObjectiveRefInput),
 });
 export type OrchestratorMcpThreadSendInput = typeof OrchestratorMcpThreadSendInput.Type;
 
@@ -584,6 +588,7 @@ export const OrchestratorMcpThreadSendResult = Schema.Struct({
   delivery: Schema.Literals(["started", "queued", "steered", "restarted"]),
   /** False when this Tot-to-Tot exchange hit its limit, so no report will follow. */
   reportsBack: Schema.optional(Schema.Literal(false)),
+  objectiveId: Schema.optional(TotObjectiveId),
 });
 export type OrchestratorMcpThreadSendResult = typeof OrchestratorMcpThreadSendResult.Type;
 
