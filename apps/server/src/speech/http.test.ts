@@ -68,6 +68,7 @@ const dependencies = Layer.mergeAll(
       generateTranscriptionPostProcessing: () => Effect.die("not used"),
       generateAvatarFigure: () => Effect.die("not used"),
       generateMemoryTidy: () => Effect.die("not used"),
+      generateReplySuggestions: () => Effect.die("not used"),
     }),
   ),
 );
@@ -417,6 +418,7 @@ effectIt.effect("tells the client why transcript cleanup failed", () =>
             ),
           generateAvatarFigure: () => Effect.die("not used"),
           generateMemoryTidy: () => Effect.die("not used"),
+          generateReplySuggestions: () => Effect.die("not used"),
         }),
       ),
     );

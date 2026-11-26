@@ -27,6 +27,7 @@ import {
   generatedThreadTitle,
   investigationUnsupported,
   AvatarFigureOutput,
+  ReplySuggestionsOutput,
   MemoryTidyOutput,
   TranscriptionPostProcessingOutput,
 } from "@t3tools/provider-core/server/textGenerationOperations";
@@ -415,6 +416,16 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
       modelSelection: input.modelSelection,
     });
   });
+  const generateReplySuggestions: ProviderTextGeneration["generateReplySuggestions"] = Effect.fn(
+    "MuseTextGeneration.generateReplySuggestions",
+  )(function* (input) {
+    return yield* runMuseJson({
+      operation: "generateReplySuggestions",
+      prompt: input.prompt,
+      outputSchema: ReplySuggestionsOutput,
+      modelSelection: input.modelSelection,
+    });
+  });
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = () =>
     Effect.fail(investigationUnsupported("generateReviewGuide", "Muse Code"));
   return {
@@ -426,5 +437,6 @@ export const makeMuseTextGeneration = Effect.fn("makeMuseTextGeneration")(functi
     generateTranscriptionPostProcessing,
     generateAvatarFigure,
     generateMemoryTidy,
+    generateReplySuggestions,
   } satisfies ProviderTextGeneration;
 });

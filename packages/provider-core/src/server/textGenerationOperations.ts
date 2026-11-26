@@ -41,6 +41,12 @@ export const MemoryTidyOutput = Schema.Struct({
   summary: Schema.String,
 });
 
+export const ReplySuggestionsOutput = Schema.Struct({
+  suggestions: Schema.Array(
+    Schema.Struct({ questionId: Schema.String, answers: Schema.Array(Schema.String) }),
+  ),
+});
+
 export type Operation = keyof ProviderTextGeneration;
 
 export interface Request<S extends Schema.Top> {
@@ -233,6 +239,18 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     });
   });
 
+  const generateReplySuggestions: ProviderTextGeneration["generateReplySuggestions"] = Effect.fn(
+    `${name}.generateReplySuggestions`,
+  )(function* (input) {
+    return yield* run({
+      operation: "generateReplySuggestions",
+      cwd: input.cwd,
+      prompt: input.prompt,
+      outputSchema: ReplySuggestionsOutput,
+      modelSelection: input.modelSelection,
+    });
+  });
+
   const generateReviewGuide: ProviderTextGeneration["generateReviewGuide"] = Effect.fn(
     `${name}.generateReviewGuide`,
   )(function* (input) {
@@ -254,5 +272,6 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     generateTranscriptionPostProcessing,
     generateAvatarFigure,
     generateMemoryTidy,
+    generateReplySuggestions,
   } satisfies ProviderTextGeneration;
 }

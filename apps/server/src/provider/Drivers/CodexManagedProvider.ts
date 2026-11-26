@@ -293,6 +293,8 @@ export const makeManagedCodexProvider = Effect.fn("makeManagedCodexProvider")(fu
       ),
     generateAvatarFigure: (value) =>
       protect("generateAvatarFigure", nativeGeneration.generateAvatarFigure(value)),
+    generateReplySuggestions: (value) =>
+      protect("generateReplySuggestions", nativeGeneration.generateReplySuggestions(value)),
     generateMemoryTidy: (value) =>
       protect("generateMemoryTidy", nativeGeneration.generateMemoryTidy(value)),
   };
