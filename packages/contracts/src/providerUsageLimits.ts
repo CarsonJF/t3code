@@ -4,6 +4,8 @@ import {
   ForwardCompatibleArray,
   IsoDateTime,
   NonNegativeInt,
+  RunId,
+  ThreadId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
@@ -182,3 +184,23 @@ export const UsageLimitsReport = Schema.Struct({
   notices: Schema.Array(Schema.String),
 });
 export type UsageLimitsReport = typeof UsageLimitsReport.Type;
+
+/** Another signed-in account of a provider: an instance of the same driver with its own login. */
+export const ProviderAccountChoice = Schema.Struct({
+  instanceId: ProviderInstanceId,
+  label: TrimmedNonEmptyString,
+});
+export type ProviderAccountChoice = typeof ProviderAccountChoice.Type;
+
+/** Runs a run that stopped on a usage limit again, on the same model with another account. */
+export const UsageLimitAccountRetryInput = Schema.Struct({
+  threadId: ThreadId,
+  runId: RunId,
+  instanceId: ProviderInstanceId,
+});
+export type UsageLimitAccountRetryInput = typeof UsageLimitAccountRetryInput.Type;
+
+export class UsageLimitAccountRetryError extends Schema.TaggedError<UsageLimitAccountRetryError>()(
+  "UsageLimitAccountRetryError",
+  { message: Schema.String },
+) {}

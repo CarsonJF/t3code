@@ -412,6 +412,8 @@ import {
   UsageLimitSourceError,
   ProviderConsumeResetCreditInput,
   ProviderConsumeResetCreditResult,
+  UsageLimitAccountRetryError,
+  UsageLimitAccountRetryInput,
 } from "./providerUsageLimits.ts";
 import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
 import {
@@ -697,6 +699,7 @@ export const WS_METHODS = {
   companionsRespond: "companions.respond",
   companionsGrantIssue: "companions.grantIssue",
   companionsGrantRevoke: "companions.grantRevoke",
+  usageLimitRetryOnAccount: "usageLimit.retryOnAccount",
   groupChatsCreate: "groupChats.create",
   groupChatsUpdate: "groupChats.update",
   groupChatsRemove: "groupChats.remove",
@@ -1245,6 +1248,10 @@ const WsCompanionsGrantIssueRpc = Rpc.make(WS_METHODS.companionsGrantIssue, {
 const WsCompanionsGrantRevokeRpc = Rpc.make(WS_METHODS.companionsGrantRevoke, {
   payload: ExternalCompanionRef,
   error: companionError,
+});
+const WsUsageLimitRetryOnAccountRpc = Rpc.make(WS_METHODS.usageLimitRetryOnAccount, {
+  payload: UsageLimitAccountRetryInput,
+  error: Schema.Union([UsageLimitAccountRetryError, EnvironmentAuthorizationError]),
 });
 const WsTotsWorkSubscribeRpc = Rpc.make(WS_METHODS.totsWorkSubscribe, {
   payload: TotWorkSubscribeInput,
@@ -2822,6 +2829,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsCompanionsRespondRpc,
   WsCompanionsGrantIssueRpc,
   WsCompanionsGrantRevokeRpc,
+  WsUsageLimitRetryOnAccountRpc,
   WsGroupChatsCreateRpc,
   WsGroupChatsUpdateRpc,
   WsGroupChatsRemoveRpc,

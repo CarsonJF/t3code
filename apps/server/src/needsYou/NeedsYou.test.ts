@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import {
+  ProviderInstanceId,
   EnvironmentId,
   type NeedsYouInbox,
   type NeedsYouItem,
@@ -497,6 +498,37 @@ describe("runItem", () => {
     );
     assert.equal(runItem(shell({ ...failed, status: "interrupted" }))?.kind, "stopped_run");
     assert.isNull(runItem(shell({ ...failed, status: "completed" })));
+  });
+
+  it("offers the other signed-in accounts of a run that stopped on a usage limit", () => {
+    const account = (instanceId: string, fields: Record<string, unknown> = {}) =>
+      ({
+        instanceId,
+        driver: "claudeAgent",
+        continuation: { groupKey: `group:${instanceId}` },
+        enabled: true,
+        auth: { status: "authenticated" },
+        ...fields,
+      }) as never;
+    const providers = [
+      account("claudeAgent"),
+      account("claudeAgent_acct2", { displayName: "Work" }),
+      account("claudeAgent_out", { auth: { status: "unauthenticated" } }),
+      account("codex", { driver: "codex" }),
+    ];
+    const limited = shell({
+      ...failed,
+      lastErrorClass: "usage_limit",
+      modelSelection: { instanceId: "claudeAgent", model: "claude-opus-5-5" },
+    });
+    const item = runItem(limited, providers);
+    assert.equal(item?.kind, "failed_run");
+    assert.equal(item?.runId, "run-1");
+    assert.deepEqual(item?.retryAccounts, [
+      { instanceId: ProviderInstanceId.make("claudeAgent_acct2"), label: "Work" },
+    ]);
+    const other = runItem(shell({ ...failed, lastErrorClass: "provider_error" }), providers);
+    assert.isUndefined(other?.retryAccounts);
   });
 });
 

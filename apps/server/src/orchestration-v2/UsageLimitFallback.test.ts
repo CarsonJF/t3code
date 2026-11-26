@@ -6,8 +6,11 @@ import {
   RunId,
   ThreadId,
   TotId,
+  ProviderDriverKind,
   type ModelSelection,
   type OrchestrationV2ServerCommand,
+  type ServerProvider,
+  type UsageLimitAccountRetryError,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -15,6 +18,7 @@ import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
+import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
@@ -115,19 +119,133 @@ const errorItem = (failureClass: string) => ({
   failure: { class: failureClass, message: "OpenCode Go weekly usage limit reached." },
 });
 
+const claudeDriver = ProviderDriverKind.make("claudeAgent");
+const claude = ProviderInstanceId.make("claudeAgent");
+const claudeAcct2 = ProviderInstanceId.make("claudeAgent_acct2");
+const claudeSameLogin = ProviderInstanceId.make("claudeAgent_alias");
+const codex = ProviderInstanceId.make("codex");
+const opus = (instanceId: ProviderInstanceId): ModelSelection => ({
+  instanceId,
+  model: "claude-opus-5-5",
+});
+const gpt: ModelSelection = { instanceId: codex, model: "gpt-5.5" };
+const serverProvider = (
+  instanceId: ProviderInstanceId,
+  options: {
+    readonly driver?: string;
+    readonly groupKey?: string;
+    readonly displayName?: string;
+    readonly signedIn?: boolean;
+  } = {},
+) =>
+  ({
+    instanceId,
+    driver: ProviderDriverKind.make(options.driver ?? claudeDriver),
+    ...(options.displayName === undefined ? {} : { displayName: options.displayName }),
+    continuation: { groupKey: options.groupKey ?? `group:${instanceId}` },
+    enabled: true,
+    auth: { status: options.signedIn === false ? "unauthenticated" : "authenticated" },
+  }) as unknown as ServerProvider;
+const providers = [
+  serverProvider(claude),
+  serverProvider(claudeAcct2, { displayName: "Claude acct2" }),
+  serverProvider(claudeSameLogin, { groupKey: `group:${claude}` }),
+  serverProvider(codex, { driver: "codex" }),
+];
+
+describe("chooseUsageLimitFallback with accounts", () => {
+  it("tries the same model on another account before a different model", () => {
+    assert.deepEqual(
+      UsageLimitFallback.chooseUsageLimitFallback({
+        candidates: [gpt, opus(claudeAcct2)],
+        denied: [],
+        failed: opus(claude),
+        providers,
+      }),
+      opus(claudeAcct2),
+    );
+    // Knowing nothing about accounts keeps the list's order.
+    assert.deepEqual(
+      UsageLimitFallback.chooseUsageLimitFallback({
+        candidates: [gpt, opus(claudeAcct2)],
+        denied: [],
+        failed: opus(claude),
+      }),
+      gpt,
+    );
+  });
+
+  it("treats an instance on the same login as the same account, and skips signed-out ones", () => {
+    assert.deepEqual(
+      UsageLimitFallback.chooseUsageLimitFallback({
+        candidates: [gpt, opus(claudeSameLogin)],
+        denied: [],
+        failed: opus(claude),
+        providers,
+      }),
+      gpt,
+    );
+    assert.deepEqual(
+      UsageLimitFallback.chooseUsageLimitFallback({
+        candidates: [opus(claudeAcct2), gpt],
+        denied: [],
+        failed: opus(claude),
+        providers: [
+          serverProvider(claude),
+          serverProvider(claudeAcct2, { signedIn: false }),
+          serverProvider(codex, { driver: "codex" }),
+        ],
+      }),
+      gpt,
+    );
+  });
+
+  it("still never uses a denied model on another account", () => {
+    assert.isNull(
+      UsageLimitFallback.chooseUsageLimitFallback({
+        candidates: [opus(claudeAcct2)],
+        denied: ["claude-opus-5-5"],
+        failed: opus(claude),
+        providers,
+      }),
+    );
+  });
+});
+
 const retryWith = (input: {
   readonly run: ReturnType<typeof failedRun>;
   readonly failureClass: string;
   readonly fallbacks: ReadonlyArray<ModelSelection>;
+  readonly providers?: ReadonlyArray<ServerProvider>;
+  readonly denied?: ReadonlyArray<string>;
+  readonly latestRunId?: string;
+  readonly act?: (
+    fallback: UsageLimitFallback.UsageLimitFallbackService,
+  ) => Effect.Effect<unknown, UsageLimitAccountRetryError>;
 }) =>
   Effect.gen(function* () {
     const dispatched = yield* Ref.make<Array<OrchestrationV2ServerCommand>>([]);
     const layer = UsageLimitFallback.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
-          ServerSettings.layerTest({ usageLimitFallbackModels: [...input.fallbacks] }),
+          ServerSettings.layerTest({
+            usageLimitFallbackModels: [...input.fallbacks],
+            ...(input.denied === undefined
+              ? {}
+              : { usageLimitFallbackDeniedModels: [...input.denied] }),
+          }),
+          input.providers === undefined
+            ? Layer.empty
+            : Layer.mock(ProviderRegistry.ProviderRegistry)({
+                getProviders: Effect.succeed(input.providers),
+              }),
           Layer.mock(ThreadManagementService.ThreadManagementService)({
-            getThreadShell: () => Effect.succeed({ archivedAt: null, deletedAt: null } as never),
+            getThreadShell: () =>
+              Effect.succeed({
+                archivedAt: null,
+                deletedAt: null,
+                latestRunId: input.latestRunId ?? "run:1",
+              } as never),
             getThreadRecords: () =>
               Effect.succeed({
                 runs: [input.run],
@@ -141,9 +259,19 @@ const retryWith = (input: {
     );
     const result = yield* Effect.gen(function* () {
       const fallback = yield* UsageLimitFallback.UsageLimitFallback;
-      return yield* fallback.retry({ threadId, runId: input.run.id, totId: TotId.make("yui") });
+      if (input.act !== undefined) {
+        return { retried: null, outcome: yield* Effect.result(input.act(fallback)) };
+      }
+      return {
+        retried: yield* fallback.retry({ threadId, runId: input.run.id, totId: TotId.make("yui") }),
+        outcome: null,
+      };
     }).pipe(Effect.provide(layer));
-    return { result, dispatched: yield* Ref.get(dispatched) };
+    return {
+      result: result.retried,
+      outcome: result.outcome,
+      dispatched: yield* Ref.get(dispatched),
+    };
   });
 
 describe("UsageLimitFallback.retry", () => {
@@ -155,12 +283,13 @@ describe("UsageLimitFallback.retry", () => {
         fallbacks: [glm, hy4],
       });
       assert.isNotNull(result);
-      assert.deepEqual(result.model, hy4);
+      const retried = result!;
+      assert.deepEqual(retried.model, hy4);
       const [retry, notice] = dispatched;
       assert.deepInclude(retry, {
         type: "message.dispatch",
         commandId: CommandId.make(`usage-limit-fallback:${threadId}:run:1`),
-        messageId: result.messageId,
+        messageId: retried.messageId,
         manualContinuationOfRunId: RunId.make("run:1"),
         modelSelection: hy4,
       });
@@ -199,6 +328,97 @@ describe("UsageLimitFallback.retry", () => {
   );
 });
 
+describe("UsageLimitFallback.retry with accounts", () => {
+  it.effect("moves to the next account on the same model and names both accounts", () =>
+    Effect.gen(function* () {
+      const { result, dispatched } = yield* retryWith({
+        run: failedRun({ modelSelection: opus(claude) }),
+        failureClass: "usage_limit",
+        fallbacks: [gpt, opus(claudeAcct2)],
+        providers,
+      });
+      assert.deepEqual(
+        (result as UsageLimitFallback.UsageLimitFallbackRetry).model,
+        opus(claudeAcct2),
+      );
+      assert.lengthOf(dispatched, 2);
+      assert.deepInclude(dispatched[1], {
+        text: "claude-opus-5-5 (account: Claude) hit a usage limit, so this run was retried once on claude-opus-5-5 (account: Claude acct2).",
+      });
+    }),
+  );
+
+  it.effect("gives a run the user retried on another account no automatic retry", () =>
+    Effect.gen(function* () {
+      const { result, dispatched } = yield* retryWith({
+        run: failedRun({
+          modelSelection: opus(claudeAcct2),
+          userMessageId: `usage-limit-account:${threadId}:run:0:${claudeAcct2}`,
+        }),
+        failureClass: "usage_limit",
+        fallbacks: [gpt],
+        providers,
+      });
+      assert.isNull(result);
+      assert.lengthOf(dispatched, 0);
+    }),
+  );
+});
+
+describe("UsageLimitFallback.retryOnAccount", () => {
+  const retryOn =
+    (instanceId: ProviderInstanceId) => (fallback: UsageLimitFallback.UsageLimitFallbackService) =>
+      fallback.retryOnAccount({ threadId, runId: RunId.make("run:1"), instanceId });
+
+  it.effect("runs the same model again on the chosen account, once per account", () =>
+    Effect.gen(function* () {
+      const { outcome, dispatched } = yield* retryWith({
+        run: failedRun({ modelSelection: opus(claude) }),
+        failureClass: "usage_limit",
+        fallbacks: [],
+        providers,
+        act: retryOn(claudeAcct2),
+      });
+      assert.isTrue(outcome?._tag === "Success");
+      const [retry, notice] = dispatched;
+      assert.deepInclude(retry, {
+        type: "message.dispatch",
+        commandId: CommandId.make(`usage-limit-account:${threadId}:run:1:${claudeAcct2}`),
+        manualContinuationOfRunId: RunId.make("run:1"),
+        modelSelection: opus(claudeAcct2),
+      });
+      assert.deepInclude(notice, {
+        systemNotice: true,
+        text: "claude-opus-5-5 (account: Claude) hit a usage limit, so this run was retried on claude-opus-5-5 (account: Claude acct2), as you asked.",
+      });
+    }),
+  );
+
+  it.effect("refuses other failures, older runs, non-accounts and denied models", () =>
+    Effect.gen(function* () {
+      for (const attempt of [
+        { failureClass: "provider_error", instanceId: claudeAcct2 },
+        { failureClass: "usage_limit", instanceId: claudeAcct2, latestRunId: "run:2" },
+        { failureClass: "usage_limit", instanceId: claudeSameLogin },
+        { failureClass: "usage_limit", instanceId: codex },
+        { failureClass: "usage_limit", instanceId: claudeAcct2, denied: ["claude-opus-5-5"] },
+      ]) {
+        const { outcome, dispatched } = yield* retryWith({
+          run: failedRun({ modelSelection: opus(claude) }),
+          failureClass: attempt.failureClass,
+          fallbacks: [],
+          providers,
+          ...(attempt.latestRunId === undefined ? {} : { latestRunId: attempt.latestRunId }),
+          ...(attempt.denied === undefined ? {} : { denied: attempt.denied }),
+          act: retryOn(attempt.instanceId),
+        });
+        assert.isTrue(outcome?._tag === "Failure", JSON.stringify(attempt));
+        assert.lengthOf(dispatched, 0);
+      }
+    }),
+  );
+});
+
 describe("UsageLimitFallback.workerLayer", () => {
   it.effect("retries failed runs only in threads a Tot launched", () =>
     Effect.gen(function* () {
@@ -220,6 +440,7 @@ describe("UsageLimitFallback.workerLayer", () => {
             }),
             Layer.succeed(UsageLimitFallback.UsageLimitFallback, {
               retry: (input) => Ref.update(retried, (all) => [...all, input]).pipe(Effect.as(null)),
+              retryOnAccount: () => Effect.die("unused"),
             }),
           ),
         ),

@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { EnvironmentId, ProjectId, RunId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
-import { ModelSelection } from "./modelSelection.ts";
+import { ModelSelection, UsageLimitFallbackModel } from "./modelSelection.ts";
 import { type RunRestriction, type TurnCaller, TurnCallerOrigin } from "./turnCaller.ts";
 
 export const TotId = TrimmedNonEmptyString.check(
@@ -264,7 +264,7 @@ export const Tot = Schema.Struct({
   /** Opt-in: absent or false keeps the Tot's own thread out of automatic settlement. */
   autoSettle: Schema.optional(Schema.Boolean),
   /** Replaces the environment's usage-limit fallback list for this Tot's work; `[]` turns it off. */
-  usageLimitFallbackModels: Schema.optional(Schema.Array(ModelSelection)),
+  usageLimitFallbackModels: Schema.optional(Schema.Array(UsageLimitFallbackModel)),
   /**
    * Whether its thread compacts before its prompt cache expires; absent follows the
    * environment's `totIdleCompaction`.
@@ -425,7 +425,7 @@ export const TotUpdateInput = Schema.Struct({
   watchReports: Schema.optional(TotWatchReports),
   autoSettle: Schema.optional(Schema.Boolean),
   /** Null goes back to the environment's list. */
-  usageLimitFallbackModels: Schema.optional(Schema.NullOr(Schema.Array(ModelSelection))),
+  usageLimitFallbackModels: Schema.optional(Schema.NullOr(Schema.Array(UsageLimitFallbackModel))),
   /** Null drops the override, so the Tot follows the environment's setting again. */
   idleCompaction: Schema.optional(Schema.NullOr(Schema.Boolean)),
   /** Null drops the override, so the Tot follows the environment's setting again. */
