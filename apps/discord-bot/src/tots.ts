@@ -106,19 +106,25 @@ export interface SendToThreadInput {
   readonly message: string;
   readonly fresh?: boolean;
   readonly clientRequestId?: string;
+  /** The Discord user who wrote it; the Tot's Who can ask list decides whether it runs. */
+  readonly discordUserId: string;
 }
 
 export const sendToThread = (
   t3: T3Client,
   input: SendToThreadInput,
 ): Promise<OrchestratorMcpThreadSendResult> =>
-  t3.call<OrchestratorMcpThreadSendResult>("t3_thread_send", {
-    threadId: input.threadId,
-    message: input.message,
-    mode: "auto",
-    ...(input.fresh === true ? { freshContext: true } : {}),
-    ...(input.clientRequestId === undefined ? {} : { clientRequestId: input.clientRequestId }),
-  });
+  t3.call<OrchestratorMcpThreadSendResult>(
+    "t3_thread_send",
+    {
+      threadId: input.threadId,
+      message: input.message,
+      mode: "auto",
+      ...(input.fresh === true ? { freshContext: true } : {}),
+      ...(input.clientRequestId === undefined ? {} : { clientRequestId: input.clientRequestId }),
+    },
+    { discordUserId: input.discordUserId },
+  );
 
 /** The app's Stop: interrupt the running turn and hold its queued messages. */
 export const stopThread = (

@@ -14,6 +14,7 @@ import {
   TotId,
   TotObjectiveId,
   TotObjectiveStatus,
+  TotWhoCanAsk,
   TotScope,
   TrimmedNonEmptyString,
 } from "@t3tools/contracts";
@@ -219,6 +220,9 @@ const TotInstructionsTool = Tool.make("t3_tot_instructions", {
     name: Schema.String,
     instructions: Schema.String,
     updated: Schema.Boolean,
+    whoCanAsk: TotWhoCanAsk.annotate({
+      description: "Outside callers it takes turns from. Read-only: only the user changes it.",
+    }),
   }),
 }).annotate(Tool.Destructive, false);
 

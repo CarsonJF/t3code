@@ -315,3 +315,26 @@ describe("TotSettingsPanel work", () => {
       .toBeInTheDocument();
   });
 });
+
+describe("TotSettingsPanel Who can ask", () => {
+  it("shows the trusted defaults and adds a Discord caller that saves once it has an id", async () => {
+    setup([]);
+    await using screen = await render(<Panel />);
+
+    await expect.element(screen.getByText("Trusted by default").first()).toBeInTheDocument();
+    expect(screen.getByText("Trusted by default").all()).toHaveLength(3);
+    await screen.getByRole("button", { name: "Add", exact: true }).click();
+    await expect
+      .element(screen.getByText("Give every caller an id, or * for everyone from that origin."))
+      .toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    await userEvent.fill(screen.getByRole("textbox", { name: "Discord user id" }), "111");
+    await expect.element(screen.getByText("Ask before changes")).toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    // Removing a default works like any other entry.
+    await screen.getByRole("button", { name: "Remove caller" }).first().click();
+    expect(screen.getByText("Trusted by default").all()).toHaveLength(2);
+  });
+});

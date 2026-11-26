@@ -39,6 +39,7 @@ import {
   type Caller,
   loadCaller,
   readCaller,
+  refuseRestrictedRun,
   unavailable,
 } from "./threadAccess.ts";
 
@@ -136,11 +137,13 @@ const refuseReadOnlyClient = McpInvocationContext.McpInvocationContext.pipe(
 const writingCaller = refuseReadOnlyClient.pipe(
   Effect.andThen(loadCaller()),
   Effect.tap(assertLiveCaller),
+  Effect.tap(refuseRestrictedRun),
 );
 
 const orchestratingCaller = refuseReadOnlyClient.pipe(
   Effect.andThen(readCaller()),
   Effect.tap(assertLiveCaller),
+  Effect.tap(refuseRestrictedRun),
 );
 
 const requireThreadCaller = McpInvocationContext.McpInvocationContext.pipe(
