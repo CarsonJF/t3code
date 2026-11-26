@@ -86,6 +86,8 @@ const RPC_AGGREGATES = {
   [WS_METHODS.totsDisable]: "tots",
   [WS_METHODS.totsStartFresh]: "tots",
   [WS_METHODS.totsReadMemory]: "tots",
+  [WS_METHODS.totsWorkSubscribe]: "tots",
+  [WS_METHODS.totsWorkUpdate]: "tots",
   [WS_METHODS.totsAvatarLibrary]: "tots",
   [WS_METHODS.totsAvatarLibrarySave]: "tots",
   [WS_METHODS.totsAvatarLibraryRemove]: "tots",

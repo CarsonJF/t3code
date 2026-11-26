@@ -506,6 +506,7 @@ import {
   TotThreadResult,
   TotUpdateInput,
 } from "./tots.ts";
+import { TotObjective, TotWorkList, TotWorkSubscribeInput, TotWorkUpdateInput } from "./totWork.ts";
 import {
   AvatarFigureDescribeInput,
   AvatarFigureDescribeResult,
@@ -657,6 +658,8 @@ export const WS_METHODS = {
   totsDisable: "tots.disable",
   totsStartFresh: "tots.startFresh",
   totsReadMemory: "tots.readMemory",
+  totsWorkSubscribe: "tots.workSubscribe",
+  totsWorkUpdate: "tots.workUpdate",
   totsAvatarLibrary: "tots.avatarLibrary",
   totsAvatarLibrarySave: "tots.avatarLibrarySave",
   totsAvatarLibraryRemove: "tots.avatarLibraryRemove",
@@ -1164,6 +1167,17 @@ const WsNeedsYouSuggestRpc = Rpc.make(WS_METHODS.needsYouSuggest, {
 const WsNeedsYouRespondRpc = Rpc.make(WS_METHODS.needsYouRespond, {
   payload: NeedsYouRespondInput,
   error: needsYouError,
+});
+const WsTotsWorkSubscribeRpc = Rpc.make(WS_METHODS.totsWorkSubscribe, {
+  payload: TotWorkSubscribeInput,
+  success: TotWorkList,
+  error: totError,
+  stream: true,
+});
+const WsTotsWorkUpdateRpc = Rpc.make(WS_METHODS.totsWorkUpdate, {
+  payload: TotWorkUpdateInput,
+  success: TotObjective,
+  error: totError,
 });
 const WsTotsReadMemoryRpc = Rpc.make(WS_METHODS.totsReadMemory, {
   payload: TotMemoryReadInput,
@@ -2710,6 +2724,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsTotsDisableRpc,
   WsTotsStartFreshRpc,
   WsTotsReadMemoryRpc,
+  WsTotsWorkSubscribeRpc,
+  WsTotsWorkUpdateRpc,
   WsTotsAvatarLibraryRpc,
   WsTotsAvatarLibrarySaveRpc,
   WsTotsAvatarLibraryRemoveRpc,

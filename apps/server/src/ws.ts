@@ -1,4 +1,4 @@
-import { GitCommandError, OrchestrationDispatchCommandError } from "@t3tools/contracts";
+import { GitCommandError, OrchestrationDispatchCommandError, TotError } from "@t3tools/contracts";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- A synchronous digest inside the pure provider mapping.
 import * as NodeCrypto from "node:crypto";
 import * as FeatureFlags from "@t3tools/shared/FeatureFlags";
@@ -209,6 +209,7 @@ import * as GroupChatService from "./tots/GroupChatService.ts";
 import * as AvatarFigureDesigner from "./tots/AvatarFigureDesigner.ts";
 import * as NeedsYou from "./needsYou/NeedsYou.ts";
 import * as TotService from "./tots/TotService.ts";
+import * as TotWorkService from "./tots/TotWorkService.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
@@ -1604,6 +1605,10 @@ export const layerWsRpc = (
       const peerThreadRelay = yield* PeerThreadRelay.PeerThreadRelay;
       const peerClientPairing = yield* PeerClientPairing.PeerClientPairing;
       const tots = yield* TotService.TotService;
+      const totWork = Option.getOrUndefined(
+        yield* Effect.serviceOption(TotWorkService.TotWorkService),
+      );
+      const noTotWork = new TotError({ message: "This server keeps no Tot work list." });
       const avatarDesigner = yield* AvatarFigureDesigner.AvatarFigureDesigner;
       const needsYou = yield* NeedsYou.NeedsYou;
       const groupChats = yield* GroupChatService.GroupChatService;
@@ -2883,6 +2888,10 @@ export const layerWsRpc = (
         [WS_METHODS.totsDisable]: (input) => tots.disable(input.id),
         [WS_METHODS.totsStartFresh]: (input) => tots.startFresh(input.id),
         [WS_METHODS.totsReadMemory]: (input) => tots.readMemory(input.id),
+        [WS_METHODS.totsWorkSubscribe]: (input) =>
+          totWork === undefined ? Stream.fail(noTotWork) : totWork.subscribe(input.id),
+        [WS_METHODS.totsWorkUpdate]: (input) =>
+          totWork === undefined ? Effect.fail(noTotWork) : totWork.update(input),
         [WS_METHODS.totsAvatarLibrary]: () => tots.avatarLibrary,
         [WS_METHODS.totsAvatarLibrarySave]: (input) => tots.saveLibraryItem(input),
         [WS_METHODS.totsAvatarLibraryRemove]: (input) =>

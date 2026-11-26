@@ -113,6 +113,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.totsDisable]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsStartFresh]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsReadMemory]: AuthOrchestrationOperateScope,
+  [WS_METHODS.totsWorkSubscribe]: AuthOrchestrationReadScope,
+  [WS_METHODS.totsWorkUpdate]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsDesignAvatar]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsAvatarLibrary]: AuthOrchestrationReadScope,
   [WS_METHODS.needsYouSubscribe]: AuthOrchestrationReadScope,

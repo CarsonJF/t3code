@@ -7,6 +7,8 @@ import {
   type ScheduledTask,
   type Tot,
   TotId,
+  type TotObjective,
+  TotObjectiveId,
   totThreadId,
 } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
@@ -33,8 +35,10 @@ const tot: Tot = {
 
 const state = vi.hoisted(() => ({
   tasks: [] as ReadonlyArray<ScheduledTask>,
+  objectives: [] as ReadonlyArray<TotObjective>,
   projects: [] as ReadonlyArray<{ id: string; title: string }>,
   remove: vi.fn(),
+  updateWork: vi.fn(),
 }));
 
 function setup(tasks: ReadonlyArray<ScheduledTask>) {
@@ -44,6 +48,8 @@ function setup(tasks: ReadonlyArray<ScheduledTask>) {
     { id: appProjectId, title: "T3 Code" },
   ];
   state.remove.mockReset().mockResolvedValue({ _tag: "Success", value: { id: "deleted" } });
+  state.objectives = [];
+  state.updateWork.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
 }
 
 function scheduledTask(
@@ -150,7 +156,7 @@ vi.mock(import("../../state/entities"), async (original) => ({
 vi.mock(import("../../state/query"), async (original) => ({
   ...(await original()),
   useEnvironmentQuery: (() => ({
-    data: { tasks: state.tasks, timeZone: "UTC" },
+    data: { tasks: state.tasks, timeZone: "UTC", objectives: state.objectives },
     dataUpdatedAt: 0,
     error: null,
     failure: null,
@@ -174,6 +180,11 @@ vi.mock(import("../../state/server"), async (original) => {
         permissionAtom: () => allowed,
       },
       updateTot: { ...actual.serverEnvironment.updateTot, permissionAtom: () => allowed },
+      updateTotWork: {
+        ...actual.serverEnvironment.updateTotWork,
+        run: state.updateWork,
+        permissionAtom: () => allowed,
+      },
       enableTot: { ...actual.serverEnvironment.enableTot, permissionAtom: () => allowed },
       disableTot: { ...actual.serverEnvironment.disableTot, permissionAtom: () => allowed },
     },
@@ -234,5 +245,73 @@ describe("TotSettingsPanel scheduled tasks", () => {
     );
     await expect.element(screen.getByText("Recurring check")).toBeInTheDocument();
     await expect.element(screen.getByText("Webhook listener")).toBeInTheDocument();
+  });
+});
+
+const objective = (
+  id: string,
+  overrides: Partial<TotObjective> & Pick<TotObjective, "title" | "status">,
+): TotObjective => ({
+  id: TotObjectiveId.make(id),
+  totId,
+  failedAttempts: 0,
+  retryCap: 3,
+  attempts: [],
+  createdAt: "2026-11-25T09:00:00.000Z",
+  updatedAt: "2026-11-25T10:00:00.000Z",
+  ...overrides,
+});
+
+const failedAttempt = (index: number) => ({
+  id: `att-${index}`,
+  kind: "launch" as const,
+  environmentId,
+  threadId: totThreadId(totId, `worker-${index}`),
+  runId: null,
+  taskId: null,
+  status: "failed" as const,
+  outcome: index === 3 ? "CI still red: flaky e2e test." : null,
+  startedAt: "2026-11-25T09:00:00.000Z",
+  endedAt: "2026-11-25T09:30:00.000Z",
+});
+
+describe("TotSettingsPanel work", () => {
+  it("lists objectives by status, and a capped one can be reset", async () => {
+    setup([]);
+    state.objectives = [
+      objective("obj-done000001", { title: "Ship the docs", status: "done" }),
+      objective("obj-capped0001", {
+        title: "Repair CI",
+        status: "needs_you",
+        failedAttempts: 3,
+        attempts: [1, 2, 3].map(failedAttempt),
+      }),
+    ];
+    await using screen = await render(<Panel />);
+
+    await expect.element(screen.getByText("Needs you · 1")).toBeInTheDocument();
+    await expect.element(screen.getByText("Done · 1")).toBeInTheDocument();
+    await expect
+      .element(screen.getByText(/3 attempts · 3 failed, the limit is 3/))
+      .toBeInTheDocument();
+    await expect.element(screen.getByText("CI still red: flaky e2e test.")).toBeInTheDocument();
+    const text = screen.container.textContent ?? "";
+    expect(text.indexOf("Repair CI")).toBeLessThan(text.indexOf("Ship the docs"));
+
+    await userEvent.click(screen.getByRole("button", { name: "Reset attempts" }));
+    await vi.waitFor(() =>
+      expect(state.updateWork).toHaveBeenCalledExactlyOnceWith(expect.anything(), {
+        environmentId,
+        input: { id: totId, objectiveId: "obj-capped0001", action: "reset" },
+      }),
+    );
+  });
+
+  it("says so when the Tot has no objectives yet", async () => {
+    setup([]);
+    await using screen = await render(<Panel />);
+    await expect
+      .element(screen.getByText(/Nothing yet\. Work Yui launches with an objective shows here\./))
+      .toBeInTheDocument();
   });
 });
