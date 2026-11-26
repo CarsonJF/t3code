@@ -199,8 +199,25 @@ export const TotAskEntry = Schema.Struct({
   mode: TotAskMode,
   /** A name the person gave it, shown instead of the id. */
   label: Schema.optional(Schema.String.check(Schema.isMaxLength(80))),
+  /** Seeded by T3 Code so links that worked before the list existed keep working. */
+  trustedByDefault: Schema.optional(Schema.Literal(true)),
 });
 export type TotAskEntry = typeof TotAskEntry.Type;
+
+/**
+ * What every Tot trusts until a person tightens it: the user's other Tots (here, and their
+ * launched workers), every linked environment, and the webhooks and schedules aimed at it.
+ * Outside clients, Discord users and other agent threads are not on it.
+ */
+export const TOT_DEFAULT_WHO_CAN_ASK: ReadonlyArray<TotAskEntry> = [
+  { origin: "tot", id: "*", mode: "full", trustedByDefault: true },
+  { origin: "linked", id: "*", mode: "full", trustedByDefault: true },
+  { origin: "webhook", id: "*", mode: "full", trustedByDefault: true },
+];
+
+/** The list in effect: a Tot saved before the list existed has the defaults. */
+export const totWhoCanAskOf = (tot: Pick<Tot, "whoCanAsk">): ReadonlyArray<TotAskEntry> =>
+  tot.whoCanAsk ?? TOT_DEFAULT_WHO_CAN_ASK;
 
 export const TotWhoCanAsk = Schema.Array(TotAskEntry).check(
   Schema.isMaxLength(TOT_MAX_ASK_ENTRIES),
@@ -218,7 +235,7 @@ export const totAskDecision = (
   tot: Pick<Tot, "whoCanAsk">,
   caller: Pick<TurnCaller, "origin" | "id">,
 ): TotAskDecision => {
-  const entries = (tot.whoCanAsk ?? []).filter((entry) => entry.origin === caller.origin);
+  const entries = totWhoCanAskOf(tot).filter((entry) => entry.origin === caller.origin);
   const entry =
     entries.find((candidate) => candidate.id === caller.id) ??
     entries.find((candidate) => candidate.id === TOT_ASK_ANYONE);
@@ -259,7 +276,8 @@ export const Tot = Schema.Struct({
   memoryTidy: Schema.optional(Schema.Boolean),
   /**
    * Outside callers this Tot takes turns from: other Tots and agents, linked environments,
-   * webhooks, Discord users and other clients. Absent or empty: none. Only a person widens it.
+   * webhooks, Discord users and other clients. Absent: `TOT_DEFAULT_WHO_CAN_ASK`, which the
+   * server seeds once; empty: nobody. Only a person widens it.
    */
   whoCanAsk: Schema.optional(TotWhoCanAsk),
 });

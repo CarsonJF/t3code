@@ -2,6 +2,7 @@ import {
   parseTotThreadId,
   TOT_THEME_MAX_LENGTH,
   totWatchReportsOf,
+  totWhoCanAskOf,
   type ScheduledTask,
   type ScheduledTaskWebhookFilter,
   type Tot,
@@ -46,7 +47,7 @@ export function totSettingsDraftFromTot(tot: Tot): TotSettingsDraft {
     autoSettle: tot.autoSettle === true,
     idleCompaction: tot.idleCompaction ?? null,
     memoryTidy: tot.memoryTidy === true,
-    whoCanAsk: tot.whoCanAsk ?? [],
+    whoCanAsk: totWhoCanAskOf(tot),
   };
 }
 
@@ -138,6 +139,7 @@ export function totSettingsDraftUpdate(draft: TotSettingsDraft): TotSettingsDraf
         id: entry.id.trim(),
         mode: entry.mode,
         ...(label === "" ? {} : { label }),
+        ...(entry.trustedByDefault === true ? { trustedByDefault: true as const } : {}),
       };
     }),
   };

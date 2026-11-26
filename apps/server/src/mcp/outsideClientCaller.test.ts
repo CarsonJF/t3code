@@ -30,8 +30,24 @@ it.each([
     client({ onBehalfOf: { service: "discord", userId: "111" } }),
     { caller: { origin: "discord", id: "111", label: "discord-tot-bridge" } },
   ],
-  // A peer link names its own sender thread instead.
-  ["nobody for a peer link", client({ linked: true }), {}],
+  // A peer link names its sender thread; one with none is still that link.
+  [
+    "a peer link that names no sender thread",
+    client({ linked: true }),
+    { caller: { origin: "linked", id: "discord-tot-bridge", label: "discord-tot-bridge" } },
+  ],
+  [
+    "nobody for a peer link with a sender thread",
+    client({
+      linked: true,
+      senderThread: {
+        environmentId: EnvironmentId.make("env:far"),
+        threadId: ThreadId.make("tot:t3bot:1"),
+        title: "T3Bot",
+      },
+    }),
+    {},
+  ],
 ] as const)("names %s", (_label, scope, expected) => {
   expect(outsideClientCaller(scope, undefined)).toEqual(expected);
 });

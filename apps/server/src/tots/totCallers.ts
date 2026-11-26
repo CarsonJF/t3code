@@ -51,8 +51,11 @@ export const outsideCallerOf = (
   }
   const sender = input.senderThreadId;
   if (sender !== undefined) {
-    if (sender === tot.threadId || parseTotLaunchedThreadId(sender) === tot.id) return undefined;
-    const other = totOwningThread(sender, tots);
+    const launchedBy = parseTotLaunchedThreadId(sender);
+    if (sender === tot.threadId || launchedBy === tot.id) return undefined;
+    // Another Tot's launched worker asks as that Tot.
+    const other =
+      totOwningThread(sender, tots) ?? tots.find((candidate) => candidate.id === launchedBy);
     return other === undefined
       ? { origin: "agent", id: sender }
       : { origin: "tot", id: other.id, label: other.name };

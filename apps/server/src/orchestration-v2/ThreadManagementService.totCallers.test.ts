@@ -194,6 +194,76 @@ describe("a Tot's Who can ask list", () => {
     );
   });
 
+  // A Tot from before the list existed, with nothing set up by hand.
+  it.effect.each([
+    { label: "Tot to Tot on this machine", input: { senderThreadId: otherTotThread } },
+    {
+      label: "another Tot's launched worker",
+      input: { senderThreadId: totLaunchedThreadId(helper.id, "work") },
+    },
+    {
+      label: "Tot to Tot from a linked machine",
+      input: {
+        linkedSender: {
+          environmentId: EnvironmentId.make("env:asuna"),
+          threadId: ThreadId.make("tot:t3bot:1"),
+          title: "T3Bot",
+        },
+      },
+    },
+    {
+      label: "a linked machine that names no sender thread",
+      input: { caller: { origin: "linked", id: "carson11" } },
+    },
+    {
+      label: "a webhook monitor",
+      input: {
+        scheduledTaskId: ScheduledTaskId.make("hook"),
+        caller: { origin: "webhook", id: "hook" },
+      },
+    },
+    { label: "a watch report", input: { createdBy: "system", creationSource: "server" } },
+  ] as const)("after the upgrade, lets $label in at Full with no setup", ({ input }) => {
+    const dispatched: Array<Dispatch> = [];
+    return send(input).pipe(
+      Effect.map((error) => {
+        expect(error._tag).toBe("ThreadManagementDurableRunProjectionError");
+        expect(dispatched).toHaveLength(1);
+        expect(dispatched[0]).not.toHaveProperty("restriction");
+      }),
+      Effect.provide(layerFor(home(undefined), dispatched)),
+    );
+  });
+
+  it.effect.each([
+    { label: "an unknown Discord user", input: { caller: discordUser } },
+    { label: "an outside client", input: { caller: { origin: "companion", id: "phone" } } },
+    { label: "a client that names nobody", input: {} },
+    { label: "an agent thread", input: { senderThreadId: ThreadId.make("thread:x") } },
+  ] as const)("after the upgrade, still refuses $label", ({ input }) => {
+    const dispatched: Array<Dispatch> = [];
+    return send(input).pipe(
+      Effect.map((error) => {
+        expect(error._tag).toBe("ThreadManagementCallerRefusedError");
+        expect(dispatched).toEqual([]);
+      }),
+      Effect.provide(layerFor(home(undefined), dispatched)),
+    );
+  });
+
+  it.effect("a person can tighten a default entry", () => {
+    const dispatched: Array<Dispatch> = [];
+    return send({ senderThreadId: otherTotThread }).pipe(
+      Effect.map(() => expect(dispatched[0]?.restriction).toBe("read-only")),
+      Effect.provide(
+        layerFor(
+          home([{ origin: "tot", id: "*", mode: "read-only", trustedByDefault: true }]),
+          dispatched,
+        ),
+      ),
+    );
+  });
+
   it.effect("prefers an exact entry over * for the same origin", () => {
     const dispatched: Array<Dispatch> = [];
     return send({ senderThreadId: otherTotThread }).pipe(

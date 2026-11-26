@@ -298,17 +298,22 @@ export function threadManagementFailure(error: unknown): OrchestratorMcpFailure 
 }
 
 /**
- * The outside client a send comes from: not a thread here and not a peer link, which name
- * their own senders. The Discord bridge names the Discord user it relays for.
+ * The outside client a send comes from, when nothing else names it: a thread here and a peer
+ * link's sender thread do. The Discord bridge names the Discord user it relays for.
  */
 export function outsideClientCaller(
   scope: McpInvocationScope,
   parent: unknown,
 ): { readonly caller?: TurnCaller } {
   const client = scope.client;
-  if (parent !== undefined || scope.thread !== undefined) return {};
-  if (client === undefined || client.linked === true) return {};
+  if (parent !== undefined || scope.thread !== undefined || client === undefined) return {};
   const label = client.label.trim().slice(0, 200) || client.sessionId;
+  // A peer link names its sender thread; one that names none is still that link.
+  if (client.linked === true) {
+    return client.senderThread === undefined
+      ? { caller: { origin: "linked", id: label, label } }
+      : {};
+  }
   return client.onBehalfOf === undefined
     ? { caller: { origin: "companion", id: label } }
     : { caller: { origin: "discord", id: client.onBehalfOf.userId, label } };

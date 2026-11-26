@@ -8,6 +8,7 @@ import {
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import { msg, T, useGT, useMessages } from "gt-react";
 
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -36,8 +37,17 @@ export function TotWhoCanAskSection(props: {
 }) {
   const gt = useGT();
   const m = useMessages();
+  // A default entry stays one while only its mode changes; a new origin or id makes it yours.
   const change = (index: number, patch: Partial<TotAskEntry>) =>
-    props.onChange(props.value.map((entry, at) => (at === index ? { ...entry, ...patch } : entry)));
+    props.onChange(
+      props.value.map((entry, at) => {
+        if (at !== index) return entry;
+        const next = { ...entry, ...patch };
+        if (patch.origin === undefined && patch.id === undefined) return next;
+        const { trustedByDefault: _default, ...own } = next;
+        return own;
+      }),
+    );
   return (
     <section className="flex flex-col gap-2.5">
       <div className="flex items-start justify-between gap-2">
@@ -47,7 +57,7 @@ export function TotWhoCanAskSection(props: {
           </h3>
           <p className="text-muted-foreground text-xs">
             {gt(
-              "You always have full access. Anyone else, such as Discord users, webhooks, other Tots and linked machines, is refused unless listed here. Ask runs their turns needing your approval for changes; Read-only lets them only look.",
+              "You always have full access. Your other Tots, linked machines and webhooks are trusted by default; Discord users, outside clients and other agent threads are refused unless listed. Ask runs a caller's turns needing your approval for changes; Read-only lets them only look.",
             )}
           </p>
         </div>
@@ -113,6 +123,15 @@ export function TotWhoCanAskSection(props: {
                   ))}
                 </SelectPopup>
               </Select>
+              {entry.trustedByDefault === true ? (
+                <Badge
+                  variant="info"
+                  size="sm"
+                  className="justify-self-start sm:order-last sm:col-span-4"
+                >
+                  <T>Trusted by default</T>
+                </Badge>
+              ) : null}
               <Button
                 size="icon-sm"
                 variant="ghost"

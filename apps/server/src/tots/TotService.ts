@@ -21,6 +21,7 @@ import {
   type TotMemoryFile,
   type TotThreadResult,
   type TotThemePatch,
+  TOT_DEFAULT_WHO_CAN_ASK,
   type TotAskEntry,
   type TotUpdateInput,
   type TotWatch,
@@ -450,6 +451,7 @@ const make = Effect.gen(function* () {
       watchAll: false,
       watches: [],
       memoryTidy: input.memoryTidy ?? true,
+      whoCanAsk: TOT_DEFAULT_WHO_CAN_ASK,
     };
     yield* writeTots((current) => [...current, tot]);
     yield* refreshFolders();
@@ -762,6 +764,12 @@ const make = Effect.gen(function* () {
       .pipe(Effect.mapError(() => fail(`${tot.name} could not be woken.`)));
   }, locked);
 
+  // One-time upgrade: a Tot from before Who can ask gets the defaults written down, so the
+  // links it already had keep working and a person sees, tightens or removes them.
+  yield* seedWhoCanAsk(settings).pipe(
+    Effect.catchCause((cause) => Effect.logWarning("Could not seed Tot Who can ask lists", cause)),
+  );
+
   // Instructions follow the app version, so an update reaches each Tot's
   // next provider session, not only after a fresh start.
   yield* refreshFolders();
@@ -867,6 +875,19 @@ const make = Effect.gen(function* () {
     setWatchAll,
     report,
   });
+});
+
+/** Writes the default Who can ask list into every Tot that has none; a no-op once done. */
+const seedWhoCanAsk = Effect.fn("TotService.seedWhoCanAsk")(function* (
+  settings: Pick<ServerSettings.ServerSettingsService["Service"], "getSettings" | "updateTots">,
+) {
+  const current = yield* settings.getSettings;
+  if (current.tots.every((tot) => tot.whoCanAsk !== undefined)) return;
+  yield* settings.updateTots((tots) =>
+    tots.map((tot) =>
+      tot.whoCanAsk === undefined ? { ...tot, whoCanAsk: TOT_DEFAULT_WHO_CAN_ASK } : tot,
+    ),
+  );
 });
 
 export const layer = Layer.effect(TotService, make);

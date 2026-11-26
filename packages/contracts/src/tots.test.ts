@@ -304,8 +304,30 @@ describe("totAskDecision", () => {
     expect(totAskDecision(tot, caller)).toEqual(expected);
   });
 
-  it("refuses everyone outside when nothing is listed", () => {
-    expect(totAskDecision({}, { origin: "companion", id: "phone" })).toEqual({ kind: "refuse" });
+  it("refuses everyone outside when the list is empty", () => {
+    expect(totAskDecision({ whoCanAsk: [] }, { origin: "tot", id: "home" })).toEqual({
+      kind: "refuse",
+    });
+  });
+
+  it.each([
+    [
+      { origin: "tot", id: "home" },
+      { kind: "allow", restriction: undefined },
+    ],
+    [
+      { origin: "linked", id: "env" },
+      { kind: "allow", restriction: undefined },
+    ],
+    [
+      { origin: "webhook", id: "hook" },
+      { kind: "allow", restriction: undefined },
+    ],
+    [{ origin: "discord", id: "111" }, { kind: "refuse" }],
+    [{ origin: "companion", id: "phone" }, { kind: "refuse" }],
+    [{ origin: "agent", id: "thread:x" }, { kind: "refuse" }],
+  ] as const)("a Tot from before the list decides %o by the defaults", (caller, expected) => {
+    expect(totAskDecision({}, caller)).toEqual(expected);
   });
 
   it("decodes a Tot saved before the list existed", () => {
