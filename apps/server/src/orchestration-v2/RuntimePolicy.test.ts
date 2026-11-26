@@ -222,6 +222,7 @@ it.layer(layerTest)("RuntimePolicyV2", (it) => {
       const claude = ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy(resolved);
       assert.equal(claude.permissionMode, "dontAsk");
       assert.isFalse(claude.installPermissionCallback);
+      assert.isTrue(claude.guardShell);
       for (const tool of ["Write", "Edit", "NotebookEdit", "Bash(git push:*)", "Bash"]) {
         assert.notInclude(claude.allowedTools ?? [], tool);
       }

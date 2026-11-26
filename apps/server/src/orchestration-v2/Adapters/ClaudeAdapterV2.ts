@@ -1,4 +1,5 @@
 import * as DocumentText from "../../provider/DocumentText.ts";
+import { CLAUDE_READ_ONLY_BASH_RULES, claudeReadOnlyBashHook } from "./claudeReadOnlyShell.ts";
 import {
   compactDynamicToolOutput,
   mcpToolResultOutput,
@@ -737,31 +738,7 @@ export interface ClaudeAgentSdkQueryPresetTools {
 export type ClaudeAgentSdkQueryTools = ClaudeAgentSdkQueryToolList | ClaudeAgentSdkQueryPresetTools;
 
 export const CLAUDE_READ_ONLY_ALLOWED_TOOLS = ["Read", "Glob", "Grep"] as const;
-
-/**
- * Shell commands a read-only turn that may read anywhere can run without asking. Each prefix
- * only reads; Claude matches every part of a compound command, and `dontAsk` denies the rest.
- * Leave out anything with a writing flag, such as `git diff --output` or `journalctl --vacuum`.
- */
-export const CLAUDE_READ_ONLY_BASH_RULES: ReadonlyArray<string> = [
-  "Bash(gh pr list:*)",
-  "Bash(gh pr view:*)",
-  "Bash(gh pr checks:*)",
-  "Bash(gh pr diff:*)",
-  "Bash(gh run list:*)",
-  "Bash(gh run view:*)",
-  "Bash(gh issue list:*)",
-  "Bash(gh issue view:*)",
-  "Bash(git status:*)",
-  "Bash(docker ps:*)",
-  "Bash(docker inspect:*)",
-  "Bash(docker logs:*)",
-  "Bash(docker compose ps:*)",
-  "Bash(docker compose ls:*)",
-  "Bash(docker compose logs:*)",
-  "Bash(systemctl status:*)",
-  "Bash(systemctl list-units:*)",
-];
+export { CLAUDE_READ_ONLY_BASH_RULES };
 
 function claudeAgentSdkQueryToolsForSdk(
   tools: ClaudeAgentSdkQueryTools,
@@ -2575,6 +2552,8 @@ export function makeClaudeQueryOptions(input: {
   readonly onUserDialog?: ClaudeQueryOptions["onUserDialog"];
   readonly onElicitation?: ClaudeQueryOptions["onElicitation"];
   readonly onStop?: HookCallback;
+  /** Decides each Bash call before Claude's permission rules. */
+  readonly bashGuard?: HookCallback;
   readonly supportedDialogKinds?: ClaudeQueryOptions["supportedDialogKinds"];
   readonly allowDangerouslySkipPermissions?: boolean;
   readonly appendSystemPromptFileText?: string;
@@ -2740,13 +2719,16 @@ export function makeClaudeQueryOptions(input: {
         ...launchAppendSystemPrompt,
       ].join("\n\n"),
     },
-    ...(deviceInstructions || input.onStop !== undefined
+    ...(deviceInstructions || input.onStop !== undefined || input.bashGuard !== undefined
       ? {
           hooks: {
             ...(deviceInstructions
               ? { SubagentStart: [{ hooks: [subagentDeviceInstructions] }] }
               : {}),
             ...(input.onStop === undefined ? {} : { Stop: [{ hooks: [input.onStop] }] }),
+            ...(input.bashGuard === undefined
+              ? {}
+              : { PreToolUse: [{ matcher: "Bash", hooks: [input.bashGuard] }] }),
           },
         }
       : {}),
@@ -3820,6 +3802,8 @@ export interface ClaudeRuntimeQueryPolicy {
   readonly allowedTools?: ReadonlyArray<string>;
   readonly allowDangerouslySkipPermissions?: true;
   readonly installPermissionCallback: boolean;
+  /** Every Bash call goes through T3 Code's read-only check, whatever Claude's rules allow. */
+  readonly guardShell?: true;
 }
 
 interface ClaudeBypassAvailability {
@@ -3877,6 +3861,7 @@ export function claudeRuntimeQueryPolicyForRuntimePolicy(
     ...(allowedTools === undefined ? {} : { allowedTools }),
     ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
     installPermissionCallback,
+    ...(globalReads ? { guardShell: true } : {}),
   };
 }
 
@@ -13854,6 +13839,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             onUserDialog,
             onElicitation,
             onStop,
+            ...(queryPolicy.guardShell === true ? { bashGuard: claudeReadOnlyBashHook } : {}),
             supportedDialogKinds: ["resume_return"],
             ...(appendSystemPromptFileText === undefined ? {} : { appendSystemPromptFileText }),
             ...(toolSearchOverride === undefined ? {} : { toolSearchOverride }),

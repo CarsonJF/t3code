@@ -97,6 +97,7 @@ import { HtmlToolkit } from "../../mcp/toolkits/html/tools.ts";
 import { MessageToolkit } from "../../mcp/toolkits/message/tools.ts";
 import { PullRequestsToolkit } from "../../mcp/toolkits/pullRequests/tools.ts";
 import { IssuesToolkit } from "../../mcp/toolkits/issues/tools.ts";
+import { claudeReadOnlyBashHook } from "./claudeReadOnlyShell.ts";
 import { EnvironmentToolkit } from "../../mcp/toolkits/environment/tools.ts";
 import { ThemeToolkit } from "../../mcp/toolkits/theme/tools.ts";
 import { ProjectToolkit } from "../../mcp/toolkits/project/tools.ts";
@@ -636,7 +637,28 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
         ...ClaudeAdapterV2.CLAUDE_READ_ONLY_BASH_RULES,
       ],
       installPermissionCallback: false,
+      guardShell: true,
     });
+  });
+
+  it("puts every Bash call of a guarded turn through T3 Code's read-only check", () => {
+    const guarded = ClaudeAdapterV2.makeClaudeQueryOptions({
+      modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+      nativeThreadId: "native-read-only-shell",
+      resume: false,
+      cwd: "/workspace",
+      bashGuard: claudeReadOnlyBashHook,
+    });
+    assert.deepEqual(guarded.hooks?.PreToolUse, [
+      { matcher: "Bash", hooks: [claudeReadOnlyBashHook] },
+    ]);
+    const unguarded = ClaudeAdapterV2.makeClaudeQueryOptions({
+      modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+      nativeThreadId: "native-shell",
+      resume: false,
+      cwd: "/workspace",
+    });
+    assert.isUndefined(unguarded.hooks?.PreToolUse);
   });
 
   it("pre-approves only reading shell commands for a read-only turn", () => {
