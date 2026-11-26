@@ -17,7 +17,7 @@ const client = (
       access: "full-access",
       ...extra,
     },
-  }) as McpInvocationContext.McpInvocationScope;
+  }) as unknown as McpInvocationContext.McpInvocationScope;
 
 it.each([
   [
