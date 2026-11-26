@@ -30,7 +30,7 @@ const noGrants = Layer.succeed(CompanionGrants.CompanionGrants, {
   retain: () => Effect.void,
   status: () => Effect.succeed(null),
   exchange: () => Effect.die("unused"),
-  companionForSession: () => Effect.succeed(undefined),
+  companionForSession: () => Effect.undefined,
   changes: Stream.empty,
 });
 
