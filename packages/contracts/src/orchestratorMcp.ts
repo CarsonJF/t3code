@@ -786,6 +786,12 @@ export const OrchestratorMcpScheduleTaskInput = Schema.Struct({
       }),
     ),
   ),
+  readOnly: Schema.optional(
+    Schema.Boolean.annotate({
+      description:
+        "Read-only sweep in its own thread; writes are refused. Ends ok (silent) or attention (posts to the Tot).",
+    }),
+  ),
   clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
 });
 export type OrchestratorMcpScheduleTaskInput = typeof OrchestratorMcpScheduleTaskInput.Type;
@@ -815,6 +821,8 @@ export const OrchestratorMcpScheduledTask = Schema.Struct({
   precheck: Schema.optional(Schema.String),
   missedRunGraceMinutes: Schema.optional(Schema.Number),
   lastSkip: Schema.optional(Schema.String),
+  readOnly: Schema.optional(Schema.Boolean),
+  lastSweep: Schema.optional(Schema.String),
   webhookUrl: Schema.optional(Schema.String).annotate({
     description:
       "Webhook bearer URL, returned only on task creation to callers allowed to run it. Lists and updates omit it; the user can copy it from Settings. Creation may omit it without T3 Connect remote access or run permission.",
@@ -862,6 +870,7 @@ export const OrchestratorMcpUpdateScheduledTaskInput = Schema.Struct({
   modelSelection: Schema.optional(ModelSelection),
   precheck: Schema.optional(Schema.NullOr(ScheduledTaskPrecheck)),
   missedRunGraceMinutes: Schema.optional(Schema.NullOr(ScheduledTaskMissedRunGraceMinutes)),
+  readOnly: Schema.optional(Schema.Boolean),
 });
 export type OrchestratorMcpUpdateScheduledTaskInput =
   typeof OrchestratorMcpUpdateScheduledTaskInput.Type;

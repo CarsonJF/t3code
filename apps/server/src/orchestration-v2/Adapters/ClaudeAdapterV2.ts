@@ -1,4 +1,5 @@
 import * as DocumentText from "../../provider/DocumentText.ts";
+import { CLAUDE_READ_ONLY_BASH_RULES, claudeReadOnlyBashHook } from "./claudeReadOnlyShell.ts";
 import {
   compactDynamicToolOutput,
   mcpToolResultOutput,
@@ -763,6 +764,7 @@ export interface ClaudeAgentSdkQueryPresetTools {
 export type ClaudeAgentSdkQueryTools = ClaudeAgentSdkQueryToolList | ClaudeAgentSdkQueryPresetTools;
 
 export const CLAUDE_READ_ONLY_ALLOWED_TOOLS = ["Read", "Glob", "Grep"] as const;
+export { CLAUDE_READ_ONLY_BASH_RULES };
 
 function claudeAgentSdkQueryToolsForSdk(
   tools: ClaudeAgentSdkQueryTools,
@@ -2604,6 +2606,8 @@ export function makeClaudeQueryOptions(input: {
   readonly onUserDialog?: ClaudeQueryOptions["onUserDialog"];
   readonly onElicitation?: ClaudeQueryOptions["onElicitation"];
   readonly onStop?: HookCallback;
+  /** Decides each Bash call before Claude's permission rules. */
+  readonly bashGuard?: HookCallback;
   readonly supportedDialogKinds?: ClaudeQueryOptions["supportedDialogKinds"];
   readonly allowDangerouslySkipPermissions?: boolean;
   readonly appendSystemPromptFileText?: string;
@@ -2769,13 +2773,16 @@ export function makeClaudeQueryOptions(input: {
         ...launchAppendSystemPrompt,
       ].join("\n\n"),
     },
-    ...(deviceInstructions || input.onStop !== undefined
+    ...(deviceInstructions || input.onStop !== undefined || input.bashGuard !== undefined
       ? {
           hooks: {
             ...(deviceInstructions
               ? { SubagentStart: [{ hooks: [subagentDeviceInstructions] }] }
               : {}),
             ...(input.onStop === undefined ? {} : { Stop: [{ hooks: [input.onStop] }] }),
+            ...(input.bashGuard === undefined
+              ? {}
+              : { PreToolUse: [{ matcher: "Bash", hooks: [input.bashGuard] }] }),
           },
         }
       : {}),
@@ -2899,6 +2906,14 @@ export const CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS: ReadonlyArray<string> = [
   "mcp__t3-code__html_render",
   "mcp__t3-code__send_to_user",
   "mcp__t3-code__t3_submit_output",
+  "mcp__t3-code__list_thread_pull_requests",
+  "mcp__t3-code__read_pull_request_guide",
+  "mcp__t3-code__pull_request_read",
+  "mcp__t3-code__pull_request_list",
+  "mcp__t3-code__ci_logs",
+  "mcp__t3-code__list_issues",
+  "mcp__t3-code__read_issue",
+  "mcp__t3-code__list_thread_issues",
 ];
 
 // The name this adapter registers T3's MCP server under, and so the one Claude gives for it.
@@ -3841,6 +3856,8 @@ export interface ClaudeRuntimeQueryPolicy {
   readonly allowedTools?: ReadonlyArray<string>;
   readonly allowDangerouslySkipPermissions?: true;
   readonly installPermissionCallback: boolean;
+  /** Every Bash call goes through T3 Code's read-only check, whatever Claude's rules allow. */
+  readonly guardShell?: true;
 }
 
 interface ClaudeBypassAvailability {
@@ -3866,13 +3883,15 @@ export function claudeRuntimeQueryPolicyForRuntimePolicy(
       ? "default"
       : "auto"
     : requestedMode;
-  const readOnlyTools =
-    sandboxPolicyKindForClaudeRuntimePolicy(runtimePolicy) === "readOnly"
-      ? CLAUDE_READ_ONLY_ALLOWED_TOOLS
-      : undefined;
-  const allowedTools =
-    readOnlyTools !== undefined && readOnlyPolicyAllowsGlobalReads(runtimePolicy)
-      ? readOnlyTools
+  const readOnly = sandboxPolicyKindForClaudeRuntimePolicy(runtimePolicy) === "readOnly";
+  const globalReads = readOnly && readOnlyPolicyAllowsGlobalReads(runtimePolicy);
+  const readOnlyTools = !readOnly
+    ? undefined
+    : globalReads
+      ? [...CLAUDE_READ_ONLY_ALLOWED_TOOLS, "Bash"]
+      : CLAUDE_READ_ONLY_ALLOWED_TOOLS;
+  const allowedTools = globalReads
+    ? [...CLAUDE_READ_ONLY_ALLOWED_TOOLS, ...CLAUDE_READ_ONLY_BASH_RULES]
       : undefined;
   // acceptEdits approves edits before the callback; the callback must ask for everything else.
   // Auto sends back what its review leaves open, and every tool where Claude cannot run in Auto.
@@ -3900,6 +3919,7 @@ export function claudeRuntimeQueryPolicyForRuntimePolicy(
     ...(allowedTools === undefined ? {} : { allowedTools }),
     ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
     installPermissionCallback,
+    ...(globalReads ? { guardShell: true } : {}),
   };
 }
 
@@ -14296,6 +14316,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             onUserDialog,
             onElicitation,
             onStop,
+            ...(queryPolicy.guardShell === true ? { bashGuard: claudeReadOnlyBashHook } : {}),
             supportedDialogKinds: ["resume_return"],
             ...(appendSystemPromptFileText === undefined ? {} : { appendSystemPromptFileText }),
             ...(toolSearchOverride === undefined ? {} : { toolSearchOverride }),

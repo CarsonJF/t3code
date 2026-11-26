@@ -18,6 +18,11 @@ describe("Tot templates", () => {
     }
   });
 
+  it("offers a Look around sweep in the stack watch and CI sitter templates", () => {
+    expect(findTotTemplate("home-stack-watcher")?.lookAround?.focus).toContain("Compose");
+    expect(findTotTemplate("ci-babysitter")?.lookAround?.focus).toContain("CI");
+  });
+
   it("finds a template by id", () => {
     expect(findTotTemplate("pr-reviewer")?.name).toBe("PR Reviewer");
     expect(findTotTemplate("nope")).toBeUndefined();

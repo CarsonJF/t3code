@@ -15,5 +15,8 @@
       "prompt": "Check the health of the Docker containers and Compose stacks on this machine as your instructions say. Reply only if something is unhealthy, restarting or down.",
       "schedule": { "type": "interval", "everyMs": 1800000 }
     }
-  ]
+  ],
+  "lookAround": {
+    "focus": "Check container and Compose health on this machine: unhealthy, restarting or exited containers, and errors in their recent logs."
+  }
 }

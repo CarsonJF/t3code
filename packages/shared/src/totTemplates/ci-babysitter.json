@@ -15,5 +15,8 @@
       "prompt": "Check the latest CI and nightly runs for the projects you own. If anything failed since your last check, find out why and act on it as your instructions say. Reply only if something needs attention.",
       "schedule": { "type": "fixed_time", "timeOfDay": "08:00" }
     }
-  ]
+  ],
+  "lookAround": {
+    "focus": "Check CI and nightly runs for the projects you own, and pull requests that are failing checks or have sat without review."
+  }
 }

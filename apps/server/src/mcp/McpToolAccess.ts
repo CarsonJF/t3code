@@ -159,11 +159,21 @@ export const reads = <P, A, E, R>(handle: (params: P) => Effect.Effect<A, E, R>)
 export const readsAsCaller = <P, A, E, R>(handle: (params: P) => Effect.Effect<A, E, R>) =>
   declare((params: P) => requireThreadCaller.pipe(Effect.flatMap(() => handle(params))), undefined);
 
-export const actsAsCaller = <P, A, E, R>(handle: (params: P) => Effect.Effect<A, E, R>) =>
+export const actsAsCaller = <P, A, E, R>(
+  handle: (params: P) => Effect.Effect<A, E, R>,
+  options?: {
+    /** Whether a limited turn may call it, as a read-only sweep must to hand back its result. */
+    readonly restrictedRuns?: "allowed";
+  },
+) =>
   declare(
     (params: P) =>
       requireThreadCaller.pipe(
-        Effect.andThen(writingCaller),
+        Effect.andThen(
+          options?.restrictedRuns === "allowed"
+            ? refuseReadOnlyClient.pipe(Effect.andThen(loadCaller()), Effect.tap(assertLiveCaller))
+            : writingCaller,
+        ),
         Effect.flatMap(() => handle(params)),
       ),
     undefined,

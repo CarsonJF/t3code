@@ -27,23 +27,34 @@ export const MIN_SCHEDULED_TASK_INTERVAL_MS = 60_000;
 
 const ScheduledTaskIntervalMs = Schema.Int.check(Schema.isGreaterThan(0));
 
+const ScheduleWeekdays = Schema.Array(
+  Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 6 })).annotate({
+    description: "Weekday. 0 is Sunday, 6 is Saturday.",
+  }),
+).annotate({
+  description: "Default: every day.",
+});
+
+/** Local hours an interval runs in, `from` inclusive and `to` exclusive. */
+const ScheduledTaskActiveHours = Schema.Struct({ from: TimeOfDay, to: TimeOfDay }).annotate({
+  description: "Run only between these local times. Default: all day.",
+});
+
+const ScheduledTaskIntervalLimits = {
+  weekdays: Schema.optional(ScheduleWeekdays),
+  activeHours: Schema.optional(ScheduledTaskActiveHours),
+};
+
 const ScheduledTaskIntervalSchedule = Schema.Struct({
   type: Schema.Literal("interval"),
   everyMs: ScheduledTaskIntervalMs,
+  ...ScheduledTaskIntervalLimits,
 });
 
 const ScheduledTaskFixedTimeSchedule = Schema.Struct({
   type: Schema.Literal("fixed_time"),
   timeOfDay: TimeOfDay,
-  weekdays: Schema.optional(
-    Schema.Array(
-      Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 6 })).annotate({
-        description: "Weekday. 0 is Sunday, 6 is Saturday.",
-      }),
-    ).annotate({
-      description: "Default: every day.",
-    }),
-  ),
+  weekdays: Schema.optional(ScheduleWeekdays),
 });
 
 const ISO_WITH_OFFSET =
@@ -273,6 +284,7 @@ export const ScheduledTaskUpsertSchedule = Schema.Union([
     ).annotate({
       description: "Min 60000.",
     }),
+    ...ScheduledTaskIntervalLimits,
   }),
   ScheduledTaskFixedTimeSchedule,
   ScheduledTaskOnceSchedule,
@@ -298,6 +310,15 @@ export const ScheduledTaskMissedRunGraceMinutes = Schema.Int.check(
   description:
     "After downtime, run one late occurrence at most this many minutes late; older ones are skipped.",
 });
+
+/** What the last read-only sweep found. `ok` posts nothing; `attention` tells the Tot. */
+export const ScheduledTaskLastSweep = Schema.Struct({
+  at: IsoDateTime,
+  // Any string, so a status added later doesn't break a client's whole list.
+  status: Schema.Union([Schema.Literals(["ok", "attention"]), Schema.String]),
+  findings: Schema.Array(Schema.String),
+});
+export type ScheduledTaskLastSweep = typeof ScheduledTaskLastSweep.Type;
 
 /** Why the last due run did not start an agent turn. */
 export const ScheduledTaskSkipReason = Schema.Literals(["precheck", "missed"]);
@@ -365,6 +386,9 @@ export const ScheduledTask = Schema.Struct({
       detail: Schema.NullOr(Schema.String),
     }),
   ),
+  /** A read-only sweep: runs in its own thread that can read but not change anything. */
+  readOnly: Schema.optional(Schema.Boolean),
+  lastSweep: Schema.optional(ScheduledTaskLastSweep),
   /** Why the task cannot run regardless of `enabled`, such as a managed policy refusing webhooks. */
   blockedByPolicy: Schema.optionalKey(Schema.String),
 });
@@ -412,6 +436,8 @@ export const ScheduledTaskUpsertInput = Schema.Struct({
   precheck: Schema.optional(Schema.NullOr(ScheduledTaskPrecheck)),
   /** Omitted: keep the stored grace. Null clears it. */
   missedRunGraceMinutes: Schema.optional(Schema.NullOr(ScheduledTaskMissedRunGraceMinutes)),
+  /** Omitted: keep the stored flag. */
+  readOnly: Schema.optional(Schema.Boolean),
 });
 export type ScheduledTaskUpsertInput = typeof ScheduledTaskUpsertInput.Type;
 
