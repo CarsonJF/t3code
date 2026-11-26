@@ -26,6 +26,40 @@ describe("scheduled task schedule calculation", () => {
     expect(parts?.minute).toBe(0);
   });
 
+  it("keeps an interval inside its weekdays and active hours", () => {
+    const weekdayDaytime = {
+      type: "interval",
+      everyMs: 4 * 60 * 60 * 1000,
+      weekdays: [1, 2, 3, 4, 5],
+      activeHours: { from: "08:00", to: "20:00" },
+    } as const;
+    const at = (day: number, hour: number) =>
+      DateTime.makeZonedUnsafe(
+        { year: 2026, month: 11, day, hour, minute: 0, second: 0, millisecond: 0 },
+        { timeZone: "America/New_York", adjustForTimeZone: true },
+      );
+    const partsOf = (next: DateTime.DateTime | null) => (next ? DateTime.toParts(next) : null);
+    // Wednesday 25 Nov 2026, 09:00: the next run is four hours on, at 13:00.
+    expect(partsOf(nextScheduledRunAt(weekdayDaytime, at(25, 9)))).toMatchObject({
+      day: 25,
+      hour: 13,
+    });
+    // 18:00 plus four hours is past 20:00, so the next run opens Thursday's window.
+    expect(partsOf(nextScheduledRunAt(weekdayDaytime, at(25, 18)))).toMatchObject({
+      day: 26,
+      hour: 8,
+    });
+    // Friday evening skips the weekend.
+    expect(partsOf(nextScheduledRunAt(weekdayDaytime, at(27, 18)))).toMatchObject({
+      day: 30,
+      weekDay: 1,
+      hour: 8,
+    });
+    expect(
+      isSameSchedule(weekdayDaytime, { type: "interval", everyMs: weekdayDaytime.everyMs }),
+    ).toBe(false);
+  });
+
   it("compares schedules structurally", () => {
     expect(
       isSameSchedule(

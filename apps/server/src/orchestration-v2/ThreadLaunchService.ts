@@ -25,6 +25,7 @@ import {
   TaskFolderError,
   TextGenerationError,
   ThreadId,
+  isLookAroundThread,
   parseTotThreadId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
@@ -1429,7 +1430,7 @@ const make = Effect.gen(function* () {
           "update-thread",
         )("Reusing an existing thread requires a thread id.");
       }
-      // A Tot's project holds that Tot's one thread; other threads start elsewhere.
+      // A Tot's project holds that Tot's one thread and its read-only sweep; others start elsewhere.
       if (input.reuseExistingThread !== true) {
         const tots = yield* serverSettings.getSettings.pipe(
           Effect.map((settings) => settings.tots),
@@ -1438,7 +1439,8 @@ const make = Effect.gen(function* () {
         const owner = tots.find((tot) => tot.projectId === input.projectId);
         if (
           owner !== undefined &&
-          (input.threadId === undefined || parseTotThreadId(input.threadId) !== owner.id)
+          (input.threadId === undefined ||
+            (parseTotThreadId(input.threadId) !== owner.id && !isLookAroundThread(input.threadId)))
         ) {
           return yield* mapError(
             input,

@@ -5732,5 +5732,14 @@
   "25bdaed653d3d2c3": "Die vorgeschlagenen Routinen einer Vorlage werden pausiert angelegt.",
   "fc72809a59128290": "Leer",
   "6eb33caef72a98a1": "Gegen 03:30 entfernt ein günstiges Modell Doppeltes aus {memory} und fasst es zusammen. Die vorige Fassung bleibt als {backup}.",
-  "4b3694d90784a5be": "Nächtliches Aufräumen des Gedächtnisses"
+  "4b3694d90784a5be": "Nächtliches Aufräumen des Gedächtnisses",
+  "8b84d7ff5492dd87": "Noch kein Rundgang.",
+  "43ed1e8b6f94d851": "Letzter Rundgang: ok, {time}",
+  "bc1a710d973c4857": "Letzter Rundgang braucht Aufmerksamkeit: {findings}",
+  "94c00ff3d1c9116e": "Umschauen",
+  "8f71572fc417cde3": "Der Anbieter dieses Tot kann einen Rundgang nicht schreibgeschützt halten. Wähle ein Codex- oder Claude-Modell.",
+  "e5cc1c6a5c6457cf": "Ein schreibgeschützter Rundgang nach Zeitplan; der Server lehnt jede Änderung ab. Still, wenn alles in Ordnung ist. Zeitplan und Vorabprüfung änderst du am Desktop oder im Web.",
+  "cd79fe8de4c658c9": "Schalte den Tot einmal ein, um den Rundgang einzurichten.",
+  "f4e1531edae9a180": "Was geprüft wird, etwa CI im Fork oder Zustand der Container",
+  "deeeb2f9f7e0f73e": "Was geprüft wird"
 }

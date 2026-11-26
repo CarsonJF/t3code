@@ -5726,5 +5726,14 @@
   "25bdaed653d3d2c3": "Les routines suggérées d'un modèle sont créées en pause.",
   "fc72809a59128290": "Vide",
   "6eb33caef72a98a1": "Vers 03:30, un modèle peu coûteux dédoublonne et condense son {memory}. La copie précédente est conservée dans {backup}.",
-  "4b3694d90784a5be": "Rangement nocturne de la mémoire"
+  "4b3694d90784a5be": "Rangement nocturne de la mémoire",
+  "8b84d7ff5492dd87": "Aucune ronde pour l'instant.",
+  "43ed1e8b6f94d851": "Dernière ronde : ok, {time}",
+  "bc1a710d973c4857": "La dernière ronde demande de l'attention : {findings}",
+  "94c00ff3d1c9116e": "Faire un tour",
+  "8f71572fc417cde3": "Le fournisseur de ce Tot ne peut pas garder une ronde en lecture seule. Choisissez un modèle Codex ou Claude.",
+  "e5cc1c6a5c6457cf": "Une ronde en lecture seule planifiée ; le serveur refuse toute modification. Silencieuse quand tout va bien. Modifiez sa planification et sa vérification préalable sur ordinateur ou sur le web.",
+  "cd79fe8de4c658c9": "Activez le Tot une fois pour configurer sa ronde.",
+  "f4e1531edae9a180": "Quoi vérifier, comme la CI du fork ou l'état des conteneurs",
+  "deeeb2f9f7e0f73e": "Quoi vérifier"
 }
