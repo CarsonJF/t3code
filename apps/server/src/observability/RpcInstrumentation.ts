@@ -43,6 +43,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.serverUpdateProvider]: "server",
   [WS_METHODS.providerAuthStart]: "provider",
   [WS_METHODS.providerConsumeResetCredit]: "provider",
+  [WS_METHODS.usageLimitRetryOnAccount]: "orchestration",
   [WS_METHODS.providerAuthComplete]: "provider",
   [WS_METHODS.providerMcpSignInStart]: "provider",
   [WS_METHODS.providerMcpSignInComplete]: "provider",

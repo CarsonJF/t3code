@@ -4,6 +4,8 @@ import { m, type MessageResolver } from "~/i18n/messages";
 import {
   type OrchestrationV2LimitRecovery,
   type OrchestrationV2LimitRecoveryUpdate,
+  type ProviderAccountChoice,
+  type ProviderInstanceId,
   type RunId,
 } from "@t3tools/contracts";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
@@ -37,6 +39,9 @@ type RecoveryProps = {
   resetPassed?: boolean;
   displayPassed?: boolean;
   onChange: (recovery: OrchestrationV2LimitRecoveryUpdate) => Promise<void>;
+  /** Other signed-in accounts of the run's provider, here. */
+  retryAccounts?: ReadonlyArray<ProviderAccountChoice>;
+  onRetryOnAccount?: (instanceId: ProviderInstanceId) => Promise<void>;
 };
 
 function parseEpochMs(isoDate: string | null): number | null {
@@ -95,9 +100,28 @@ export function usageLimitRecoveryBannerItem(
   const displayPassed = props.displayPassed ?? (displayAtMs !== null && displayAtMs <= Date.now());
   const workspaceLimit = errorCode === CHATGPT_WORKSPACE_USAGE_LIMIT_CODE;
   const chatGptLimit = workspaceLimit || errorCode === CHATGPT_USAGE_LIMIT_CODE;
-  const recoveryActions = canSchedule ? (
+  const accountActions =
+    props.retryAccounts !== undefined &&
+    props.retryAccounts.length > 0 &&
+    props.onRetryOnAccount !== undefined ? (
+      <AccountRetryActions
+        key={`accounts:${runId}`}
+        accounts={props.retryAccounts}
+        onRetry={props.onRetryOnAccount}
+      />
+    ) : null;
+  const scheduleActions = canSchedule ? (
     <RecoveryActions key={`${runId}:${resetAt}`} {...props} />
   ) : null;
+  const recoveryActions =
+    accountActions === null ? (
+      scheduleActions
+    ) : (
+      <>
+        {accountActions}
+        {scheduleActions}
+      </>
+    );
   const resumesUpcoming = resumes && !displayPassed;
   const shownAt = resumesUpcoming ? displayAt : resetAt;
   const formattedTime = shownAt
@@ -147,6 +171,44 @@ export function usageLimitRecoveryBannerItem(
       </>
     ),
   };
+}
+
+function AccountRetryActions({
+  accounts,
+  onRetry,
+}: {
+  readonly accounts: ReadonlyArray<ProviderAccountChoice>;
+  readonly onRetry: (instanceId: ProviderInstanceId) => Promise<void>;
+}) {
+  const gt = useGT();
+  const [pending, setPending] = useState(false);
+  async function retry(instanceId: ProviderInstanceId) {
+    setPending(true);
+    try {
+      await onRetry(instanceId);
+    } catch (cause) {
+      toastManager.add({
+        type: "error",
+        title: m(msg("Could not retry on that account")),
+        description: thrownErrorMessage(cause, m) ?? m(msg("An error occurred.")),
+      });
+    }
+    setPending(false);
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
+      {accounts.map((account) => (
+        <InlineButton
+          key={account.instanceId}
+          touchTarget="padded"
+          disabled={pending}
+          onClick={() => void retry(account.instanceId)}
+        >
+          {gt("Retry on {account}", { account: account.label })}
+        </InlineButton>
+      ))}
+    </span>
+  );
 }
 
 function RecoveryActions({ runId, resetAt, recovery, snoozedUntil, onChange }: RecoveryProps) {

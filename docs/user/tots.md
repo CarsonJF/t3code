@@ -43,6 +43,10 @@ The stack watch and CI sitter templates set up a sweep with a focus for their jo
 
 When a thread a Tot started, or a scheduled task, stops on a provider's usage limit, T3 Code can run it again once on another model. List the models in order as `usageLimitFallbackModels` in the server's `settings.json`; a Tot's own `usageLimitFallbackModels` replaces that list for its work, and an empty list turns the fallback off for it. The thread says when this happened. Models in `usageLimitFallbackDeniedModels` are never used, and full `opencode-go/glm-5.3` is never used whatever that list says. A one-time task that still fails is turned off and shown as failed.
 
+An entry can name another account of the same provider: add the account as its own provider instance with its own login ([Claude](./providers-claude.md#separate-accounts-or-configurations), [Codex](./providers-codex.md#use-multiple-accounts)), then list it as `"claude@work:claude-opus-5-5"`, which means the instance `claudeAgent_work`, or as `{ "instanceId": "<instance id>", "model": "<model>" }`. When the same model is listed on another signed-in account of the provider that hit the limit, that entry is tried first, still as the one retry. Accounts are per machine: linked environments do not share them, and T3 Code never copies a login from one account's folder to another.
+
+When a run stops on a usage limit and the provider has another signed-in account here, the thread's usage-limit banner and its **Needs you** item offer **Retry on** that account. The run continues on the same model with that account, the thread says so, and later turns stay on it; pick another account in the model picker to move back.
+
 **Watch reports**, in a Tot's panel on its own thread, chooses what it hears about: **Launched threads only** (the default) reports threads the Tot started and the answer to anything it sends with a message, **Every watch** also reports threads it asked to watch, and **Off** stops reports without deleting the watches, so turning them back on resumes them.
 
 A report says whether the thread **Finished**, **Failed**, was **Stopped**, needs an answer, is **Waiting**, has **Stalled**, or is **Still working**, and quotes the end of its last message. A thread that ends its turn waiting on something it will act on, such as a pull request's CI checks, its review or merge, a check waiting for approval, a deploy it is monitoring, or a background task or subagent, reports **Waiting** with the reason, then its real outcome when the wait ends. Other background work left running, for example a dev server, reports when it ends, or once as Still working after 30 minutes.
@@ -104,7 +108,7 @@ The **Needs you** button (the inbox icon at the bottom of the sidebar) collects 
 
 Items are grouped by machine and by Tot. Approve or decline, pick an option or type an answer, or open the thread. Answers go through the same path as the thread itself. When a question has no options, a few **Suggested** replies appear as chips; they only fill in the answer, and nothing is sent until you press **Send answer**. Suggestions use the text generation model, or the `replySuggestionModelSelection` setting when it is set.
 
-**Snooze** hides an item for a while; **Dismiss** hides it until it goes away. Both are listed under **Snoozed and dismissed**, where **Bring back** shows them again. Approvals on a linked machine this app is not connected to open there instead.
+**Snooze** hides an item for a while; **Dismiss** hides it until it goes away. Both are listed under **Snoozed and dismissed**, where **Bring back** shows them again. Approvals and **Retry on** another account on a linked machine this app is not connected to open there instead.
 
 Tots can read the same list with `t3_needs_you`.
 
