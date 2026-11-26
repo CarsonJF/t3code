@@ -264,6 +264,7 @@ it.effect("takes a hub's reset for an unreset usage_limit, then refreshes the sn
         generateReviewGuide: () => Effect.die("unused"),
         generateTranscriptionPostProcessing: () => Effect.die("unused"),
         generateAvatarFigure: () => Effect.die("unused"),
+        generateMemoryTidy: () => Effect.die("unused"),
       },
       snapshot: {
         refreshUsage: Deferred.succeed(refreshed, undefined).pipe(Effect.asVoid),

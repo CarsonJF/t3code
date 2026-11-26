@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
 import { ScheduledTaskUpsertInput } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -21,7 +22,7 @@ import * as ScheduledTaskService from "./ScheduledTaskService.ts";
 
 const decodeInput = Schema.decodeUnknownEffect(ScheduledTaskUpsertInput);
 const NOW = Date.parse("2026-09-09T12:00:00.000Z");
-const iso = (ms: number) => new Date(ms).toISOString();
+const iso = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(ms));
 
 const baseInput = (title: string, extra: Record<string, unknown> = {}) =>
   decodeInput({
