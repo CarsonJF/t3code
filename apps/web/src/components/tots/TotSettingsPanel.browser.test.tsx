@@ -31,6 +31,7 @@ const tot: Tot = {
   name: "Yui",
   projectId: totProjectId,
   threadId: totThread,
+  modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
 };
 
 const state = vi.hoisted(() => ({
@@ -39,6 +40,8 @@ const state = vi.hoisted(() => ({
   projects: [] as ReadonlyArray<{ id: string; title: string }>,
   remove: vi.fn(),
   updateWork: vi.fn(),
+  upsert: vi.fn(),
+  providerDriver: "codex",
 }));
 
 function setup(tasks: ReadonlyArray<ScheduledTask>) {
@@ -50,6 +53,8 @@ function setup(tasks: ReadonlyArray<ScheduledTask>) {
   state.remove.mockReset().mockResolvedValue({ _tag: "Success", value: { id: "deleted" } });
   state.objectives = [];
   state.updateWork.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
+  state.upsert.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
+  state.providerDriver = "codex";
 }
 
 function scheduledTask(
@@ -170,11 +175,21 @@ vi.mock(import("../../state/server"), async (original) => {
   const actual = await original();
   const { Atom } = await import("effect/reactivity");
   const allowed = Atom.make(true);
+  const provider = (driver: string) => [{ instanceId: "codex", driver }];
+  const codexProviders = Atom.make(provider("codex"));
+  const otherProviders = Atom.make(provider("opencode"));
   return {
     ...actual,
     serverEnvironment: {
       ...actual.serverEnvironment,
       deleteScheduledTask: { ...actual.serverEnvironment.deleteScheduledTask, run: state.remove },
+      upsertScheduledTask: {
+        ...actual.serverEnvironment.upsertScheduledTask,
+        run: state.upsert,
+        permissionAtom: () => allowed,
+      },
+      providersValueAtom: (() =>
+        state.providerDriver === "codex" ? codexProviders : otherProviders) as never,
       setScheduledTaskEnabled: {
         ...actual.serverEnvironment.setScheduledTaskEnabled,
         permissionAtom: () => allowed,
@@ -202,6 +217,47 @@ function Panel() {
     </>
   );
 }
+
+const sweep = scheduledTask("look-around", {
+  title: "Look around",
+  prompt: "Check CI on the fork",
+  enabled: true,
+  readOnly: true,
+  projectId: totProjectId,
+  schedule: {
+    type: "interval",
+    everyMs: 4 * 3_600_000,
+    weekdays: [1, 2, 3, 4, 5],
+    activeHours: { from: "08:00", to: "20:00" },
+  },
+  createdByTotId: totId,
+  lastSweep: { at: "2026-11-25T13:00:00.000Z", status: "ok", findings: [] },
+});
+
+describe("TotSettingsPanel Look around", () => {
+  it("shows the last quiet sweep in its own section, not among the routines", async () => {
+    setup([sweep, recurring]);
+    await using screen = await render(<Panel />);
+
+    await expect.element(screen.getByText("Last sweep: ok")).toBeInTheDocument();
+    await expect.element(screen.getByText("Recurring check")).toBeInTheDocument();
+    await expect.element(screen.getByRole("switch", { name: "Look around for Yui" })).toBeChecked();
+  });
+
+  it("will not turn a sweep on for a provider that cannot keep it read-only", async () => {
+    setup([]);
+    state.providerDriver = "opencode";
+    await using screen = await render(<Panel />);
+
+    await expect
+      .element(screen.getByText(/cannot keep a sweep read-only, so it cannot be turned on/))
+      .toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("switch", { name: "Look around for Yui" }))
+      .toBeDisabled();
+    expect(state.upsert).not.toHaveBeenCalled();
+  });
+});
 
 describe("TotSettingsPanel scheduled tasks", () => {
   it("shows the tasks a Tot made in other projects, with where each lives", async () => {

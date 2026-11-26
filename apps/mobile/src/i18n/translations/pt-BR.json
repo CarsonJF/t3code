@@ -5736,5 +5736,14 @@
   "25bdaed653d3d2c3": "As rotinas sugeridas de um modelo são criadas em pausa.",
   "fc72809a59128290": "Em branco",
   "6eb33caef72a98a1": "Por volta das 03:30, um modelo barato remove duplicatas e condensa o {memory}. A cópia anterior fica em {backup}.",
-  "4b3694d90784a5be": "Organização noturna da memória"
+  "4b3694d90784a5be": "Organização noturna da memória",
+  "8b84d7ff5492dd87": "Nenhuma varredura ainda.",
+  "43ed1e8b6f94d851": "Última varredura: ok, {time}",
+  "bc1a710d973c4857": "A última varredura precisa de atenção: {findings}",
+  "94c00ff3d1c9116e": "Dar uma olhada",
+  "8f71572fc417cde3": "O provedor deste Tot não consegue manter a varredura somente leitura. Escolha um modelo Codex ou Claude.",
+  "e5cc1c6a5c6457cf": "Uma varredura somente leitura agendada; o servidor recusa qualquer alteração. Fica em silêncio quando está tudo bem. Altere a agenda e a pré-verificação no desktop ou na web.",
+  "cd79fe8de4c658c9": "Ative o Tot uma vez para configurar a varredura.",
+  "f4e1531edae9a180": "O que verificar, como o CI do fork ou a saúde dos contêineres",
+  "deeeb2f9f7e0f73e": "O que verificar"
 }

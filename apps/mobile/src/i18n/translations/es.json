@@ -5736,5 +5736,14 @@
   "25bdaed653d3d2c3": "Las rutinas sugeridas de una plantilla se crean en pausa.",
   "fc72809a59128290": "En blanco",
   "6eb33caef72a98a1": "Hacia las 03:30 un modelo económico elimina duplicados y condensa su {memory}. La copia anterior se guarda como {backup}.",
-  "4b3694d90784a5be": "Limpieza nocturna de memoria"
+  "4b3694d90784a5be": "Limpieza nocturna de memoria",
+  "8b84d7ff5492dd87": "Aún no hay revisiones.",
+  "43ed1e8b6f94d851": "Última revisión: ok, {time}",
+  "bc1a710d973c4857": "La última revisión necesita atención: {findings}",
+  "94c00ff3d1c9116e": "Echar un vistazo",
+  "8f71572fc417cde3": "El proveedor de este Tot no puede mantener la revisión en solo lectura. Elige un modelo de Codex o Claude.",
+  "e5cc1c6a5c6457cf": "Una revisión de solo lectura programada; el servidor rechaza cualquier cambio. No dice nada si todo va bien. Cambia su programación y comprobación previa en escritorio o web.",
+  "cd79fe8de4c658c9": "Activa el Tot una vez para configurar su revisión.",
+  "f4e1531edae9a180": "Qué revisar, como el CI del fork o el estado de los contenedores",
+  "deeeb2f9f7e0f73e": "Qué revisar"
 }
