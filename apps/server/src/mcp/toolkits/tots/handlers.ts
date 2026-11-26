@@ -3,6 +3,7 @@ import {
   HOME_TOT_ID,
   OrchestratorMcpFailure,
   type Tot,
+  type TotObjective,
   type TotThemePatch,
 } from "@t3tools/contracts";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
@@ -18,6 +19,8 @@ import { defaultWebhookWakePrompt } from "../../../scheduledTasks/webhookListene
 import * as NeedsYou from "../../../needsYou/NeedsYou.ts";
 import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
+import * as TotWorkService from "../../../tots/TotWorkService.ts";
+import { workListOrder } from "../../../tots/totWork.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { readTotCaller, requireTotChange } from "../../totCaller.ts";
@@ -65,7 +68,82 @@ const instructionsCaller = Effect.fn("mcp.totInstructionsCaller")(function* (wri
   return Option.none<Tot["id"]>();
 });
 
+/** Most objectives a listing returns, open ones first. */
+const WORK_LIST_LIMIT = 20;
+
+/** Whether a person started the calling Tot's current run, which is what may lift a retry cap. */
+const runStartedByPerson = Effect.fn("mcp.runStartedByPerson")(function* () {
+  const { scope, threads } = yield* readCaller();
+  if (scope.thread === undefined) return false;
+  const threadId = scope.thread.threadId;
+  const shell = yield* threads.getThreadShell(threadId).pipe(Effect.orElseSucceed(() => null));
+  const runId = shell?.activeRunId ?? shell?.latestRunId;
+  if (runId == null) return false;
+  const { runs, messages } = yield* threads
+    .getThreadRecords(threadId, ["runs", "messages"], {
+      messageRoles: ["user"],
+      messageRunIds: [runId],
+    })
+    .pipe(Effect.orElseSucceed(() => ({ runs: [], messages: [] })));
+  const startedBy = runs.find((run) => run.id === runId)?.userMessageId;
+  return messages.some((message) => message.id === startedBy && message.createdBy === "user");
+});
+
 export const layer = McpToolAccess.toLayer(TotToolkit, {
+  t3_tot_work: McpToolAccess.reads((input) =>
+    Effect.gen(function* () {
+      const action = input.action ?? "list";
+      const tot =
+        action === "list" ? yield* readTotCaller() : Option.some(yield* requireTotChange());
+      if (Option.isNone(tot) || tot.value.via !== "local")
+        return yield* new OrchestratorMcpFailure({
+          code: "capability_denied",
+          message: "Only a Tot has a work list, and it lives with the Tot's own environment.",
+        });
+      const totId = tot.value.totId;
+      const work = Option.getOrUndefined(
+        yield* Effect.serviceOption(TotWorkService.TotWorkService),
+      );
+      if (work === undefined)
+        return yield* new OrchestratorMcpFailure({
+          code: "orchestration_error",
+          message: "This server keeps no Tot work list.",
+        });
+      const invalid = (error: { readonly message: string }) =>
+        new OrchestratorMcpFailure({ code: "invalid_request", message: error.message });
+      if (action !== "list") {
+        if (input.objectiveId === undefined)
+          return yield* new OrchestratorMcpFailure({
+            code: "invalid_request",
+            message: "This action needs `objectiveId`.",
+          });
+        const objectiveId = input.objectiveId;
+        if (action === "reset") {
+          const current = (yield* work.list(totId).pipe(Effect.mapError(invalid))).objectives.find(
+            (objective) => objective.id === objectiveId,
+          );
+          const capped =
+            current !== undefined &&
+            current.retryCap > 0 &&
+            current.failedAttempts >= current.retryCap;
+          if (capped && !(yield* runStartedByPerson()))
+            return yield* new OrchestratorMcpFailure({
+              code: "capability_denied",
+              message:
+                "This objective hit its retry cap, so only a person can reset it: ask the user. They can reset it in your Work panel, or tell you to.",
+            });
+        }
+        yield* work.update({ id: totId, objectiveId, action }).pipe(Effect.mapError(invalid));
+      }
+      const scope = yield* McpInvocationContext.McpInvocationContext;
+      const { objectives } = yield* work.list(totId).pipe(Effect.mapError(invalid));
+      const shown =
+        action === "list"
+          ? workListOrder(objectives).slice(0, WORK_LIST_LIMIT)
+          : objectives.filter((objective) => objective.id === input.objectiveId);
+      return { objectives: shown.map((objective) => workSummary(scope, objective)) };
+    }),
+  ),
   t3_tot_list: McpToolAccess.reads(() =>
     Effect.gen(function* () {
       yield* readCaller();
@@ -432,4 +510,24 @@ export const layer = McpToolAccess.toLayer(TotToolkit, {
       };
     }),
   ),
+});
+
+const workSummary = (scope: McpInvocationContext.McpInvocationScope, objective: TotObjective) => ({
+  id: objective.id,
+  title: objective.title,
+  status: objective.status,
+  attempts: objective.attempts.length,
+  failedAttempts: objective.failedAttempts,
+  threads: [
+    ...new Set(
+      objective.attempts.map((attempt) =>
+        McpInvocationContext.threadLinkFor(
+          { ...scope, environmentId: attempt.environmentId },
+          attempt.threadId,
+        ),
+      ),
+    ),
+  ].slice(-3),
+  outcome: objective.attempts.findLast((attempt) => attempt.outcome !== null)?.outcome ?? null,
+  updatedAt: objective.updatedAt,
 });

@@ -33,6 +33,15 @@ Watches live on the Tot and are evaluated on the host ([`TotWatchService`](../..
 - In a thread a Tot launched, a person's messages (`message.updated` with `createdBy: "user"`, or a remote follower's `user_message` items) and the outcomes of runs a person started are held as a note and appended under that Tot's next report line for the thread. They never queue a report themselves, so steering cannot wake the Tot.
 - A Tot's own thread compacts before its prompt cache expires unless the Tot or `totIdleCompaction` opts out, because watch reports, schedules and MCP sends never pass the web composer where `onReturn` runs. Before the `/compact`, `IdleCompactionService` sends the Tot an `idle-compact:save:` turn to write its working state to memory; that turn refreshes the cache, so its end compacts at once.
 
+## Work list
+
+[`TotWorkService`](../../apps/server/src/tots/TotWorkService.ts) keeps each Tot's objectives and their attempts in SQLite (`tot_objectives`, `tot_objective_attempts`), because they must outlive a restart and a fresh start, and settings are not the place for growing history.
+
+- An attempt starts when `t3_thread_launch`, `delegate_task` or a run-starting `t3_thread_send` passes `objective`. The cap is checked before anything starts: for a linked environment it runs in `afterForwarding`'s `before`, and `objective` is stripped from the forwarded call, since the work list lives with the calling Tot.
+- Attempt status is level-triggered from the watcher's own look at the thread (`attemptStatusOf`), not from reports, so it moves whatever the Tot's report mode and nothing the worker says changes it. Local threads, delegate children included, feed it from every `lookNow`; linked threads only through a Tot's follower, so a delegate on a linked environment stays Working until the Tot closes it.
+- An attempt ignores looks at an earlier run until its own run is seen, then follows later runs (restart continuations, background wakes). `tracks` keeps an in-memory set of threads with open attempts, so a look elsewhere costs nothing.
+- Objective status is derived on read. The cap counts failed and stopped attempts since `reset_at`. A Tot may reset a capped objective only from a run a person started (`runStartedByPerson`), so a Tot cannot lift its own breaker.
+
 ## Group chats
 
 A group chat is a host-owned record in `ServerSettings.groupChats` (written only by [`GroupChatService`](../../apps/server/src/tots/GroupChatService.ts)) and one room thread, `tot-room:<id>`.

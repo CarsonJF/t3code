@@ -13308,5 +13308,39 @@
   "6e96ce482c3d701e": "Verworfen",
   "9bd31b8911a11607": "Zurückholen",
   "338ce4267d4f180c": "Braucht dich ({count})",
-  "d25661576338fcf0": "Braucht dich"
+  "d25661576338fcf0": "Braucht dich",
+  "16b243a1f0fff69b": "Geplant",
+  "a41f47e1573c46f2": "In Arbeit",
+  "141121e1748a73d3": "Wartet",
+  "8037a010afbb588a": "Braucht dich",
+  "6774ad492caae447": "Erledigt",
+  "eaa0d34f3c28c3bc": "Fehlgeschlagen",
+  "1cef2a8c21c52f92": "Abgebrochen",
+  "b1b9cf874de3c93a": "{title} konnte nicht aktualisiert werden",
+  "7b5e2fca586f73a8": "{count, plural, one {{count} Versuch} other {{count} Versuche}}",
+  "5b6dec876f2e4f2e": "{failed} fehlgeschlagen, das Limit ist {cap}",
+  "2713e2918ae87fcc": "Arbeit",
+  "e4fcce4a72cd2887": [
+    "Ziele, für die ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Arbeit gestartet hat. Der Status folgt den Threads."
+  ],
+  "af70fa60e76b9b5f": "Arbeit konnte nicht geladen werden:",
+  "5f0519a313d37c8d": "Arbeit wird geladen…",
+  "00d00206c7abd3c0": [
+    "Noch nichts. Arbeit, die ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " mit einem Ziel startet, erscheint hier."
+  ],
+  "182049c015041be2": "Wieder öffnen",
+  "b58e74f61e48ef30": "Versuche zurücksetzen",
+  "d196bbded33998b4": "Als erledigt markieren"
 }

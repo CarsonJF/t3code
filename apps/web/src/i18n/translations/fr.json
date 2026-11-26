@@ -13308,5 +13308,39 @@
   "6e96ce482c3d701e": "Ignoré",
   "9bd31b8911a11607": "Rétablir",
   "338ce4267d4f180c": "Vous attend ({count})",
-  "d25661576338fcf0": "Vous attend"
+  "d25661576338fcf0": "Vous attend",
+  "16b243a1f0fff69b": "Prévu",
+  "a41f47e1573c46f2": "En cours",
+  "141121e1748a73d3": "En attente",
+  "8037a010afbb588a": "Vous attend",
+  "6774ad492caae447": "Terminé",
+  "eaa0d34f3c28c3bc": "Échec",
+  "1cef2a8c21c52f92": "Annulé",
+  "b1b9cf874de3c93a": "Impossible de mettre à jour {title}",
+  "7b5e2fca586f73a8": "{count, plural, one {{count} tentative} other {{count} tentatives}}",
+  "5b6dec876f2e4f2e": "{failed} en échec, la limite est de {cap}",
+  "2713e2918ae87fcc": "Travail",
+  "e4fcce4a72cd2887": [
+    "Objectifs pour lesquels ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " a lancé du travail. Le statut suit ses fils."
+  ],
+  "af70fa60e76b9b5f": "Impossible de charger le travail :",
+  "5f0519a313d37c8d": "Chargement du travail…",
+  "00d00206c7abd3c0": [
+    "Rien pour l’instant. Le travail que ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " lance avec un objectif apparaît ici."
+  ],
+  "182049c015041be2": "Rouvrir",
+  "b58e74f61e48ef30": "Réinitialiser les tentatives",
+  "d196bbded33998b4": "Marquer comme terminé"
 }

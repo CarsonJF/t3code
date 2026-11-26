@@ -1687,6 +1687,10 @@ export function createServerEnvironmentAtoms<R, E>(
         return Atom.make((get) => snapshot(get)?.definition?.revision);
       },
     }),
+    totWorkLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:tots:work-live",
+      tag: WS_METHODS.totsWorkSubscribe,
+    }),
     scheduledTasksLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:server:scheduled-tasks:live",
       tag: WS_METHODS.scheduledTasksSubscribe,
@@ -2095,6 +2099,12 @@ export function createServerEnvironmentAtoms<R, E>(
     designTotAvatar: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:tots:design-avatar",
       tag: WS_METHODS.totsDesignAvatar,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
+    updateTotWork: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:tots:work-update",
+      tag: WS_METHODS.totsWorkUpdate,
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
