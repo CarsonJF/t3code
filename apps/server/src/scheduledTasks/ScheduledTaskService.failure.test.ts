@@ -126,6 +126,7 @@ const harness = (input: {
                   input.retry === null ? null : { messageId: fallbackMessageId, model: flash },
                 ),
               ),
+            retryOnAccount: () => Effect.die("unused"),
           }),
           Layer.succeed(ScheduledRunAlerts.ScheduledRunAlerts, {
             notifyFailure: (failure) =>

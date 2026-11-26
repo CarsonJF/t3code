@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema";
 import {
   EnvironmentId,
   IsoDateTime,
+  RunId,
   RuntimeRequestId,
   ScheduledTaskId,
   ThreadId,
@@ -10,6 +11,7 @@ import {
 } from "./baseSchemas.ts";
 import { OrchestrationV2UserInputQuestion } from "./orchestrationV2.ts";
 import { ProviderRequestKind, ProviderUserInputAnswers } from "./providerPolicy.ts";
+import { ProviderAccountChoice } from "./providerUsageLimits.ts";
 import { TotId } from "./tots.ts";
 
 export const NeedsYouItemKind = Schema.Literals([
@@ -40,6 +42,10 @@ export const NeedsYouItem = Schema.Struct({
   /** Absent when the question can only be answered in its thread, such as a secret. */
   questions: Schema.optional(Schema.Array(OrchestrationV2UserInputQuestion)),
   scheduledTaskId: Schema.optional(ScheduledTaskId),
+  /** The failed run, on a run that stopped on a usage limit. */
+  runId: Schema.optional(RunId),
+  /** Other accounts of that run's provider it can be retried on, in this environment. */
+  retryAccounts: Schema.optional(Schema.Array(ProviderAccountChoice)),
   /** Present only on hidden items: when a snooze ends, or null when dismissed. */
   hiddenUntil: Schema.optional(Schema.NullOr(IsoDateTime)),
   /** A thread link agents can pass on; clients build their own. */

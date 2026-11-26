@@ -24,6 +24,7 @@ import {
   MessageCircleQuestionIcon,
   ShieldQuestionIcon,
   LightbulbIcon,
+  RotateCcwIcon,
   XIcon,
 } from "lucide-react";
 import { useState } from "react";
@@ -259,6 +260,9 @@ function NeedsYouRow(props: {
           </T>
         </p>
       )}
+      {item.retryAccounts !== undefined && item.retryAccounts.length > 0 ? (
+        <RetryOnAccount item={item} accounts={item.retryAccounts} machine={machine} />
+      ) : null}
       <div className="flex flex-wrap items-center gap-1">
         <Button size="compact" variant="ghost-muted" onClick={() => open(item)}>
           <ArrowUpRightIcon />
@@ -342,6 +346,55 @@ function ApprovalActions(props: {
       >
         <T>Decline</T>
       </Button>
+    </div>
+  );
+}
+
+function RetryOnAccount(props: {
+  readonly item: NeedsYouItem;
+  readonly accounts: NonNullable<NeedsYouItem["retryAccounts"]>;
+  readonly machine: NeedsYouMachine;
+}) {
+  const gt = useGT();
+  const retry = useAtomCommand(serverEnvironment.retryOnAccount, { reportFailure: false });
+  const [pending, setPending] = useState(false);
+  const { item, machine } = props;
+  if (!machine.connected) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        <T>
+          Connect this app to <Var>{machine.label}</Var> to retry on another account here, or open
+          the thread there.
+        </T>
+      </p>
+    );
+  }
+  const retryOn = async (instanceId: (typeof props.accounts)[number]["instanceId"]) => {
+    if (item.threadId === null || item.runId === undefined) return;
+    setPending(true);
+    const result = await retry({
+      environmentId: machine.environmentId,
+      input: { threadId: item.threadId, runId: item.runId, instanceId },
+    });
+    setPending(false);
+    reportResult(gt("Could not retry on that account"), result);
+  };
+  return (
+    <div className="flex flex-wrap gap-2">
+      {props.accounts.map((account) => (
+        <Button
+          key={account.instanceId}
+          size="compact"
+          variant="outline"
+          disabled={pending}
+          onClick={() => void retryOn(account.instanceId)}
+        >
+          <RotateCcwIcon />
+          <T>
+            Retry on <Var>{account.label}</Var>
+          </T>
+        </Button>
+      ))}
     </div>
   );
 }

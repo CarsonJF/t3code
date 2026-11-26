@@ -101,6 +101,7 @@ const harness = (output: unknown) =>
           }),
           Layer.succeed(UsageLimitFallback.UsageLimitFallback, {
             retry: () => Effect.succeed(null),
+            retryOnAccount: () => Effect.die("unused"),
           }),
           Layer.succeed(ScheduledRunAlerts.ScheduledRunAlerts, {
             notifyFailure: (failure) => Ref.update(failures, (all) => [...all, failure]),
