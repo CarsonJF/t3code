@@ -5,6 +5,7 @@ import * as AvatarFigureDesigner from "./tots/AvatarFigureDesigner.ts";
 import * as NeedsYou from "./needsYou/NeedsYou.ts";
 import * as TotService from "./tots/TotService.ts";
 import * as TotWatchService from "./tots/TotWatchService.ts";
+import * as TotWorkService from "./tots/TotWorkService.ts";
 import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
 import * as Random from "effect/Random";
 import * as EnvironmentKeys from "./cloud/environmentKeys.ts";
@@ -993,7 +994,7 @@ const layerMakeRoutes = Layer.mergeAll(
       GroupChatService.layer,
       TotMemoryTidyJob.layer,
       NeedsYou.layer,
-    ).pipe(Layer.provideMerge(TotService.layer)),
+    ).pipe(Layer.provideMerge(TotWorkService.layer), Layer.provideMerge(TotService.layer)),
   ),
   Layer.provide(AvatarFigureDesigner.layer),
   // Links to other environments, shared by clients (WebSocket) and agents (/mcp).

@@ -13277,5 +13277,39 @@
   "6e96ce482c3d701e": "Descartado",
   "9bd31b8911a11607": "Recuperar",
   "338ce4267d4f180c": "Te necesita ({count})",
-  "d25661576338fcf0": "Te necesita"
+  "d25661576338fcf0": "Te necesita",
+  "16b243a1f0fff69b": "Planificado",
+  "a41f47e1573c46f2": "En curso",
+  "141121e1748a73d3": "En espera",
+  "8037a010afbb588a": "Te necesita",
+  "6774ad492caae447": "Hecho",
+  "eaa0d34f3c28c3bc": "Falló",
+  "1cef2a8c21c52f92": "Cancelado",
+  "b1b9cf874de3c93a": "No se pudo actualizar {title}",
+  "7b5e2fca586f73a8": "{count, plural, one {{count} intento} other {{count} intentos}}",
+  "5b6dec876f2e4f2e": "{failed} fallidos, el límite es {cap}",
+  "2713e2918ae87fcc": "Trabajo",
+  "e4fcce4a72cd2887": [
+    "Objetivos para los que ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " inició trabajo. El estado sigue a sus hilos."
+  ],
+  "af70fa60e76b9b5f": "No se pudo cargar el trabajo:",
+  "5f0519a313d37c8d": "Cargando trabajo…",
+  "00d00206c7abd3c0": [
+    "Nada todavía. Aquí aparece el trabajo que ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " inicia con un objetivo."
+  ],
+  "182049c015041be2": "Reabrir",
+  "b58e74f61e48ef30": "Restablecer intentos",
+  "d196bbded33998b4": "Marcar como hecho"
 }

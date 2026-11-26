@@ -12,6 +12,8 @@ import {
   Tot,
   TotAvatar,
   TotId,
+  TotObjectiveId,
+  TotObjectiveStatus,
   TotScope,
   TrimmedNonEmptyString,
 } from "@t3tools/contracts";
@@ -236,6 +238,31 @@ const NeedsYouTool = Tool.make("t3_needs_you", {
 })
   .annotate(Tool.Readonly, true)
   .annotate(Tool.Destructive, false);
+const TotWorkTool = Tool.make("t3_tot_work", {
+  ...shared,
+  description:
+    "As a Tot, list the objectives you passed as `objective`, with status, attempts and outcome. Check before relaunching. `done`/`cancelled` closes one; `reset` clears failed attempts.",
+  parameters: Schema.Struct({
+    action: Schema.optional(Schema.Literals(["list", "done", "cancelled", "reset"])).annotate({
+      description: "Default: list.",
+    }),
+    objectiveId: Schema.optional(TotObjectiveId),
+  }),
+  success: Schema.Struct({
+    objectives: Schema.Array(
+      Schema.Struct({
+        id: TotObjectiveId,
+        title: Schema.String,
+        status: TotObjectiveStatus,
+        attempts: Schema.Number,
+        failedAttempts: Schema.Number,
+        threads: Schema.Array(Schema.String),
+        outcome: Schema.NullOr(Schema.String),
+        updatedAt: Schema.String,
+      }),
+    ),
+  }),
+}).annotate(Tool.Destructive, false);
 
 export const TotToolkit = Toolkit.make(
   TotListTool,
@@ -248,4 +275,5 @@ export const TotToolkit = Toolkit.make(
   TotCreateTool,
   TotInstructionsTool,
   NeedsYouTool,
+  TotWorkTool,
 );

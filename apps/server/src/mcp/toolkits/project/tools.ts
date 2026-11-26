@@ -22,6 +22,8 @@ import {
   OrchestratorMcpFailure,
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
+  TotObjectiveId,
+  TotObjectiveRefInput,
 } from "@t3tools/contracts";
 import * as FileSystem from "effect/FileSystem";
 import * as DocumentText from "../../../provider/DocumentText.ts";
@@ -166,6 +168,7 @@ const ThreadLaunchTool = Tool.make("t3_thread_launch", {
       }),
     ),
     clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
+    objective: Schema.optional(TotObjectiveRefInput),
     /** Set by a linked environment launching its agent's delegated task here; ignored otherwise. */
     delegatedFrom: Schema.optional(OrchestrationV2DelegatedFrom),
     /** Set by a linked environment whose workflow run this thread is a step of; ignored otherwise. */
@@ -178,6 +181,7 @@ const ThreadLaunchTool = Tool.make("t3_thread_launch", {
     modelSelection: ModelSelection,
     runId: Schema.NullOr(RunId),
     status: Schema.NullOr(OrchestrationV2RunStatus),
+    objectiveId: Schema.optional(TotObjectiveId),
   }),
   dependencies: [
     ...shared.dependencies,
