@@ -153,7 +153,25 @@ export interface MemoryTidyGenerationInput {
   modelSelection: ModelSelection;
 }
 
+/** A prompt holding one or more questions; the answer suggests short replies to each. */
+export interface ReplySuggestionGenerationInput {
+  cwd: string;
+  prompt: string;
+  modelSelection: ModelSelection;
+}
+
+export interface ReplySuggestions {
+  readonly suggestions: ReadonlyArray<{
+    readonly questionId: string;
+    readonly answers: ReadonlyArray<string>;
+  }>;
+}
+
 export interface ProviderTextGeneration {
+  readonly generateReplySuggestions: (
+    input: ReplySuggestionGenerationInput,
+  ) => Effect.Effect<ReplySuggestions, TextGenerationError>;
+
   readonly generateAvatarFigure: (
     input: AvatarFigureGenerationInput,
   ) => Effect.Effect<AvatarFigureDraft, TextGenerationError>;

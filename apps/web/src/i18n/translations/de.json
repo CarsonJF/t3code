@@ -13219,5 +13219,50 @@
   "7dcbf66bc26f10ae": "Nächtliches Aufräumen des Gedächtnisses für {name}",
   "0c9b03a0a40b461f": "Wird rückgängig gemacht…",
   "0c7b8cd7ce14bb5f": "Letztes Aufräumen rückgängig machen",
-  "81a0dfe96d155888": "Nächtliches Aufräumen des Gedächtnisses"
+  "81a0dfe96d155888": "Nächtliches Aufräumen des Gedächtnisses",
+  "6a1390b1f63ef634": "Konnte nicht ausgeblendet werden",
+  "cd3bf273c74438c2": "Freigabe",
+  "5c8772e727c04218": "Frage",
+  "71a0d291605ff58d": "Fehlgeschlagener Lauf",
+  "85c9954de7b4cee7": "Gestoppter Lauf",
+  "3ffa3898db62ec7e": "Geplanter Lauf fehlgeschlagen",
+  "93e6e9252bdccfa1": "Die Entscheidung konnte nicht gesendet werden",
+  "4e430d5ea01c249b": "Die Antwort konnte nicht gesendet werden",
+  "070babcc726100d9": "Antwort eingeben",
+  "39fd01a80e88ee2a": "Konnte nicht zurückgeholt werden",
+  "1b7c524fccf06537": "Braucht dich",
+  "7c5a3071fb7d9f14": "Nichts braucht dich",
+  "2843b91a4c4a5e98": "Freigaben, Fragen und fehlgeschlagene Läufe aller Tots und verknüpften Rechner erscheinen hier.",
+  "2df485ee15283e6b": "Dieser Rechner konnte nicht gelesen werden:",
+  "5eb5603f5b29900d": "Threads",
+  "df1fb90eb9a77fbf": "Geplante Aufgaben",
+  "39b4070d872d2028": "Später erinnern",
+  "a30ccddf9846901f": "Für eine Stunde",
+  "05c315b2aeaf837c": "Für vier Stunden",
+  "2ac68b6da5c86403": "Bis morgen früh",
+  "3a364fe01dd16636": [
+    "Verbinde diese App mit ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ", um hier freizugeben, oder öffne den Thread dort."
+  ],
+  "77ada50f836c7878": "Vorschläge",
+  "cfea388d49c84ed1": "Antworten werden überlegt…",
+  "5536b6ffc0e02e95": "Antwort senden",
+  "5bd55126073a21cb": [
+    "Zurückgestellt und verworfen (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ")"
+  ],
+  "6e96ce482c3d701e": "Verworfen",
+  "9bd31b8911a11607": "Zurückholen",
+  "338ce4267d4f180c": "Braucht dich ({count})",
+  "d25661576338fcf0": "Braucht dich"
 }
