@@ -33,6 +33,8 @@ import * as Schema from "effect/Schema";
 import { HttpServerRequest } from "effect/http";
 
 import { hostedAppUrlConfig } from "../cloud/publicConfig.ts";
+import * as CompanionGrants from "../companions/CompanionGrants.ts";
+import { isSameMachineRequest } from "../companions/sameMachine.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpHttpServer from "../mcp/McpHttpServer.ts";
@@ -626,31 +628,56 @@ export const layerMcpClientAuthenticator = Layer.effect(
         ),
       ),
     );
+    const companionGrants = Option.getOrUndefined(
+      yield* Effect.serviceOption(CompanionGrants.CompanionGrants),
+    );
+    // A companion's grant is good only from this machine; elsewhere it is no credential at all.
+    const companionOf = (sessionId: string, request: HttpServerRequest.HttpServerRequest) =>
+      companionGrants === undefined
+        ? Effect.succeed({ companionId: undefined, allowed: true })
+        : companionGrants.companionForSession(sessionId).pipe(
+            Effect.map((companionId) => ({
+              companionId,
+              allowed: companionId === undefined || isSameMachineRequest(request),
+            })),
+          );
     return McpHttpServer.McpClientAuthenticator.of({
       authenticate: Effect.fn("McpHttpServer.McpClientAuthenticator.authenticate")(
         function (request) {
           return environmentAuth.authenticateMcpClient(request).pipe(
             Effect.flatMap((client) =>
+              companionOf(client.sessionId, request).pipe(
+                Effect.map((companion) => ({ client, companion })),
+              ),
+            ),
+            Effect.flatMap(({ client, companion }) =>
               Clock.currentTimeMillis.pipe(
-                Effect.map((issuedAt): McpInvocationContext.McpInvocationScope => ({
-                  environmentId,
-                  requestNamespace: `client:${client.sessionId}`,
-                  thread: undefined,
-                  client: {
-                    sessionId: client.sessionId,
-                    label: client.label,
-                    access: client.access,
-                    linked: client.peerLink,
-                    linkExpiresAt: client.linkExpiresAt,
-                    ...(client.peerLink ? {} : { hostedAppUrl }),
-                  },
-                  capabilities: new Set<McpInvocationContext.McpCapability>([
-                    "orchestration",
-                    "worktree",
-                    "pull-requests",
-                  ]),
-                  issuedAt,
-                })),
+                Effect.map((issuedAt): McpInvocationContext.McpInvocationScope | undefined =>
+                  !companion.allowed
+                    ? undefined
+                    : {
+                        environmentId,
+                        requestNamespace: `client:${client.sessionId}`,
+                        thread: undefined,
+                        client: {
+                          sessionId: client.sessionId,
+                          label: client.label,
+                          access: client.access,
+                          linked: client.peerLink,
+                          linkExpiresAt: client.linkExpiresAt,
+                          ...(client.peerLink ? {} : { hostedAppUrl }),
+                          ...(companion.companionId === undefined
+                            ? {}
+                            : { companionId: companion.companionId }),
+                        },
+                        capabilities: new Set<McpInvocationContext.McpCapability>([
+                          "orchestration",
+                          "worktree",
+                          "pull-requests",
+                        ]),
+                        issuedAt,
+                      },
+                ),
               ),
             ),
             Effect.catch((error) =>

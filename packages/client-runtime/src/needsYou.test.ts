@@ -29,6 +29,52 @@ const env = (
 });
 
 describe("mergeNeedsYou", () => {
+  it("gives each companion its own section, apart from Tots and threads", () => {
+    const companion = (key: string, companionId: string, name: string) =>
+      item(key, {
+        kind: "companion",
+        threadId: null,
+        companion: {
+          companionId,
+          name,
+          needsYouId: key,
+          channel: "main",
+          kind: "approval",
+          options: [],
+        },
+      });
+    const merged = mergeNeedsYou(
+      [
+        {
+          sourceEnvironmentId: asuna,
+          inbox: {
+            environments: [
+              env(asuna, [
+                item("t1"),
+                companion("c1", "demo", "Demo"),
+                companion("c2", "demo", "Demo"),
+                companion("c3", "other", "Another"),
+              ]),
+            ],
+          },
+        },
+      ],
+      new Set([asuna]),
+    );
+    expect(merged.count).toBe(4);
+    expect(
+      merged.machines[0]?.sections.map((section) => [
+        section.totName,
+        section.companionId,
+        section.items.map((entry) => entry.key),
+      ]),
+    ).toEqual([
+      ["Another", "other", ["c3"]],
+      ["Demo", "demo", ["c1", "c2"]],
+      [null, null, ["t1"]],
+    ]);
+  });
+
   it("keeps a connected environment's own list over how a linked one saw it", () => {
     const merged = mergeNeedsYou(
       [

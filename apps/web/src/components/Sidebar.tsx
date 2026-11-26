@@ -3,6 +3,7 @@ import { msg, T, useGT, useMessages } from "gt-react";
 import { m } from "../i18n/messages";
 import { attachSidebarTree } from "../lib/sidebarTree";
 import { TotsSidebarSection } from "./tots/TotsSidebarSection";
+import { ExternalCompanionsSidebarSection } from "./companions/ExternalCompanionsSidebarSection";
 import { useTots } from "../state/tots";
 import { type EnvironmentId, type ScopedProjectRef } from "@t3tools/contracts";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
@@ -3413,6 +3414,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               onClearSearch={clearThreadSearch}
             />
             <TotsSidebarSection />
+            <ExternalCompanionsSidebarSection />
           </SidebarGroup>
         }
       >

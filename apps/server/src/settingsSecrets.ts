@@ -4,6 +4,7 @@ import {
   CloudSpeechCredentials,
   CodexSettings,
   EasDeviceHostConfig,
+  ExternalCompanionConfig,
   type ProviderInstanceConfig,
   type ProviderInstanceId,
   type ServerSettings,
@@ -54,6 +55,7 @@ const textGeneratorSecretFields = secretSettingsFields(TextGeneratorConfig);
 const voiceSecretFields = secretSettingsFields(CloudSpeechCredentials);
 const easDeviceHostSecretFields = secretSettingsFields(EasDeviceHostConfig);
 const simlockDeviceHostSecretFields = secretSettingsFields(SimlockDeviceHostConfig);
+const externalCompanionSecretFields = secretSettingsFields(ExternalCompanionConfig);
 const encode = (value: string) => Buffer.from(value, "utf8").toString("base64url");
 
 export interface SettingsSecret {
@@ -250,6 +252,17 @@ function mapSecretFieldGroups(
       ) as SimlockDeviceHostConfig,
   );
 
+  const externalCompanions = settings.externalCompanions.map(
+    (companion) =>
+      mapFields(
+        companion,
+        externalCompanionSecretFields,
+        (field, serverHost) =>
+          `external-companion-${encode(companion.id)}-${encode(field)}` +
+          (serverHost === null ? "" : `-${encode(serverHost)}`),
+      ) as ExternalCompanionConfig,
+  );
+
   return {
     ...settings,
     cloudSpeechCredentials: mapFields(
@@ -263,6 +276,7 @@ function mapSecretFieldGroups(
     textGenerators,
     easDeviceHosts,
     simlockDeviceHosts,
+    externalCompanions,
   };
 }
 
@@ -338,6 +352,9 @@ export function withoutRedirectedSecrets(
       : entry;
   };
   const simlockHosts = new Map(current.simlockDeviceHosts.map((host) => [host.id, host]));
+  const companions = new Map(
+    current.externalCompanions.map((companion) => [companion.id, companion]),
+  );
   return {
     ...next,
     providerInstances: Object.fromEntries(
@@ -374,6 +391,9 @@ export function withoutRedirectedSecrets(
     ) as ServerSettings["textGenerators"],
     simlockDeviceHosts: next.simlockDeviceHosts.map((host) =>
       rebound(host, simlockHosts.get(host.id), "agentToken", "gatewayUrl"),
+    ),
+    externalCompanions: next.externalCompanions.map((companion) =>
+      rebound(companion, companions.get(companion.id), "token", "baseUrl"),
     ),
   };
 }
