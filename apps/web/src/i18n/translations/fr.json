@@ -13459,5 +13459,24 @@
   "ea0097edaa06817b": "En semaine uniquement",
   "e7e9762bbb8514c4": "Vérification préalable (facultative)",
   "4e4eca8f36ff7d92": "Une commande shell lancée d'abord dans le dossier du Tot ; un code de sortie non nul saute cette ronde.",
-  "7ada5fe78b59c87a": "Faire un tour a trouvé quelque chose"
+  "7ada5fe78b59c87a": "Faire un tour a trouvé quelque chose",
+  "a59436c0eebf13af": "Impossible de réessayer avec ce compte",
+  "de52f30cce176b8c": "Réessayer avec {account}",
+  "13629f8216661033": [
+    "Connectez cette app à ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " pour réessayer ici avec un autre compte, ou ouvrez le fil là-bas."
+  ],
+  "1012470564ed461f": [
+    "Réessayer avec ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ]
 }

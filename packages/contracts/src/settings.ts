@@ -36,7 +36,7 @@ import {
   DEFAULT_TEXT_GENERATION_REASONING_EFFORT,
   ProviderOptionSelections,
 } from "./model.ts";
-import { ModelSelection } from "./modelSelection.ts";
+import { ModelSelection, UsageLimitFallbackModel } from "./modelSelection.ts";
 import { ProjectScript, type ProjectMutation } from "./project.ts";
 import { ThreadGroupOp, ThreadGroupsState } from "./threadGroups.ts";
 import { GroupChatsSetting } from "./groupChats.ts";
@@ -1598,7 +1598,7 @@ export const ServerSettings = Schema.Struct({
    * Tried in order, once, when scheduled or Tot-launched work fails on a usage limit. A Tot's own
    * list replaces this one. Denied models are skipped.
    */
-  usageLimitFallbackModels: Schema.Array(ModelSelection).pipe(
+  usageLimitFallbackModels: Schema.Array(UsageLimitFallbackModel).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   /** Model ids never used as a usage-limit fallback, on top of `ALWAYS_DENIED_FALLBACK_MODELS`. */
@@ -2097,7 +2097,7 @@ export const ServerSettingsPatch = Schema.Struct({
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   autoResumeLimitedThreads: Schema.optionalKey(Schema.Boolean),
   snoozeLimitedThreads: Schema.optionalKey(Schema.Boolean),
-  usageLimitFallbackModels: Schema.optionalKey(Schema.Array(ModelSelection)),
+  usageLimitFallbackModels: Schema.optionalKey(Schema.Array(UsageLimitFallbackModel)),
   usageLimitFallbackDeniedModels: Schema.optionalKey(Schema.Array(Schema.String)),
   snoozePresets: Schema.optionalKey(SnoozePresetSettings),
   hiddenThreadTags: Schema.optionalKey(Schema.Array(Schema.String)),

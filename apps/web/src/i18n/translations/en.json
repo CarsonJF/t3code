@@ -13467,5 +13467,24 @@
   "ea0097edaa06817b": "Weekdays only",
   "e7e9762bbb8514c4": "Precheck (optional)",
   "4e4eca8f36ff7d92": "A shell command run first in the Tot's folder; a non-zero exit skips that sweep.",
-  "7ada5fe78b59c87a": "Look around found something"
+  "7ada5fe78b59c87a": "Look around found something",
+  "a59436c0eebf13af": "Could not retry on that account",
+  "de52f30cce176b8c": "Retry on {account}",
+  "13629f8216661033": [
+    "Connect this app to ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " to retry on another account here, or open the thread there."
+  ],
+  "1012470564ed461f": [
+    "Retry on ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ]
 }

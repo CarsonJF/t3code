@@ -184,8 +184,9 @@ const make = Effect.gen(function* () {
           ),
       { concurrency: 4 },
     );
+    const providers = yield* providerRegistry.getProviders;
     const runs = live.flatMap((shell) => {
-      const item = shell.pendingRuntimeRequest === null ? runItem(shell) : null;
+      const item = shell.pendingRuntimeRequest === null ? runItem(shell, providers) : null;
       return item === null ? [] : [item];
     });
     const tasks = yield* scheduled.list().pipe(

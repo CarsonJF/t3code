@@ -7,7 +7,9 @@ import {
   parseTotThreadId,
   ProviderRequestKind,
   type ScheduledTask,
+  type ServerProvider,
 } from "@t3tools/contracts";
+import { otherProviderAccounts } from "@t3tools/shared/usageLimits";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 
@@ -88,8 +90,14 @@ export const requestItems = (input: {
   });
 };
 
-/** A failed or stopped top-level run that finished after the user last opened its thread. */
-export const runItem = (shell: OrchestrationV2ThreadShell): NeedsYouItem | null => {
+/**
+ * A failed or stopped top-level run that finished after the user last opened its thread. One that
+ * stopped on a usage limit names the other accounts it can be retried on.
+ */
+export const runItem = (
+  shell: OrchestrationV2ThreadShell,
+  providers: ReadonlyArray<ServerProvider> = [],
+): NeedsYouItem | null => {
   if (shell.status !== "failed" && shell.status !== "interrupted") return null;
   // Subagents and workflow steps report to whoever started them.
   if (shell.lineage.relationshipToParent === "subagent" || shell.lineage.workflowStep === true)
@@ -101,7 +109,12 @@ export const runItem = (shell: OrchestrationV2ThreadShell): NeedsYouItem | null 
   const visited = millis(shell.lastVisitedAt);
   if (visited !== null && visited >= completed) return null;
   const failed = shell.status === "failed";
+  const retryAccounts =
+    failed && shell.lastErrorClass === "usage_limit"
+      ? otherProviderAccounts(providers, shell.modelSelection.instanceId)
+      : [];
   return {
+    ...(retryAccounts.length > 0 ? { runId: shell.latestRunId, retryAccounts } : {}),
     key: `run:${shell.id}:${shell.latestRunId}`,
     kind: failed ? "failed_run" : "stopped_run",
     threadId: shell.id,
