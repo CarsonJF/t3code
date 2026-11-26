@@ -19,6 +19,7 @@ export const NeedsYouItemKind = Schema.Literals([
   "stopped_run",
   "scheduled_failure",
   "companion",
+  "sweep_attention",
 ]);
 export type NeedsYouItemKind = typeof NeedsYouItemKind.Type;
 
