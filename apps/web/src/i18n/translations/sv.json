@@ -13271,5 +13271,39 @@
   "6e96ce482c3d701e": "Avfärdad",
   "9bd31b8911a11607": "Ta tillbaka",
   "338ce4267d4f180c": "Behöver dig ({count})",
-  "d25661576338fcf0": "Behöver dig"
+  "d25661576338fcf0": "Behöver dig",
+  "16b243a1f0fff69b": "Planerad",
+  "a41f47e1573c46f2": "Pågår",
+  "141121e1748a73d3": "Väntar",
+  "8037a010afbb588a": "Behöver dig",
+  "6774ad492caae447": "Klar",
+  "eaa0d34f3c28c3bc": "Misslyckades",
+  "1cef2a8c21c52f92": "Avbruten",
+  "b1b9cf874de3c93a": "Kunde inte uppdatera {title}",
+  "7b5e2fca586f73a8": "{count, plural, one {{count} försök} other {{count} försök}}",
+  "5b6dec876f2e4f2e": "{failed} misslyckade, gränsen är {cap}",
+  "2713e2918ae87fcc": "Arbete",
+  "e4fcce4a72cd2887": [
+    "Mål som ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " har startat arbete för. Statusen följer dess trådar."
+  ],
+  "af70fa60e76b9b5f": "Kunde inte läsa in arbetet:",
+  "5f0519a313d37c8d": "Läser in arbete…",
+  "00d00206c7abd3c0": [
+    "Inget än. Arbete som ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " startar med ett mål visas här."
+  ],
+  "182049c015041be2": "Öppna igen",
+  "b58e74f61e48ef30": "Nollställ försök",
+  "d196bbded33998b4": "Markera som klar"
 }

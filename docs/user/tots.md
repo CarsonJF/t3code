@@ -44,6 +44,12 @@ When you write in a thread a Tot started, the Tot is not woken for it. Its next 
 
 **Compact when idle**, in the same panel, keeps a Tot's long-running thread small. By default a Tot's thread compacts just before its prompt cache expires, whatever **Compact idle threads** says for other threads, and the Tot first gets a turn to save its work in flight to its memory. Choose **Like other threads** to follow **Compact idle threads** instead, or set `totIdleCompaction` to `false` in the server's settings to change the default for every Tot. This works for Tots on Claude and OpenCode.
 
+### Work list
+
+The **Work** section at the top of a Tot's panel lists its objectives: the goals it started threads or delegates for, grouped by **Needs you**, **Working**, **Waiting**, **Planned**, **Failed**, **Done** and **Cancelled**. Each shows its threads, how many attempts it took, the end of the last worker's final message, and when it last changed. Statuses follow the threads themselves; the Tot does not update them by hand.
+
+When an objective's attempts fail or are stopped 3 times, it moves to **Needs you** and the Tot cannot start more work for it. Look at what went wrong, then choose **Reset attempts** to let the Tot try again, or **Cancel** or **Mark done** to close it. The Tot can reset it too when you tell it to. Set `totObjectiveRetryCap` in the server's settings to change the limit; `0` turns it off. The web and desktop apps show the work list; the mobile app does not yet.
+
 ## Other machines
 
 Tots live on one server and reach your other machines through linked environments. Turn on **Linked environments** in **Settings → Labs** on each machine, and link them at full access so a Tot can act and approve there.

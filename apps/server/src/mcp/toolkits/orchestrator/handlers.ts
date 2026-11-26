@@ -7,6 +7,7 @@ import {
   TOT_REPORT_MESSAGE_ID_PREFIX,
 } from "@t3tools/contracts";
 import { readTotCaller, refuseTots } from "../../totCaller.ts";
+import { checkObjective, forwardedObjectiveTarget, recordAttempt } from "../../totWork.ts";
 import * as TotService from "../../../tots/TotService.ts";
 import { OrchestratorToolkit } from "./tools.ts";
 import * as Option from "effect/Option";
@@ -54,11 +55,26 @@ const handlers = {
       return yield* service.capabilities(scope, input);
     }),
   ),
-  delegate_task: McpToolAccess.actsAsCaller((input) =>
+  delegate_task: McpToolAccess.actsAsCaller(({ objective, ...input }) =>
     Effect.gen(function* () {
+      const target = yield* checkObjective(objective);
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const service = yield* OrchestratorMcpService.OrchestratorMcpService;
-      return yield* service.delegateTask(scope, input);
+      const task = yield* service.delegateTask(scope, input);
+      const child =
+        task.remoteChild ??
+        (task.childThreadId === null
+          ? undefined
+          : { environmentId: scope.environmentId, threadId: task.childThreadId });
+      if (child === undefined) return task;
+      const recorded = yield* recordAttempt(target, {
+        kind: "delegate",
+        environmentId: child.environmentId,
+        threadId: child.threadId,
+        runId: task.childRunId,
+        taskId: task.taskId,
+      });
+      return { ...task, ...recorded };
     }),
   ),
   task_status: McpToolAccess.actsAsCaller(({ taskId }) =>
@@ -232,14 +248,26 @@ const handlers = {
   t3_thread_send: McpToolAccess.afterForwarding(
     McpToolAccess.writesThreads(
       (input) => [input.threadId],
-      (input) =>
+      ({ objective, ...input }) =>
         Effect.gen(function* () {
+          const target = yield* checkObjective(objective);
           const scope = yield* McpInvocationContext.McpInvocationContext;
           const service = yield* OrchestratorMcpService.OrchestratorMcpService;
           const sent = yield* service.sendToThread(scope, input);
           // A Tot hears when the run its message started ends.
           const watched = yield* watchSentRun(scope.environmentId, sent.threadId, sent.runId);
-          return { ...sent, ...watched };
+          // A steer joins a run already counted, so only a send that starts a run is an attempt.
+          const recorded =
+            sent.delivery === "steered"
+              ? {}
+              : yield* recordAttempt(target, {
+                  kind: "send",
+                  environmentId: scope.environmentId,
+                  threadId: sent.threadId,
+                  runId: sent.runId,
+                  taskId: sent.taskId,
+                });
+          return { ...sent, ...watched, ...recorded };
         }),
     ),
     // There the thread's parent is here, so only this side can make a follow-up a task.
@@ -249,8 +277,19 @@ const handlers = {
         const remote = yield* RemoteDelegation.RemoteDelegation;
         const followed = yield* remote.followUp(scope, environmentId, input, sent);
         const watched = yield* watchSentRun(environmentId, input.threadId, followed.runId);
-        return { ...followed, ...watched };
+        const recorded =
+          followed.delivery === "steered"
+            ? {}
+            : yield* recordAttempt(yield* forwardedObjectiveTarget(input.objective), {
+                kind: "send",
+                environmentId,
+                threadId: input.threadId,
+                runId: followed.runId,
+                taskId: followed.taskId,
+              });
+        return { ...followed, ...watched, ...recorded };
       }),
+    (input) => checkObjective(input.objective),
   ),
   t3_thread_wait: McpToolAccess.reads((input) =>
     Effect.gen(function* () {

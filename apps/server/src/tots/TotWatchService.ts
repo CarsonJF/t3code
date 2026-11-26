@@ -40,6 +40,7 @@ import * as ServerSettings from "../serverSettings.ts";
 import { IDLE_COMPACTION_MESSAGE_ID_PREFIX } from "../orchestration-v2/IdleCompaction.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as TotService from "./TotService.ts";
+import * as TotWorkService from "./TotWorkService.ts";
 import { USER_STOP_REASON } from "../orchestration-v2/RunExecutionService.ts";
 import {
   BACKGROUND_WAKE_GRACE_MS,
@@ -338,6 +339,7 @@ const make = Effect.gen(function* () {
   const settings = yield* ServerSettings.ServerSettingsService;
   const followRetry = yield* RemoteDelegation.FollowRetrySchedule;
   const pause = yield* TotFollowPause;
+  const work = Option.getOrUndefined(yield* Effect.serviceOption(TotWorkService.TotWorkService));
   const layerScope = yield* Scope.Scope;
   const followers = new Map<string, Fiber.Fiber<void>>();
   const seen = new Map<ThreadId, WatchedThreadState>();
@@ -505,6 +507,24 @@ const make = Effect.gen(function* () {
     } satisfies TotWatchLineDetail;
   });
 
+  /** The end of a run's last message, for the work list's outcome. */
+  const lastWords = (threadId: ThreadId, runId: string | null) =>
+    runId === null
+      ? Effect.succeed(null)
+      : threads
+          .getThreadRecords(threadId, ["messages"], {
+            messageRoles: ["assistant"],
+            messageRunIds: [RunId.make(runId)],
+          })
+          .pipe(
+            Effect.map(
+              ({ messages }) =>
+                formatWatchExcerpt(messages.findLast((message) => message.text.trim() !== "")?.text)
+                  ?.text ?? null,
+            ),
+            Effect.orElseSucceed(() => null),
+          );
+
   /** Looks again once a restart has decided whether this stopped run continues. */
   const lookAfterContinuation = Effect.fnUntraced(function* (threadId: ThreadId, runId: RunId) {
     const key = `${threadId}\u0000${runId}`;
@@ -568,6 +588,9 @@ const make = Effect.gen(function* () {
     const next = watched
       ? throughHold(threadId, current, shell, previous === undefined, now, wokenByWork)
       : current;
+    if (work?.tracks(environmentId, threadId) === true) {
+      yield* work.observe(environmentId, threadId, next, lastWords(threadId, next.runId));
+    }
     // The startup pass must not become the baseline a launched watch's next look compares with.
     if (!sentOnly) {
       seen.set(threadId, next);
@@ -964,6 +987,14 @@ const make = Effect.gen(function* () {
           Effect.retry(followRetry),
         );
       if (waited.lost === "thread") {
+        if (work?.tracks(watch.environmentId, watch.threadId) === true) {
+          yield* work.observe(
+            watch.environmentId,
+            watch.threadId,
+            ENDED_STATE,
+            Effect.succeed(null),
+          );
+        }
         // Only the watched thread being gone ends the watch; a missing caller just stops here.
         if ((yield* callerShell) !== null) {
           yield* tots.removeWatch(totId, watch.environmentId, watch.threadId).pipe(Effect.ignore);
@@ -1101,6 +1132,27 @@ const make = Effect.gen(function* () {
           : found;
       if (event === "waiting" && next.status === "waiting") waitReported = next.waitingOn;
       previous = next;
+      if (work?.tracks(watch.environmentId, watch.threadId) === true) {
+        const looked = next;
+        yield* work.observe(
+          watch.environmentId,
+          watch.threadId,
+          looked,
+          remoteRead(20, 20_000).pipe(
+            Effect.map(
+              (page) =>
+                formatWatchExcerpt(
+                  Option.getOrUndefined(page)?.items.findLast(
+                    (item) =>
+                      item.type === "assistant_message" &&
+                      item.text !== null &&
+                      item.runId === looked.runId,
+                  )?.text,
+                )?.text ?? null,
+            ),
+          ),
+        );
+      }
       const delivers = deliversWatchReport({
         mode,
         reasons: [
