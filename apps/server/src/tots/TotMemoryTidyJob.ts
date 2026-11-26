@@ -52,6 +52,7 @@ const MAX_CLOSED_WORK = 40;
 
 /** The most recent tidy time at or before `nowMs`, in local time. */
 export const latestTidySlot = (nowMs: number): number => {
+  // @effect-diagnostics-next-line globalDate:off - the slot is a wall-clock hour in the server's own timezone.
   const slot = new Date(nowMs);
   slot.setHours(TIDY_HOUR, TIDY_MINUTE, 0, 0);
   if (slot.getTime() > nowMs) slot.setDate(slot.getDate() - 1);
@@ -88,15 +89,15 @@ const make = Effect.gen(function* () {
     threads.listProjectThreads({ includeSubagents: false }).pipe(
       Effect.map((entries) =>
         entries
-          .filter(
-            (entry) =>
-              parseTotLaunchedThreadId(entry.id) === tot.id &&
-              entry.settledAt !== null &&
-              (since === null || entry.settledAt > since),
-          )
-          .toSorted((a, b) => (b.settledAt ?? "").localeCompare(a.settledAt ?? ""))
-          .slice(0, MAX_CLOSED_WORK)
-          .map((entry): ClosedWork => ({ title: entry.title, settledAt: entry.settledAt ?? "" })),
+          .flatMap((entry): ReadonlyArray<ClosedWork> => {
+            if (parseTotLaunchedThreadId(entry.id) !== tot.id || entry.settledAt === null) {
+              return [];
+            }
+            const settledAt = DateTime.formatIso(entry.settledAt);
+            return since === null || settledAt > since ? [{ title: entry.title, settledAt }] : [];
+          })
+          .toSorted((a, b) => b.settledAt.localeCompare(a.settledAt))
+          .slice(0, MAX_CLOSED_WORK),
       ),
       Effect.orElseSucceed((): ReadonlyArray<ClosedWork> => []),
     );
