@@ -1041,6 +1041,7 @@ describe("providerMaintenanceRunner", () => {
           generateTranscriptionPostProcessing: () => Effect.die("unused"),
           generateAvatarFigure: () => Effect.die("unused"),
           generateMemoryTidy: () => Effect.die("unused"),
+          generateReplySuggestions: () => Effect.die("unused"),
           generateThreadTitle: () =>
             Effect.sync(() => {
               log.push("text generation spawned provider");

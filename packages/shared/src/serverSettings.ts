@@ -201,6 +201,19 @@ export function resolveTotMemoryTidyModelSelection(
     : settings.textGenerationModelSelection;
 }
 
+/** Needs you reply suggestions follow the text generation model unless their own usable model is set. */
+export function resolveReplySuggestionModelSelection(
+  settings: ServerSettings,
+  providers?: ReadonlyArray<ServerProvider>,
+): ModelSelection {
+  const selection = settings.replySuggestionModelSelection;
+  return selection &&
+    isModelSelectionProviderEnabled(settings, selection) &&
+    isTextGenerationTargetUsable(settings, providers, selection.instanceId)
+    ? selection
+    : settings.textGenerationModelSelection;
+}
+
 export interface PersistedServerObservabilitySettings {
   readonly otlpTracesUrl: string | undefined;
   readonly otlpMetricsUrl: string | undefined;
@@ -645,6 +658,9 @@ export function applyServerSettingsPatch(
       : {}),
     ...(patch.totMemoryTidyModelSelection !== undefined
       ? { totMemoryTidyModelSelection: patch.totMemoryTidyModelSelection }
+      : {}),
+    ...(patch.replySuggestionModelSelection !== undefined
+      ? { replySuggestionModelSelection: patch.replySuggestionModelSelection }
       : {}),
     ...(patch.defaultProjectScripts !== undefined
       ? { defaultProjectScripts: patch.defaultProjectScripts }

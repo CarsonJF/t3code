@@ -13263,5 +13263,50 @@
   "7dcbf66bc26f10ae": "Rangement nocturne de la mémoire de {name}",
   "0c9b03a0a40b461f": "Annulation…",
   "0c7b8cd7ce14bb5f": "Annuler le dernier rangement",
-  "81a0dfe96d155888": "Rangement nocturne de la mémoire"
+  "81a0dfe96d155888": "Rangement nocturne de la mémoire",
+  "6a1390b1f63ef634": "Impossible de le masquer",
+  "cd3bf273c74438c2": "Approbation",
+  "5c8772e727c04218": "Question",
+  "71a0d291605ff58d": "Exécution échouée",
+  "85c9954de7b4cee7": "Exécution arrêtée",
+  "3ffa3898db62ec7e": "Une exécution planifiée a échoué",
+  "93e6e9252bdccfa1": "Impossible d'envoyer la décision",
+  "4e430d5ea01c249b": "Impossible d'envoyer la réponse",
+  "070babcc726100d9": "Saisissez une réponse",
+  "39fd01a80e88ee2a": "Impossible de le rétablir",
+  "1b7c524fccf06537": "Vous attend",
+  "7c5a3071fb7d9f14": "Rien ne vous attend",
+  "2843b91a4c4a5e98": "Les approbations, questions et exécutions échouées de chaque Tot et machine liée s'affichent ici.",
+  "2df485ee15283e6b": "Impossible de lire cette machine :",
+  "5eb5603f5b29900d": "Fils",
+  "df1fb90eb9a77fbf": "Tâches planifiées",
+  "39b4070d872d2028": "Reporter",
+  "a30ccddf9846901f": "Pendant une heure",
+  "05c315b2aeaf837c": "Pendant quatre heures",
+  "2ac68b6da5c86403": "Jusqu'à demain matin",
+  "3a364fe01dd16636": [
+    "Connectez cette app à ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " pour approuver ici, ou ouvrez le fil là-bas."
+  ],
+  "77ada50f836c7878": "Suggestions",
+  "cfea388d49c84ed1": "Recherche de réponses…",
+  "5536b6ffc0e02e95": "Envoyer la réponse",
+  "5bd55126073a21cb": [
+    "Reportés et ignorés (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ")"
+  ],
+  "6e96ce482c3d701e": "Ignoré",
+  "9bd31b8911a11607": "Rétablir",
+  "338ce4267d4f180c": "Vous attend ({count})",
+  "d25661576338fcf0": "Vous attend"
 }
