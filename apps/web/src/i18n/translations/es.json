@@ -13224,8 +13224,6 @@
   ],
   "6e96ce482c3d701e": "Descartado",
   "9bd31b8911a11607": "Recuperar",
-  "338ce4267d4f180c": "Te necesita ({count})",
-  "d25661576338fcf0": "Te necesita",
   "16b243a1f0fff69b": "Planificado",
   "a41f47e1573c46f2": "En curso",
   "141121e1748a73d3": "En espera",
@@ -13417,6 +13415,16 @@
   ],
   "1012470564ed461f": [
     "Reintentar con ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "708f9144bda073a1": "Abrir «Te necesita»",
+  "d6c5494cf45ad5e7": "Abrir «Te necesita»",
+  "9353579fe56bdf6e": [
+    "Ver los ",
     {
       "i": 1,
       "k": "_gt_value_1",

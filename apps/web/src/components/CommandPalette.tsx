@@ -70,6 +70,7 @@ import {
   BugIcon,
   BotIcon,
   ChartNoAxesColumnIcon,
+  InboxIcon,
   CheckIcon,
   ChevronRightIcon,
   CornerLeftUpIcon,
@@ -1868,6 +1869,17 @@ function OpenCommandPaletteDialog(props: {
     shortcutCommand: "usage.open",
     run: async () => {
       await navigate({ to: "/usage" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:needs-you",
+    searchTerms: ["needs you", "inbox", "approvals", "questions", "snoozed", "dismissed"],
+    title: gt("Open Needs you"),
+    icon: <InboxIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/needs-you" });
     },
   });
 
