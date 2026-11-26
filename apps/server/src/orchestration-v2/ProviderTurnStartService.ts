@@ -1051,17 +1051,27 @@ export const layer: Layer.Layer<
         .resolve({
           thread: projection.thread,
           modelSelection: run.modelSelection,
+          ...(run.restriction === undefined ? {} : { restriction: run.restriction }),
         })
         .pipe(Effect.result);
       if (resolvedPolicy._tag === "Failure") {
         const error = resolvedPolicy.failure;
-        if (error._tag !== "RuntimePolicyAboveCeilingError") return yield* error;
-        yield* settleStartFailure({
+        if (error._tag === "RuntimePolicyResolveError") return yield* error;
+        yield* settleStartFailure(
+          error._tag === "RuntimePolicyAboveCeilingError"
+            ? {
           signal: "runtime-mode-above-ceiling",
           title: "Thread mode is above the policy limit",
           error,
           message: error.message,
-        });
+              }
+            : {
+                signal: "read-only-unsupported",
+                title: "This provider cannot run read-only",
+                error,
+                message: error.message,
+              },
+        );
         return;
       }
       const resolvedRuntimePolicy = resolvedPolicy.success;
@@ -1279,6 +1289,7 @@ export const layer: Layer.Layer<
           text: providerMessage.text,
           records: providerMessage.context?.records ?? [],
         }),
+        run.caller,
       );
       const slashCommand = isSlashCommandMessage(providerMessage);
       const goalDriver =

@@ -59,6 +59,7 @@ const harness = (callerThread: ThreadId) => {
       getProjectThreadRecords: (input) =>
         Effect.succeed({
           thread: liveThreadShell(input.threadId),
+          runs: [],
           runtimeRequests: [{ id: approval, kind: "command", status: "pending" }],
           turnItems: [
             {

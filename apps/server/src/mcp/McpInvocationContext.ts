@@ -55,6 +55,11 @@ export interface McpClientCaller {
   readonly narrowedTo?: ClientModes | undefined;
   /** A linked environment's thread this request is made for (`T3-Sender-Thread`). */
   readonly senderThread?: OrchestrationV2LinkedSender | undefined;
+  /**
+   * The Discord user an outside client sends for (`T3-On-Behalf-Of`), as the Discord bridge
+   * does. Read only from a client that is not a peer link; a Tot checks it on its own list.
+   */
+  readonly onBehalfOf?: { readonly service: "discord"; readonly userId: string } | undefined;
   /** An outside client's thread links go through this hosted app, as Copy thread's do. */
   readonly hostedAppUrl?: string | undefined;
 }
@@ -79,6 +84,9 @@ export const LINK_EXPIRES_AT_HEADER = "t3-link-expires-at";
  * it. Read only from a linked client.
  */
 export const SENDER_THREAD_HEADER = "t3-sender-thread";
+
+/** `T3-On-Behalf-Of: discord/<userId>`: the person an outside client relays for. */
+export const ON_BEHALF_OF_HEADER = "t3-on-behalf-of";
 
 export interface ClientModes {
   readonly runtimeMode: RuntimeMode;
