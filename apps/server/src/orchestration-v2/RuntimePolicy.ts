@@ -129,7 +129,7 @@ function restrictRuntimePolicy(
 }
 
 /** A Look around sweep's thread is read-only on every run, whatever restriction the run has. */
-export function effectiveRestriction(
+function effectiveRestriction(
   thread: Pick<OrchestrationV2AppThread, "id">,
   restriction: RunRestriction | undefined,
 ): RunRestriction | undefined {

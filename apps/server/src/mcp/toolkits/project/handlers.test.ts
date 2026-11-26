@@ -142,6 +142,8 @@ const clientLaunchHarness = (input: {
       addWatch: (_id, watch) => Effect.sync(() => void input.tots?.watches.push(watch)),
     }),
     Layer.mock(ThreadManagement.ThreadManagementService)({
+      // An unrestricted run, so a Tot caller keeps full access.
+      getProjectThreadRecords: () => Effect.succeed({ runs: [] } as never),
       // A thread exists once a launch started it.
       getThreadShell: (threadId) => {
         if (input.callerShell !== undefined && threadId === input.callerShell.id)

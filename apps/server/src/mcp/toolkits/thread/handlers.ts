@@ -433,7 +433,7 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
             ),
           );
       }),
-    { readOnlySweeps: "allowed" },
+    { restrictedRuns: "allowed" },
   ),
   t3_queue: McpToolAccess.either(
     (input) => input.action === "list" || input.action === "read",

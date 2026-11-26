@@ -153,7 +153,7 @@ const probeHandlers: McpToolAccess.Handlers<typeof ProbeToolkit.tools> = {
   reads: McpToolAccess.reads(() => ran),
   reads_as_caller: McpToolAccess.readsAsCaller(() => ran),
   acts_as_caller: McpToolAccess.actsAsCaller(() => ran),
-  submits_output: McpToolAccess.actsAsCaller(() => ran, { readOnlySweeps: "allowed" }),
+  submits_output: McpToolAccess.actsAsCaller(() => ran, { restrictedRuns: "allowed" }),
   writes: McpToolAccess.writes(() => ran),
   writes_with_capability: McpToolAccess.writesWithCapability(() => ran),
   writes_threads: McpToolAccess.writesThreads(
@@ -407,6 +407,9 @@ it.effect.each([
   ["writes", "ask", "capability_denied"],
   ["writes", undefined, "ran"],
   ["acts_as_caller", "read-only", "capability_denied"],
+  // A limited turn still hands back its result, as a sweep does.
+  ["submits_output", "read-only", "ran"],
+  ["submits_output", "ask", "ran"],
   ["writes_threads", "ask", "capability_denied"],
   ["starts_threads", "read-only", "capability_denied"],
   ["writes_environment", "ask", "capability_denied"],
