@@ -13479,5 +13479,24 @@
   "090ae1c0253f99c3": "Mellan",
   "ea0097edaa06817b": "Endast vardagar",
   "e7e9762bbb8514c4": "Förkontroll (valfri)",
-  "4e4eca8f36ff7d92": "Ett skalkommando som körs först i Totens mapp; en slutkod som inte är noll hoppar över den rundan."
+  "4e4eca8f36ff7d92": "Ett skalkommando som körs först i Totens mapp; en slutkod som inte är noll hoppar över den rundan.",
+  "a59436c0eebf13af": "Kunde inte försöka igen med det kontot",
+  "de52f30cce176b8c": "Försök igen med {account}",
+  "13629f8216661033": [
+    "Anslut den här appen till ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " för att försöka igen här med ett annat konto, eller öppna tråden där."
+  ],
+  "1012470564ed461f": [
+    "Försök igen med ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ]
 }

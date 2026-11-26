@@ -125,6 +125,8 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // A grant lets the companion sign in to /mcp, like a pairing link.
   [WS_METHODS.companionsGrantIssue]: AuthAccessWriteScope,
   [WS_METHODS.companionsGrantRevoke]: AuthAccessWriteScope,
+  // Starts a run in the thread, like sending a message to it.
+  [WS_METHODS.usageLimitRetryOnAccount]: AuthOrchestrationOperateScope,
   // A guest link hands thread access to someone outside, like a pairing link.
   [WS_METHODS.guestShareCreate]: AuthAccessWriteScope,
   [WS_METHODS.peerLinksLink]: AuthAccessWriteScope,
