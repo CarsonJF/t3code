@@ -112,6 +112,10 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.groupChatsRemove]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsWriteMemory]: AuthOrchestrationOperateScope,
   [WS_METHODS.totsRevertMemoryTidy]: AuthOrchestrationOperateScope,
+  // Answers reach threads like a reply in them.
+  [WS_METHODS.needsYouHide]: AuthOrchestrationOperateScope,
+  [WS_METHODS.needsYouRestore]: AuthOrchestrationOperateScope,
+  [WS_METHODS.needsYouRespond]: AuthOrchestrationOperateScope,
   // A guest link hands thread access to someone outside, like a pairing link.
   [WS_METHODS.guestShareCreate]: AuthAccessWriteScope,
   [WS_METHODS.peerLinksLink]: AuthAccessWriteScope,

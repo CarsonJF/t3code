@@ -13219,5 +13219,50 @@
   "7dcbf66bc26f10ae": "Limpieza nocturna de memoria de {name}",
   "0c9b03a0a40b461f": "Revirtiendo…",
   "0c7b8cd7ce14bb5f": "Revertir la última limpieza",
-  "81a0dfe96d155888": "Limpieza nocturna de memoria"
+  "81a0dfe96d155888": "Limpieza nocturna de memoria",
+  "6a1390b1f63ef634": "No se pudo ocultar",
+  "cd3bf273c74438c2": "Aprobación",
+  "5c8772e727c04218": "Pregunta",
+  "71a0d291605ff58d": "Ejecución fallida",
+  "85c9954de7b4cee7": "Ejecución detenida",
+  "3ffa3898db62ec7e": "Falló una ejecución programada",
+  "93e6e9252bdccfa1": "No se pudo enviar la decisión",
+  "4e430d5ea01c249b": "No se pudo enviar la respuesta",
+  "070babcc726100d9": "Escribe una respuesta",
+  "39fd01a80e88ee2a": "No se pudo recuperar",
+  "1b7c524fccf06537": "Te necesita",
+  "7c5a3071fb7d9f14": "Nada te necesita",
+  "2843b91a4c4a5e98": "Aquí aparecen las aprobaciones, preguntas y ejecuciones fallidas de cada Tot y máquina vinculada.",
+  "2df485ee15283e6b": "No se pudo leer esta máquina:",
+  "5eb5603f5b29900d": "Hilos",
+  "df1fb90eb9a77fbf": "Tareas programadas",
+  "39b4070d872d2028": "Posponer",
+  "a30ccddf9846901f": "Durante una hora",
+  "05c315b2aeaf837c": "Durante cuatro horas",
+  "2ac68b6da5c86403": "Hasta mañana por la mañana",
+  "3a364fe01dd16636": [
+    "Conecta esta app a ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " para aprobar aquí, o abre el hilo allí."
+  ],
+  "77ada50f836c7878": "Sugerencias",
+  "cfea388d49c84ed1": "Pensando respuestas…",
+  "5536b6ffc0e02e95": "Enviar respuesta",
+  "5bd55126073a21cb": [
+    "Pospuestos y descartados (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ")"
+  ],
+  "6e96ce482c3d701e": "Descartado",
+  "9bd31b8911a11607": "Recuperar",
+  "338ce4267d4f180c": "Te necesita ({count})",
+  "d25661576338fcf0": "Te necesita"
 }
