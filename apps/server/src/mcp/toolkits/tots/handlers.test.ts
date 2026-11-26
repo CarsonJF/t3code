@@ -25,6 +25,7 @@ import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementSer
 import * as ScheduledTaskService from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as GroupChatService from "../../../tots/GroupChatService.ts";
 import * as TotService from "../../../tots/TotService.ts";
+import * as TotWorkService from "../../../tots/TotWorkService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { liveThreadShell } from "../../McpToolAccess.testkit.ts";
@@ -54,7 +55,14 @@ const asTot = (input: TotCreateInput): Tot => ({
 });
 
 /** A thread caller, or the user at a full-access client outside any thread. */
-const harness = (callerThread: ThreadId | "person") => {
+const harness = (
+  callerThread: ThreadId | "person",
+  extras: {
+    readonly work?: Omit<Partial<TotWorkService.TotWorkService["Service"]>, "tracks">;
+    /** Who wrote the message that started the caller's current run. */
+    readonly runStartedBy?: "user" | "agent";
+  } = {},
+) => {
   const watches: Array<TotWatch> = [];
   const instructions = new Map<TotId, string>();
   const created: Array<TotCreateInput> = [];
@@ -138,7 +146,15 @@ const harness = (callerThread: ThreadId | "person") => {
     Layer.mock(ThreadManagement.ThreadManagementService)({
       getThreadShell: (threadId) =>
         Effect.succeed(liveThreadShell(threadId, { activeRunId: RunId.make("run") })),
+      getThreadRecords: () =>
+        Effect.succeed({
+          runs: [{ id: RunId.make("run"), userMessageId: "message:run" }],
+          messages: [{ id: "message:run", createdBy: extras.runStartedBy ?? "agent" }],
+        } as never),
     }),
+    ...(extras.work === undefined
+      ? []
+      : [Layer.mock(TotWorkService.TotWorkService)({ tracks: () => false, ...extras.work })]),
     Layer.mock(ScheduledTaskService.ScheduledTaskService)({
       upsert: (input) =>
         Effect.sync(() => {
@@ -185,7 +201,8 @@ const harness = (callerThread: ThreadId | "person") => {
       | "t3_tot_webhook_listener"
       | "t3_tot_theme_set"
       | "t3_tot_theme_read"
-      | "t3_tot_instructions",
+      | "t3_tot_instructions"
+      | "t3_tot_work",
     params: Record<string, unknown>,
   ) =>
     Effect.gen(function* () {
@@ -455,3 +472,43 @@ it.effect("refuses instructions over the cap", () => {
     expect(instructions.size).toBe(0);
   });
 });
+
+const cappedObjective = {
+  id: "obj-abc123def456",
+  totId: "home",
+  title: "Repair CI",
+  status: "needs_you",
+  failedAttempts: 3,
+  retryCap: 3,
+  attempts: [],
+  createdAt: "2026-11-25T10:00:00.000Z",
+  updatedAt: "2026-11-25T11:00:00.000Z",
+} as never;
+
+it.effect("a Tot resets an objective past its retry cap only on a person's word", () =>
+  Effect.gen(function* () {
+    for (const startedBy of ["agent", "user"] as const) {
+      const updates: Array<unknown> = [];
+      const { call } = harness(homeThread, {
+        runStartedBy: startedBy,
+        work: {
+          list: () => Effect.succeed({ objectives: [cappedObjective] }),
+          update: (input) => Effect.sync(() => (updates.push(input), cappedObjective)),
+        },
+      });
+      const result = yield* call("t3_tot_work", {
+        action: "reset",
+        objectiveId: "obj-abc123def456",
+      });
+      if (startedBy === "agent") {
+        expect(result).toMatchObject({ code: "capability_denied" });
+        expect(updates).toEqual([]);
+      } else {
+        expect(result).toMatchObject({
+          objectives: [{ id: "obj-abc123def456", status: "needs_you", failedAttempts: 3 }],
+        });
+        expect(updates).toEqual([{ id: "home", objectiveId: "obj-abc123def456", action: "reset" }]);
+      }
+    }
+  }),
+);

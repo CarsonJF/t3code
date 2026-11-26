@@ -13308,5 +13308,39 @@
   "6e96ce482c3d701e": "Dismissed",
   "9bd31b8911a11607": "Bring back",
   "338ce4267d4f180c": "Needs you ({count})",
-  "d25661576338fcf0": "Needs you"
+  "d25661576338fcf0": "Needs you",
+  "16b243a1f0fff69b": "Planned",
+  "a41f47e1573c46f2": "Working",
+  "141121e1748a73d3": "Waiting",
+  "8037a010afbb588a": "Needs you",
+  "6774ad492caae447": "Done",
+  "eaa0d34f3c28c3bc": "Failed",
+  "1cef2a8c21c52f92": "Cancelled",
+  "b1b9cf874de3c93a": "Could not update {title}",
+  "7b5e2fca586f73a8": "{count, plural, one {{count} attempt} other {{count} attempts}}",
+  "5b6dec876f2e4f2e": "{failed} failed, the limit is {cap}",
+  "2713e2918ae87fcc": "Work",
+  "e4fcce4a72cd2887": [
+    "Objectives ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " started work for. Status follows its threads."
+  ],
+  "af70fa60e76b9b5f": "Could not load work:",
+  "5f0519a313d37c8d": "Loading work…",
+  "00d00206c7abd3c0": [
+    "Nothing yet. Work ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " launches with an objective shows here."
+  ],
+  "182049c015041be2": "Reopen",
+  "b58e74f61e48ef30": "Reset attempts",
+  "d196bbded33998b4": "Mark done"
 }

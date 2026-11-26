@@ -13300,5 +13300,39 @@
   "6e96ce482c3d701e": "Dispensado",
   "9bd31b8911a11607": "Trazer de volta",
   "338ce4267d4f180c": "Precisa de você ({count})",
-  "d25661576338fcf0": "Precisa de você"
+  "d25661576338fcf0": "Precisa de você",
+  "16b243a1f0fff69b": "Planejado",
+  "a41f47e1573c46f2": "Em andamento",
+  "141121e1748a73d3": "Aguardando",
+  "8037a010afbb588a": "Precisa de você",
+  "6774ad492caae447": "Concluído",
+  "eaa0d34f3c28c3bc": "Falhou",
+  "1cef2a8c21c52f92": "Cancelado",
+  "b1b9cf874de3c93a": "Não foi possível atualizar {title}",
+  "7b5e2fca586f73a8": "{count, plural, one {{count} tentativa} other {{count} tentativas}}",
+  "5b6dec876f2e4f2e": "{failed} com falha, o limite é {cap}",
+  "2713e2918ae87fcc": "Trabalho",
+  "e4fcce4a72cd2887": [
+    "Objetivos para os quais ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " iniciou trabalho. O status acompanha as conversas."
+  ],
+  "af70fa60e76b9b5f": "Não foi possível carregar o trabalho:",
+  "5f0519a313d37c8d": "Carregando trabalho…",
+  "00d00206c7abd3c0": [
+    "Nada ainda. O trabalho que ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " inicia com um objetivo aparece aqui."
+  ],
+  "182049c015041be2": "Reabrir",
+  "b58e74f61e48ef30": "Redefinir tentativas",
+  "d196bbded33998b4": "Marcar como concluído"
 }
