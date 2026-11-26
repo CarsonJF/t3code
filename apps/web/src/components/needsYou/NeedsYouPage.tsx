@@ -49,7 +49,7 @@ import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { CompanionNeedsYouActions } from "../companions/CompanionNeedsYouActions";
 import { useNeedsYou } from "./useNeedsYou";
 
-const KIND_ICONS = {
+export const NEEDS_YOU_KIND_ICONS = {
   approval: ShieldQuestionIcon,
   question: MessageCircleQuestionIcon,
   failed_run: CircleXIcon,
@@ -162,7 +162,7 @@ function MachineGroup(props: {
   );
 }
 
-function useOpenItem(machine: NeedsYouMachine) {
+export function useOpenNeedsYouItem(machine: NeedsYouMachine) {
   const navigate = useNavigate();
   return (item: NeedsYouItem) => {
     if (item.companion !== undefined) {
@@ -194,9 +194,9 @@ function NeedsYouRow(props: {
 }) {
   const { item, machine } = props;
   const gt = useGT();
-  const open = useOpenItem(machine);
+  const open = useOpenNeedsYouItem(machine);
   const hide = useAtomCommand(serverEnvironment.hideNeedsYou, { reportFailure: false });
-  const Icon = KIND_ICONS[item.kind];
+  const Icon = NEEDS_YOU_KIND_ICONS[item.kind];
   const hideUntil = async (until: Date | null) =>
     reportResult(
       gt("Could not hide it"),
@@ -239,30 +239,7 @@ function NeedsYouRow(props: {
           {needsYouAge(item.at, props.now)}
         </span>
       </div>
-      {item.kind === "approval" && item.requestId !== undefined ? (
-        <ApprovalActions item={item} machine={machine} />
-      ) : null}
-      {item.kind === "question" && item.questions !== undefined ? (
-        <QuestionAnswer item={item} questions={item.questions} machine={machine} />
-      ) : null}
-      {item.companion === undefined ? null : machine.connected ? (
-        <CompanionNeedsYouActions
-          environmentId={machine.environmentId}
-          companionId={item.companion.companionId}
-          needsYouId={item.companion.needsYouId}
-          kind={item.companion.kind}
-          options={item.companion.options}
-        />
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          <T>
-            Connect this app to <Var>{machine.label}</Var> to answer its companions here.
-          </T>
-        </p>
-      )}
-      {item.retryAccounts !== undefined && item.retryAccounts.length > 0 ? (
-        <RetryOnAccount item={item} accounts={item.retryAccounts} machine={machine} />
-      ) : null}
+      <NeedsYouItemActions item={item} machine={machine} />
       <div className="flex flex-wrap items-center gap-1">
         <Button size="compact" variant="ghost-muted" onClick={() => open(item)}>
           <ArrowUpRightIcon />
@@ -301,6 +278,42 @@ function NeedsYouRow(props: {
         </Button>
       </div>
     </li>
+  );
+}
+
+/** Approve, answer, or retry an item in place; shared by the page and the sidebar section. */
+export function NeedsYouItemActions(props: {
+  readonly item: NeedsYouItem;
+  readonly machine: NeedsYouMachine;
+}) {
+  const { item, machine } = props;
+  return (
+    <>
+      {item.kind === "approval" && item.requestId !== undefined ? (
+        <ApprovalActions item={item} machine={machine} />
+      ) : null}
+      {item.kind === "question" && item.questions !== undefined ? (
+        <QuestionAnswer item={item} questions={item.questions} machine={machine} />
+      ) : null}
+      {item.companion === undefined ? null : machine.connected ? (
+        <CompanionNeedsYouActions
+          environmentId={machine.environmentId}
+          companionId={item.companion.companionId}
+          needsYouId={item.companion.needsYouId}
+          kind={item.companion.kind}
+          options={item.companion.options}
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          <T>
+            Connect this app to <Var>{machine.label}</Var> to answer its companions here.
+          </T>
+        </p>
+      )}
+      {item.retryAccounts !== undefined && item.retryAccounts.length > 0 ? (
+        <RetryOnAccount item={item} accounts={item.retryAccounts} machine={machine} />
+      ) : null}
+    </>
   );
 }
 
