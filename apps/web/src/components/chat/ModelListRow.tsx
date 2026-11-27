@@ -57,39 +57,39 @@ export const ModelListRow = memo(function ModelListRow(props: {
     favoriteActiveKey !== modelKey;
 
   const label = (
-      <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
-        <div
-          className="min-w-0 truncate text-sm font-normal leading-snug"
-          // Names the row in full on hover only when it is cut off.
-          onPointerEnter={(event) => {
-            const name = event.currentTarget;
-            name.title = name.scrollWidth > name.clientWidth ? getDisplayModelName(model) : "";
-          }}
-        >
-          {getDisplayModelName(model)}
-          {/* The logo is decorative, so name the provider for screen readers. */}
-          <span className="sr-only">, {props.providerDisplayName}</span>
-        </div>
-        {props.isSelected ? <CheckIcon className="size-3.5 shrink-0" aria-hidden="true" /> : null}
-        {props.subProvider ? (
-          <span className="min-w-0 shrink truncate text-xs text-muted-foreground/70">
-            {props.subProvider}
-          </span>
-        ) : null}
-        {props.showNewBadge ? (
-          <span
-            className="shrink-0 rounded border border-update/35 bg-update/15 px-0.5 py-px text-3xs font-bold uppercase leading-none tracking-wide text-update-foreground"
-            aria-label={gt("New model")}
-          >
-            {gt("New", { $context: "badge on a newly added model" })}
-          </span>
-        ) : null}
-        {props.unavailable ? (
-          <Badge variant="outline" size="sm">
-            <T context="badge on a model that cannot be selected">Unavailable</T>
-          </Badge>
-        ) : null}
+    <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+      <div
+        className="min-w-0 truncate text-sm font-normal leading-snug"
+        // Names the row in full on hover only when it is cut off.
+        onPointerEnter={(event) => {
+          const name = event.currentTarget;
+          name.title = name.scrollWidth > name.clientWidth ? getDisplayModelName(model) : "";
+        }}
+      >
+        {getDisplayModelName(model)}
+        {/* The logo is decorative, so name the provider for screen readers. */}
+        <span className="sr-only">, {props.providerDisplayName}</span>
       </div>
+      {props.isSelected ? <CheckIcon className="size-3.5 shrink-0" aria-hidden="true" /> : null}
+      {props.subProvider ? (
+        <span className="min-w-0 shrink truncate text-xs text-muted-foreground/70">
+          {props.subProvider}
+        </span>
+      ) : null}
+      {props.showNewBadge ? (
+        <span
+          className="shrink-0 rounded border border-update/35 bg-update/15 px-0.5 py-px text-3xs font-bold uppercase leading-none tracking-wide text-update-foreground"
+          aria-label={gt("New model")}
+        >
+          {gt("New", { $context: "badge on a newly added model" })}
+        </span>
+      ) : null}
+      {props.unavailable ? (
+        <Badge variant="outline" size="sm">
+          <T context="badge on a model that cannot be selected">Unavailable</T>
+        </Badge>
+      ) : null}
+    </div>
   );
 
   const row = (
@@ -151,14 +151,14 @@ export const ModelListRow = memo(function ModelListRow(props: {
               onKeyDown={(event) => {
                 event.stopPropagation();
               }}
-                onPointerEnter={() => setFavoriteActiveKey(modelKey)}
-                onPointerLeave={() =>
-                  setFavoriteActiveKey((current) => (current === modelKey ? null : current))
-                }
-                onFocus={() => setFavoriteActiveKey(modelKey)}
-                onBlur={() =>
-                  setFavoriteActiveKey((current) => (current === modelKey ? null : current))
-                }
+              onPointerEnter={() => setFavoriteActiveKey(modelKey)}
+              onPointerLeave={() =>
+                setFavoriteActiveKey((current) => (current === modelKey ? null : current))
+              }
+              onFocus={() => setFavoriteActiveKey(modelKey)}
+              onBlur={() =>
+                setFavoriteActiveKey((current) => (current === modelKey ? null : current))
+              }
               disabled={Boolean(props.disabledReason)}
               aria-label={props.isFavorite ? gt("Remove from favorites") : gt("Add to favorites")}
             >

@@ -1426,10 +1426,10 @@ export const layer = Layer.effect(
           const [row] = yield* getRows(task.id);
           const current = row === undefined ? null : yield* decodeRow(row, origin);
           const scheduleSource = current ?? task;
-            // A manual run that starts before a one-time run must not use it up.
+          // A manual run that starts before a one-time run must not use it up.
           const next = nextRunAt(
-              scheduleSource,
-              scheduleSource.schedule.type === "once" ? startedAt : completedAt,
+            scheduleSource,
+            scheduleSource.schedule.type === "once" ? startedAt : completedAt,
           );
           const completed: ScheduledTask = {
             ...scheduleSource,
@@ -1439,7 +1439,7 @@ export const layer = Layer.effect(
                 lastRunStatus === "failed" &&
                 next === null &&
                 scheduleSource.schedule.type === "once"
-            ),
+              ),
             updatedAt: iso(completedAt),
             lastRunAt: startedAtIso,
             nextRunAt: next,
@@ -1655,23 +1655,23 @@ export const layer = Layer.effect(
           due,
           ({ task, dueAt }) =>
             Effect.suspend(() =>
-            task.missedRunGraceMinutes !== undefined
-              ? isPastMissedRunGrace(task.schedule, task.missedRunGraceMinutes, dueAt, now)
-                ? recordSkippedRun(
-                    task,
-                    now,
-                    "missed",
-                    `Due at ${task.nextRunAt}, past the ${task.missedRunGraceMinutes}-minute grace.`,
-                  )
-                : runTask(task, "scheduled")
-              : isMissedFixedTimeRun(task.schedule, dueAt, now)
-                ? rescheduleMissedRun(
-                    task,
-                    now,
-                    "missed",
-                    "Missed a scheduled run because the server was not running at that time.",
-                  )
-                : runTask(task, "scheduled"),
+              task.missedRunGraceMinutes !== undefined
+                ? isPastMissedRunGrace(task.schedule, task.missedRunGraceMinutes, dueAt, now)
+                  ? recordSkippedRun(
+                      task,
+                      now,
+                      "missed",
+                      `Due at ${task.nextRunAt}, past the ${task.missedRunGraceMinutes}-minute grace.`,
+                    )
+                  : runTask(task, "scheduled")
+                : isMissedFixedTimeRun(task.schedule, dueAt, now)
+                  ? rescheduleMissedRun(
+                      task,
+                      now,
+                      "missed",
+                      "Missed a scheduled run because the server was not running at that time.",
+                    )
+                  : runTask(task, "scheduled"),
             ).pipe(
               Effect.catch((cause) =>
                 Effect.logWarning("Scheduled task run failed", { taskId: task.id, cause }),
@@ -1938,8 +1938,8 @@ export const layer = Layer.effect(
               const fromRef =
                 signatureInput?.secretRef === undefined
                   ? bearerInput?.secretRef === undefined
-                  ? undefined
-                  : yield* secretRequests
+                    ? undefined
+                    : yield* secretRequests
                         .consume({ ref: bearerInput.secretRef, projectId: input.projectId })
                         .pipe(
                           Effect.catch((error) =>
@@ -1978,7 +1978,7 @@ export const layer = Layer.effect(
       const workspaceStrategy: ScheduledTask["workspaceStrategy"] =
         readOnly ||
         (input.workspaceStrategy.type === "worktree" &&
-        ((yield* managedFolders.isScratchProject(input.projectId)) ||
+          ((yield* managedFolders.isScratchProject(input.projectId)) ||
             (yield* threadLaunch.isNonGitProject(input.projectId))))
           ? { type: "root" }
           : input.workspaceStrategy;

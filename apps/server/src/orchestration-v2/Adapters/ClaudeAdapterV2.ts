@@ -3892,7 +3892,7 @@ export function claudeRuntimeQueryPolicyForRuntimePolicy(
       : CLAUDE_READ_ONLY_ALLOWED_TOOLS;
   const allowedTools = globalReads
     ? [...CLAUDE_READ_ONLY_ALLOWED_TOOLS, ...CLAUDE_READ_ONLY_BASH_RULES]
-      : undefined;
+    : undefined;
   // acceptEdits approves edits before the callback; the callback must ask for everything else.
   // Auto sends back what its review leaves open, and every tool where Claude cannot run in Auto.
   const installPermissionCallback =
