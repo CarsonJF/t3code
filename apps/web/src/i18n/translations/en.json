@@ -13398,7 +13398,6 @@
   "30a56f7e1ff009f1": "Could not issue the grant",
   "74202565bb77aaf0": "Connect an environment to manage its companions.",
   "a6b7d9df094eb2f8": "Add companion",
-  "ee38a3adf88fb3c2": "Companions",
   "09b910ec70f5ee9e": "Agent services you run elsewhere that speak External Companion Protocol v1. This server talks to them, so their tokens stay here.",
   "63db50d72e72da95": "No companions yet",
   "66b483d78b1f69ec": [

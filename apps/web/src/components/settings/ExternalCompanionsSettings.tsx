@@ -54,6 +54,7 @@ import { SecretSourceInput, useSecretSources } from "./SecretSourceInput";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSearchableSetting } from "./settingsSearch";
 import { useSettingsScope } from "./SettingsScopeContext";
+import { SettingsSectionIntro } from "./SettingsSectionIntro";
 
 const ACCESS_LABELS: Record<AuthMcpClientAccess, string> = {
   "read-only": msg("Read only"),
@@ -93,10 +94,9 @@ export function ExternalCompanionsSettings() {
     <SettingsPageContainer>
       {environmentId === null ? (
         <SettingsSection {...setting("external-companions")}>
-          <SettingsRow
-            title={<T>External Companions</T>}
-            description={<T>Connect an environment to manage its companions.</T>}
-          />
+          <SettingsSectionIntro>
+            <T>Connect an environment to manage its companions.</T>
+          </SettingsSectionIntro>
         </SettingsSection>
       ) : (
         <CompanionList key={environmentId} environmentId={environmentId} />
@@ -153,15 +153,12 @@ function CompanionList(props: { readonly environmentId: EnvironmentId }) {
         </Button>
       }
     >
-      <SettingsRow
-        title={<T>Companions</T>}
-        description={
-          <T>
-            Agent services you run elsewhere that speak External Companion Protocol v1. This server
-            talks to them, so their tokens stay here.
-          </T>
-        }
-      />
+      <SettingsSectionIntro>
+        <T>
+          Agent services you run elsewhere that speak External Companion Protocol v1. This server
+          talks to them, so their tokens stay here.
+        </T>
+      </SettingsSectionIntro>
       {configs.length === 0 ? (
         <SettingsRow
           title={<T>No companions yet</T>}

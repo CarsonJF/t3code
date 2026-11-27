@@ -24,6 +24,7 @@ import { useTotActions } from "../tots/useTotActions";
 import { Button } from "../ui/button";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSearchableSetting } from "./settingsSearch";
+import { SettingsSectionIntro } from "./SettingsSectionIntro";
 import { TotMemoryTidySettings } from "./TotMemoryTidySettings";
 
 const TOTS_DESCRIPTION =
@@ -156,7 +157,7 @@ function TotsList(props: { readonly environmentId: EnvironmentId | null }) {
   return (
     <SettingsPageContainer>
       <SettingsSection
-        title="Tots"
+        {...searchableSetting("tots")}
         headerAction={
           environmentId === null ? undefined : (
             <div className="flex items-center gap-1.5">
@@ -180,10 +181,10 @@ function TotsList(props: { readonly environmentId: EnvironmentId | null }) {
         }
       >
         {environmentId === null ? (
-          <SettingsRow {...searchableSetting("tots")} description="Connect to a T3 server first." />
+          <SettingsSectionIntro>Connect to a T3 server first.</SettingsSectionIntro>
         ) : (
           <>
-            <SettingsRow {...searchableSetting("tots")} description={TOTS_DESCRIPTION} />
+            <SettingsSectionIntro>{TOTS_DESCRIPTION}</SettingsSectionIntro>
             {machines.map((host) => (
               <TotsRows
                 key={host.environmentId}
@@ -218,10 +219,10 @@ function GroupChatsSection(props: { readonly environmentId: EnvironmentId | null
         </Button>
       }
     >
-      <SettingsRow
-        title="Talk to several Tots at once"
-        description="One shared thread you and several Tots talk in. Name a Tot with @ to ask it; with no name, the moderator answers. Tots can answer each other up to a limit you set."
-      />
+      <SettingsSectionIntro>
+        One shared thread you and several Tots talk in. Name a Tot with @ to ask it; with no name,
+        the moderator answers. Tots can answer each other up to a limit you set.
+      </SettingsSectionIntro>
       {rooms.length === 0 ? (
         <SettingsRow title="No group chats yet" description="Start one with New group chat." />
       ) : null}
