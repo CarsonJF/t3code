@@ -5,7 +5,6 @@
  */
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer.layer takes Node's own createServer.
 import * as NodeHttp from "node:http";
-// @effect-diagnostics-next-line nodeBuiltinImport:off -- a line reader for a demo script's stdin.
 import * as NodeReadline from "node:readline";
 
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
