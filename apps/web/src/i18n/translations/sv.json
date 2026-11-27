@@ -13506,5 +13506,41 @@
       "k": "_gt_value_1",
       "v": "v"
     }
-  ]
+  ],
+  "e09770bdfcbe6b74": "Companion theme CSS",
+  "ce70ea7ef1470f3e": "Companion theme effect",
+  "262bf3d8c7cc46d9": "Themed",
+  "0fb99dde81bd8323": [
+    "Theme for ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "4723ae40e33d47bb": "Styles this companion's conversation and its children's, here only. It is set in T3, never by the companion.",
+  "a7ecf0ead2942b8d": "CSS",
+  "bbc2f34e0c360a8f": [
+    "Scoped to",
+    " ",
+    {
+      "t": "code",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    },
+    "; child channels also carry ",
+    {
+      "t": "code",
+      "i": 3,
+      "c": "data-companion-channel"
+    },
+    ". A Tot theme's CSS works unchanged."
+  ],
+  "ce68d284623646c0": "Effect",
+  "40e0c7efbd4045d3": "Runs in the sandboxed effect layer over the conversation; not here.",
+  "b9c4fa741561b5f4": "Clear theme"
 }

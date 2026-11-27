@@ -311,6 +311,13 @@ export class ServerSettingsService extends Context.Service<
       update: (groupChats: ServerSettings["groupChats"]) => ServerSettings["groupChats"],
     ) => Effect.Effect<ServerSettings, ServerSettingsError>;
 
+    /** A server-side companion change, such as a theme; tokens stay as stored. */
+    readonly updateExternalCompanions: (
+      update: (
+        companions: ServerSettings["externalCompanions"],
+      ) => ServerSettings["externalCompanions"],
+    ) => Effect.Effect<ServerSettings, ServerSettingsError>;
+
     /** The thread groups before each recent change, from the backup beside settings.json. */
     readonly readThreadGroupHistory: Effect.Effect<ThreadGroupHistory>;
 
@@ -386,6 +393,13 @@ const makeTest = Effect.fn("serverSettings.makeTest")(function* (
     updateGroupChats: (update) =>
       updateTestSettings((currentSettings) =>
         Effect.succeed({ ...currentSettings, groupChats: update(currentSettings.groupChats) }),
+      ),
+    updateExternalCompanions: (update) =>
+      updateTestSettings((currentSettings) =>
+        Effect.succeed({
+          ...currentSettings,
+          externalCompanions: update(currentSettings.externalCompanions),
+        }),
       ),
     readThreadGroupHistory: Effect.succeed(EMPTY_THREAD_GROUP_HISTORY),
     withSettingsSnapshot: (use) =>
@@ -1562,6 +1576,10 @@ const make = Effect.gen(function* () {
     updateGroupChats: (update) =>
       updateAndPersistSettings({}, (current) =>
         Effect.succeed({ ...current, groupChats: update(current.groupChats) }),
+      ),
+    updateExternalCompanions: (update) =>
+      updateAndPersistSettings({}, (current) =>
+        Effect.succeed({ ...current, externalCompanions: update(current.externalCompanions) }),
       ),
     readThreadGroupHistory,
     withSettingsSnapshot,

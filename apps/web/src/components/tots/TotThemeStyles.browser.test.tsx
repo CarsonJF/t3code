@@ -3,7 +3,7 @@ import { expect, it } from "vite-plus/test";
 import type { ReactNode } from "react";
 
 import { render } from "../../../test/render";
-import { TotThemeSheet } from "./TotThemeStyles";
+import { ThemeSheet, TotThemeSheet } from "./TotThemeStyles";
 
 const yui = TotId.make("yui");
 
@@ -84,4 +84,27 @@ it("never mounts a sheet for a non-Tot thread", async () => {
         .includes('data-tot-id="yui"'),
     ),
   ).toBe(false);
+});
+
+it("mounts a companion's sheet on its view only, reading a Tot theme's root as the view", async () => {
+  await using screen = await render(
+    <>
+      <div data-companion-id="yui" data-companion-channel="main">
+        <p>Companion text</p>
+      </div>
+      {probes}
+      <ThemeSheet
+        kind="companion"
+        scopeId="yui"
+        css={'[data-tot-id="yui"][data-thread-id] { background-color: rgb(1, 2, 3); }'}
+      />
+    </>,
+    { router: false },
+  );
+  const view = screen.container.querySelector<HTMLElement>('[data-companion-id="yui"]')!;
+  const tot = screen.container.querySelector<HTMLElement>('[data-tot-id="yui"]')!;
+  expect(getComputedStyle(view).backgroundColor).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(tot).backgroundColor).not.toBe("rgb(1, 2, 3)");
+  await screen.unmount();
+  expect(getComputedStyle(view).backgroundColor).not.toBe("rgb(1, 2, 3)");
 });

@@ -376,6 +376,57 @@ describe("ExternalCompanions", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.live("drops theme CSS and effect a manifest or event tries to supply", () =>
+    Effect.gen(function* () {
+      const injected = {
+        theme: { css: "body { display: none }", effect: "fetch('/steal')" },
+        css: "body { display: none }",
+      };
+      const { mock, companions } = yield* start(
+        (baseUrl, token) => [companionConfig(baseUrl, token)],
+        {
+          manifest: {
+            ...DEMO_MANIFEST,
+            ...injected,
+            avatar: { ...DEMO_MANIFEST.avatar, ...injected },
+            children: DEMO_MANIFEST.children.map((child) => ({ ...child, ...injected })),
+          },
+        },
+      );
+      yield* waitFor(companions, connected);
+      yield* mock.emit(
+        JSON.stringify({
+          type: "child.updated",
+          child: { id: "scout", name: "Scout", unreadCount: 1, ...injected },
+        }),
+      );
+      const state = yield* waitFor(
+        companions,
+        (current) => current.companions[0]?.manifest?.children[0]?.unreadCount === 1,
+      );
+      const seen = JSON.stringify(state);
+      expect(seen).not.toContain("display: none");
+      expect(seen).not.toContain("steal");
+      expect(state.companions[0]?.manifest).not.toHaveProperty("theme");
+    }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.live("keeps the connection when only the companion's theme changes", () =>
+    Effect.gen(function* () {
+      const { mock, settings, companions } = yield* start((baseUrl, token) => [
+        companionConfig(baseUrl, token),
+      ]);
+      yield* waitFor(companions, connected);
+      const opened = yield* mock.socketsOpened;
+      yield* settings.set([
+        { ...companionConfig(mock.baseUrl, mock.token), theme: { css: ".x { color: red }" } },
+      ]);
+      yield* mock.emit({ type: "avatar.state", state: "working" });
+      yield* waitFor(companions, (state) => state.companions[0]?.avatarStates.main === "working");
+      expect(yield* mock.socketsOpened).toBe(opened);
+    }).pipe(Effect.scoped, Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.live("drops a removed companion and its items", () =>
     Effect.gen(function* () {
       const { settings, companions } = yield* start((baseUrl, token) => [

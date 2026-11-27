@@ -2,6 +2,8 @@ import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   EMPTY_CHANNEL_VIEW,
+  companionAvatar,
+  companionFaceState,
   withOlderMessages,
   type CompanionChannelView,
 } from "@t3tools/client-runtime/companions";
@@ -39,7 +41,7 @@ import {
 import { useState, type KeyboardEvent } from "react";
 
 import { isElectron } from "~/env";
-import { useClientSettings } from "~/hooks/useSettings";
+import { useClientSettings, useEnvironmentSettings } from "~/hooks/useSettings";
 import { formatShortTimestamp } from "../../timestampFormat";
 import { randomUUID } from "../../lib/utils";
 import { linkedThreadRouteParams } from "../../linkedThreadSurface";
@@ -57,6 +59,9 @@ import { SidebarInset } from "../ui/sidebar";
 import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { ThemeEffect } from "../tots/TotThemeEffect";
+import { ConversationHero } from "../tots/TotThreadHero";
+import { ThemeSheet } from "../tots/TotThemeStyles";
 import { CompanionFace } from "./CompanionFace";
 import { CompanionNeedsYouActions } from "./CompanionNeedsYouActions";
 
@@ -125,11 +130,11 @@ function ConnectedChat(props: {
       input: { companionId: companion.id, channel },
     }),
   );
-  const view: CompanionChannelView =
-    Option.getOrUndefined(AsyncResult.value(result)) ?? EMPTY_CHANNEL_VIEW;
-  const loading =
-    AsyncResult.isInitial(result) || (AsyncResult.isWaiting(result) && view.messages.length === 0);
+  const snapshot = Option.getOrUndefined(AsyncResult.value(result));
+  const view: CompanionChannelView = snapshot ?? EMPTY_CHANNEL_VIEW;
   const loadFailed = AsyncResult.isFailure(result);
+  // The stream stays open after its snapshot, so an empty channel has loaded once one arrives.
+  const loading = snapshot === undefined && !loadFailed;
   const [older, setOlder] = useState<{
     readonly messages: ReadonlyArray<CompanionMessage>;
     readonly cursor: string | null;
@@ -140,6 +145,14 @@ function ConnectedChat(props: {
   const messages = withOlderMessages(older?.messages ?? [], view.messages);
   const online = companion.connection === "connected";
   const name = child?.name ?? companion.label;
+  const faceSeed = child === undefined ? companion.id : `${companion.id}:${child.id}`;
+  const avatarState = companion.avatarStates[childId ?? "main"];
+  // Children wear the companion's theme; their CSS can target data-companion-channel.
+  const theme = useEnvironmentSettings(
+    environmentId,
+    (settings) => settings.externalCompanions.find((entry) => entry.id === companion.id)?.theme,
+  );
+  const working = online && avatarState === "working";
   const loadOlder = async () => {
     if (cursor === null) return;
     setLoadingOlder(true);
@@ -166,8 +179,8 @@ function ConnectedChat(props: {
         <WorkspacePageHeader electron={isElectron} className="border-b">
           <CompanionFace
             avatar={child?.avatar ?? companion.manifest?.avatar}
-            seed={child === undefined ? companion.id : `${companion.id}:${child.id}`}
-            state={companion.avatarStates[childId ?? "main"]}
+            seed={faceSeed}
+            state={avatarState}
             online={online}
             size={22}
           />
@@ -196,65 +209,88 @@ function ConnectedChat(props: {
             {companion.error}
           </p>
         ) : null}
-        <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto scrollbar-gutter-both">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-5">
-            {cursor !== null && messages.length > 0 ? (
-              <Button
-                size="compact"
-                variant="ghost-muted"
-                className="self-center"
-                disabled={loadingOlder}
-                onClick={() => void loadOlder()}
-              >
-                <T>Load older messages</T>
-              </Button>
-            ) : null}
-            {loading ? (
-              <p className="text-center text-sm text-muted-foreground">
-                <T>Loading…</T>
-              </p>
-            ) : null}
-            {loadFailed && messages.length === 0 ? (
-              <p className="text-center text-sm text-muted-foreground">
-                <T>
-                  The conversation could not be read. It loads again when the companion is back.
-                </T>
-              </p>
-            ) : null}
-            {!loading && !loadFailed && messages.length === 0 ? (
-              <p className="text-center text-sm text-muted-foreground">
-                <T>
-                  No messages with <Var>{name}</Var> yet.
-                </T>
-              </p>
-            ) : null}
-            {messages.map((message) => (
-              <MessageRow
-                key={message.id}
-                message={message}
-                streaming={view.streaming.has(message.id)}
-                environmentId={environmentId}
-                companion={companion}
-                childAvatar={child?.avatar}
-                faceSeed={child === undefined ? companion.id : `${companion.id}:${child.id}`}
-              />
-            ))}
-            {view.looseNeedsYou.map((needsYou) => (
-              <NeedsYouCard
-                key={needsYou.id}
-                needsYou={needsYou}
-                environmentId={environmentId}
-                companionId={companion.id}
-              />
-            ))}
+        <div
+          className="relative flex min-h-0 flex-1 flex-col bg-background"
+          data-companion-id={companion.id}
+          data-companion-channel={channel}
+        >
+          <ThemeSheet kind="companion" scopeId={companion.id} css={theme?.css} />
+          <ThemeEffect
+            frameKey={`${companion.id}:${channel}`}
+            script={theme?.effect}
+            context={{
+              usedTokens: null,
+              maxTokens: null,
+              usedPercentage: null,
+              working,
+              phase: !online ? "disconnected" : working ? "running" : "ready",
+            }}
+          />
+          <ConversationHero
+            avatar={companionAvatar(child?.avatar ?? companion.manifest?.avatar, faceSeed)}
+            name={name}
+            state={companionFaceState(avatarState, online)}
+          />
+          <div className="messages-timeline-scroll flex min-h-0 flex-1 flex-col-reverse overflow-y-auto scrollbar-gutter-both">
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-5">
+              {cursor !== null && messages.length > 0 ? (
+                <Button
+                  size="compact"
+                  variant="ghost-muted"
+                  className="self-center"
+                  disabled={loadingOlder}
+                  onClick={() => void loadOlder()}
+                >
+                  <T>Load older messages</T>
+                </Button>
+              ) : null}
+              {loading ? (
+                <p className="text-center text-sm text-muted-foreground">
+                  <T>Loading…</T>
+                </p>
+              ) : null}
+              {loadFailed && messages.length === 0 ? (
+                <p className="text-center text-sm text-muted-foreground">
+                  <T>
+                    The conversation could not be read. It loads again when the companion is back.
+                  </T>
+                </p>
+              ) : null}
+              {!loading && !loadFailed && messages.length === 0 ? (
+                <p className="text-center text-sm text-muted-foreground">
+                  <T>
+                    No messages with <Var>{name}</Var> yet.
+                  </T>
+                </p>
+              ) : null}
+              {messages.map((message) => (
+                <MessageRow
+                  key={message.id}
+                  message={message}
+                  streaming={view.streaming.has(message.id)}
+                  environmentId={environmentId}
+                  companion={companion}
+                  childAvatar={child?.avatar}
+                  faceSeed={faceSeed}
+                />
+              ))}
+              {view.looseNeedsYou.map((needsYou) => (
+                <NeedsYouCard
+                  key={needsYou.id}
+                  needsYou={needsYou}
+                  environmentId={environmentId}
+                  companionId={companion.id}
+                />
+              ))}
+            </div>
           </div>
+          <Composer
+            environmentId={environmentId}
+            companion={companion}
+            channel={channel}
+            name={name}
+          />
         </div>
-        <Composer
-          environmentId={environmentId}
-          companion={companion}
-          channel={channel}
-          name={name}
-        />
       </div>
     </SidebarInset>
   );
@@ -315,7 +351,10 @@ function MessageRow(props: {
           )}
         </div>
         {message.text === "" ? null : (
-          <div className={mine ? "rounded-2xl bg-secondary px-3 py-2" : "min-w-0"}>
+          <div
+            className={mine ? "rounded-2xl bg-secondary px-3 py-2" : "min-w-0"}
+            {...(mine ? { "data-user-message-bubble": "" } : {})}
+          >
             <ChatMarkdown
               text={message.text}
               cwd={undefined}
@@ -525,6 +564,7 @@ function Composer(props: {
   return (
     <form
       className="border-t bg-background px-4 py-3"
+      data-slot="composer-host"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();

@@ -1,4 +1,4 @@
-import { TOT_THEME_MAX_LENGTH, type TotThemePatch } from "@t3tools/contracts";
+import { TOT_THEME_MAX_LENGTH, type TotTheme, type TotThemePatch } from "@t3tools/contracts";
 
 import { themeCssLoadsRemoteFiles } from "./themeCss.ts";
 
@@ -17,3 +17,24 @@ export function totThemeProblem(theme: TotThemePatch): string | null {
   }
   return null;
 }
+
+/**
+ * A theme write merged onto a stored theme: an absent field keeps its value, and
+ * `""` or null clears that field alone. Undefined when nothing is left.
+ */
+export function mergeTheme(
+  theme: TotTheme | undefined,
+  patch: TotThemePatch,
+): TotTheme | undefined {
+  const css = patch.css === undefined ? theme?.css : (patch.css ?? "");
+  const effect = patch.effect === undefined ? theme?.effect : (patch.effect ?? "");
+  const next = {
+    ...(css === undefined || css === "" ? {} : { css }),
+    ...(effect === undefined || effect === "" ? {} : { effect }),
+  };
+  return Object.keys(next).length === 0 ? undefined : next;
+}
+
+/** The element a companion's theme CSS is scoped to; its ids are slugs, so no escaping. */
+export const companionThemeSelector = (companionId: string) =>
+  `[data-companion-id="${companionId}"]`;
