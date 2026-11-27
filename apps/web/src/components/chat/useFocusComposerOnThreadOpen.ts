@@ -3,6 +3,16 @@ import { useEffect } from "react";
 
 import { restoreFocusOnThreadEnter } from "../../lib/terminalFocus";
 
+/** Focuses the composer a frame after entering a conversation; returns the cancel. */
+export function focusComposerAfterEntry(focusComposer: () => void): () => void {
+  const frame = window.requestAnimationFrame(() => {
+    // Double-clicking a sidebar row opens its thread and its rename field in one gesture.
+    if (document.activeElement?.matches("[data-sidebar-row] input")) return;
+    focusComposer();
+  });
+  return () => window.cancelAnimationFrame(frame);
+}
+
 /** Restores thread focus, landing the caret a frame after composer entry. */
 export function useFocusComposerOnThreadOpen(
   threadRef: ScopedThreadRef | null,
@@ -14,20 +24,16 @@ export function useFocusComposerOnThreadOpen(
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- restores DOM focus on thread entry and after the drawer opens or closes
   useEffect(() => {
     if (!threadRef || !enabled || !root) return;
-    let frame: number | undefined;
+    let cancelFrame: (() => void) | undefined;
     const leave = restoreFocusOnThreadEnter(threadRef, {
       root,
       focusComposer: () => {
-        frame = window.requestAnimationFrame(() => {
-          // Double-clicking a sidebar row opens its thread and its rename field in one gesture.
-          if (document.activeElement?.matches("[data-sidebar-row] input")) return;
-          focusComposer();
-        });
+        cancelFrame = focusComposerAfterEntry(focusComposer);
       },
     });
     return () => {
       leave();
-      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      cancelFrame?.();
     };
   }, [
     threadRef,
