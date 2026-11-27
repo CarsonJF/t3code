@@ -10,6 +10,7 @@ import * as Schema from "effect/Schema";
 import { AuthMcpClientAccess } from "./auth.ts";
 import { IsoDateTime, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { SettingsSecretValue } from "./settingsSecretValue.ts";
+import { TotTheme } from "./tots.ts";
 
 const COMPANION_PROTOCOL = "companion.v1";
 
@@ -44,6 +45,12 @@ export const ExternalCompanionConfig = Schema.Struct({
     Schema.withDecodingDefaultKey(Effect.succeed("")),
     Schema.annotateKey({ settingsSecret: true }),
   ),
+  /**
+   * The companion view's look, a Tot theme scoped to `[data-companion-id="<id>"]`. Set on
+   * this server only (settings or `t3_companion_theme_set`); the manifest and events never
+   * carry one, since everything the companion sends is untrusted.
+   */
+  theme: Schema.optional(TotTheme),
 });
 export type ExternalCompanionConfig = typeof ExternalCompanionConfig.Type;
 

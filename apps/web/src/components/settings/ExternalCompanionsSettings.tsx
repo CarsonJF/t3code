@@ -4,6 +4,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
+  TOT_THEME_MAX_LENGTH,
   isSecretReference,
   type AuthMcpClientAccess,
   type CompanionManifest,
@@ -12,11 +13,14 @@ import {
   type ExternalCompanionGrantIssueResult,
   type ExternalCompanionStatus,
   type SettingsSecretValue,
+  type TotTheme,
 } from "@t3tools/contracts";
+import { companionThemeSelector, totThemeProblem } from "@t3tools/shared/totTheme";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
 import {
   CopyIcon,
   KeyRoundIcon,
+  PaletteIcon,
   PencilIcon,
   PlugZapIcon,
   PlusIcon,
@@ -42,6 +46,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
 import { SecretSourceInput, useSecretSources } from "./SecretSourceInput";
@@ -115,6 +120,7 @@ function CompanionList(props: { readonly environmentId: EnvironmentId }) {
   );
   const [editing, setEditing] = useState<Editing>(null);
   const [granting, setGranting] = useState<ExternalCompanionStatus | null>(null);
+  const [theming, setTheming] = useState<ExternalCompanionConfig | null>(null);
   const save = async (next: ReadonlyArray<ExternalCompanionConfig>) => {
     const result = await update({
       environmentId: props.environmentId,
@@ -172,6 +178,7 @@ function CompanionList(props: { readonly environmentId: EnvironmentId }) {
             onEdit={() => setEditing({ config, isNew: false })}
             onRemove={() => void save(configs.filter((entry) => entry.id !== config.id))}
             onGrant={() => (status === undefined ? undefined : setGranting(status))}
+            onTheme={() => setTheming(config)}
             environmentId={props.environmentId}
           />
         );
@@ -188,6 +195,20 @@ function CompanionList(props: { readonly environmentId: EnvironmentId }) {
               ? [...configs, config]
               : configs.map((entry) => (entry.id === config.id ? config : entry));
             if (await save(next)) setEditing(null);
+          }}
+        />
+      )}
+      {theming === null ? null : (
+        <CompanionThemeDialog
+          config={theming}
+          name={statusOf(theming.id)?.label ?? (theming.label || theming.id)}
+          canWrite={canWrite}
+          onClose={() => setTheming(null)}
+          onSave={async (theme) => {
+            const { theme: _previous, ...rest } = theming;
+            const next = theme === undefined ? rest : { ...rest, theme };
+            if (await save(configs.map((entry) => (entry.id === theming.id ? next : entry))))
+              setTheming(null);
           }}
         />
       )}
@@ -210,6 +231,7 @@ function CompanionSettingsRow(props: {
   readonly onEdit: () => void;
   readonly onRemove: () => void;
   readonly onGrant: () => void;
+  readonly onTheme: () => void;
 }) {
   const gt = useGT();
   const m = useMessages();
@@ -233,6 +255,11 @@ function CompanionSettingsRow(props: {
             size={20}
           />
           <span className="truncate">{status?.label ?? (config.label || config.id)}</span>
+          {config.theme === undefined ? null : (
+            <Badge variant="outline" size="sm" data-companion-themed>
+              <T>Themed</T>
+            </Badge>
+          )}
           <Badge variant={online ? "secondary" : "outline"} size="sm">
             {online ? (
               <T>Connected</T>
@@ -298,6 +325,9 @@ function CompanionSettingsRow(props: {
               <T>Revoke MCP</T>
             </Button>
           )}
+          <Button size="icon-xs" variant="ghost" aria-label={gt("Theme")} onClick={props.onTheme}>
+            <PaletteIcon />
+          </Button>
           <Button
             size="icon-xs"
             variant="ghost"
@@ -373,6 +403,7 @@ function CompanionEditor(props: {
     }
     setBusy(true);
     await props.onSave({
+      ...props.initial,
       id,
       label: manifest?.name ?? props.initial.label,
       baseUrl: baseUrl.trim(),
@@ -588,6 +619,124 @@ function GrantDialog(props: {
               <T>Done</T>
             </Button>
           )}
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+/** One companion's theme: the Tot theme editor's fields, scoped to the companion's view. */
+export function CompanionThemeDialog(props: {
+  readonly config: ExternalCompanionConfig;
+  readonly name: string;
+  readonly canWrite: boolean;
+  readonly onClose: () => void;
+  readonly onSave: (theme: TotTheme | undefined) => Promise<void>;
+}) {
+  const gt = useGT();
+  const [css, setCss] = useState(props.config.theme?.css ?? "");
+  const [effect, setEffect] = useState(props.config.theme?.effect ?? "");
+  const [busy, setBusy] = useState(false);
+  const cssProblem = totThemeProblem({ css });
+  const effectProblem = totThemeProblem({ effect });
+  const save = async (theme: TotTheme | undefined) => {
+    setBusy(true);
+    await props.onSave(theme);
+    setBusy(false);
+  };
+  const themed = css !== "" || effect !== "";
+  return (
+    <Dialog open onOpenChange={(open) => (open ? undefined : props.onClose())}>
+      <DialogPopup className="max-w-2xl" data-companion-theme-editor={props.config.id}>
+        <DialogHeader>
+          <DialogTitle>
+            <T>
+              Theme for <Var>{props.name}</Var>
+            </T>
+          </DialogTitle>
+          <DialogDescription>
+            <T>
+              Styles this companion&apos;s conversation and its children&apos;s, here only. It is
+              set in T3, never by the companion.
+            </T>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogPanel>
+          <div className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1">
+              <span className="font-medium text-xs">
+                <T>CSS</T>
+              </span>
+              <Textarea
+                aria-label={gt("Companion theme CSS")}
+                className="min-h-40 resize-y"
+                value={css}
+                disabled={!props.canWrite}
+                placeholder={".messages-timeline-scroll { background: #101820; }"}
+                onChange={(event) => setCss(event.target.value)}
+              />
+              <span className="text-xs text-muted-foreground">
+                <T>
+                  Scoped to{" "}
+                  <code>
+                    <Var>{companionThemeSelector(props.config.id)}</Var>
+                  </code>
+                  ; child channels also carry <code>data-companion-channel</code>. A Tot
+                  theme&apos;s CSS works unchanged.
+                </T>
+              </span>
+              <span className="self-end text-xs text-muted-foreground">
+                {css.length.toLocaleString()} / {TOT_THEME_MAX_LENGTH.toLocaleString()}
+              </span>
+              {cssProblem === null ? null : (
+                <p className="text-destructive-foreground text-xs">{cssProblem}</p>
+              )}
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-medium text-xs">
+                <T>Effect</T>
+              </span>
+              <span className="text-xs text-muted-foreground">
+                <T>Runs in the sandboxed effect layer over the conversation; not here.</T>
+              </span>
+              <Textarea
+                aria-label={gt("Companion theme effect")}
+                className="min-h-28 resize-y"
+                value={effect}
+                disabled={!props.canWrite}
+                onChange={(event) => setEffect(event.target.value)}
+              />
+              <span className="self-end text-xs text-muted-foreground">
+                {effect.length.toLocaleString()} / {TOT_THEME_MAX_LENGTH.toLocaleString()}
+              </span>
+              {effectProblem === null ? null : (
+                <p className="text-destructive-foreground text-xs">{effectProblem}</p>
+              )}
+            </label>
+          </div>
+        </DialogPanel>
+        <DialogFooter>
+          {props.config.theme === undefined ? null : (
+            <Button
+              variant="outline"
+              disabled={busy || !props.canWrite}
+              onClick={() => void save(undefined)}
+            >
+              <T>Clear theme</T>
+            </Button>
+          )}
+          <Button
+            disabled={busy || !props.canWrite || cssProblem !== null || effectProblem !== null}
+            onClick={() =>
+              void save(
+                themed
+                  ? { ...(css === "" ? {} : { css }), ...(effect === "" ? {} : { effect }) }
+                  : undefined,
+              )
+            }
+          >
+            <T>Save</T>
+          </Button>
         </DialogFooter>
       </DialogPopup>
     </Dialog>

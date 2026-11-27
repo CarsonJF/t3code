@@ -6,7 +6,12 @@ import {
   totFaceState,
   type EnvironmentTot,
 } from "@t3tools/client-runtime/tots";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ThreadId,
+  TotAvatar as TotAvatarDescriptor,
+  TotFaceState,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 
@@ -70,12 +75,27 @@ function TotHero(props: {
   readonly threadId: ThreadId;
 }) {
   const { tot } = props.entry;
+  const shell = useThreadShell(scopeThreadRef(props.environmentId, props.threadId));
+  return (
+    <ConversationHero
+      avatar={tot.avatar}
+      name={tot.name}
+      state={totFaceState(totFaceInputFromShell(tot, shell))}
+    />
+  );
+}
+
+/** The one you are talking to, large above a conversation: a Tot's thread or a companion's. */
+export function ConversationHero(props: {
+  readonly avatar: TotAvatarDescriptor;
+  readonly name: string;
+  readonly state: TotFaceState;
+}) {
+  const { avatar, name, state } = props;
   const animate = useClientSettings((settings) => settings.animateTotAvatars);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const shell = useThreadShell(scopeThreadRef(props.environmentId, props.threadId));
-  const accent = useTotAccent(tot.avatar);
+  const accent = useTotAccent(avatar);
   const [collapsed, setCollapsed] = useLocalStorage(HERO_COLLAPSED_KEY, false, Schema.Boolean);
-  const state = totFaceState(totFaceInputFromShell(tot, shell));
   const animation = resolveTotAnimation("own-view", animate, reducedMotion);
   const status = (
     <span className="text-muted-foreground text-xs" aria-live="polite">
@@ -86,7 +106,7 @@ function TotHero(props: {
     <Button
       variant="ghost"
       size="icon-xs"
-      aria-label={collapsed ? `Show ${tot.name} large` : `Make ${tot.name} small`}
+      aria-label={collapsed ? `Show ${name} large` : `Make ${name} small`}
       aria-expanded={!collapsed}
       onClick={() => setCollapsed(!collapsed)}
     >
@@ -96,19 +116,20 @@ function TotHero(props: {
   return (
     <div
       className="relative shrink-0"
+      data-conversation-hero={state}
       style={{ backgroundImage: `linear-gradient(to bottom, ${totTint(accent, 13)}, transparent)` }}
     >
       {collapsed ? (
         <div className="flex items-center justify-center gap-2.5 px-4 py-2">
-          <TotAvatar avatar={tot.avatar} state={state} animation={animation} size={32} />
-          <span className="font-medium text-foreground text-sm">{tot.name}</span>
+          <TotAvatar avatar={avatar} state={state} animation={animation} size={32} />
+          <span className="font-medium text-foreground text-sm">{name}</span>
           {status}
           {toggle}
         </div>
       ) : (
         <div className="flex flex-col items-center gap-1.5 pt-4 pb-5">
-          <TotAvatar avatar={tot.avatar} state={state} animation={animation} size={104} />
-          <span className="font-medium text-foreground text-lg">{tot.name}</span>
+          <TotAvatar avatar={avatar} state={state} animation={animation} size={104} />
+          <span className="font-medium text-foreground text-lg">{name}</span>
           {status}
           <div className="absolute top-2 right-3">{toggle}</div>
         </div>

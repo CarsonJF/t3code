@@ -1,13 +1,12 @@
 /**
- * Runs the External Companion Protocol v1 test fixture on a fixed port, with demo history, for
- * trying the feature locally:
- *
- *   node apps/server/scripts/mock-companion.ts [--port 4790] [--token mock-token]
- *
- * Register http://127.0.0.1:<port> with that token in Settings → External Companions.
+ * The External Companion Protocol v1 fixture on a fixed port, with demo history:
+ * `node apps/server/scripts/mock-companion.ts [--port 4790] [--token mock-token]`.
+ * Each stdin line is sent as an event, such as {"type":"avatar.state","state":"working"}.
  */
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- NodeHttpServer.layer takes Node's own createServer.
 import * as NodeHttp from "node:http";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- a line reader for a demo script's stdin.
+import * as NodeReadline from "node:readline";
 
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -89,6 +88,11 @@ const history = {
 const program = Effect.gen(function* () {
   const mock = yield* makeMockCompanion({ token, history, pageSize: 3 });
   yield* Effect.logInfo(`Mock companion at ${mock.baseUrl} (token ${mock.token})`);
+  const services = yield* Effect.context();
+  const lines = NodeReadline.createInterface({ input: process.stdin });
+  lines.on("line", (line) => {
+    if (line.trim() !== "") Effect.runForkWith(services)(mock.emit(line.trim()));
+  });
   return yield* Effect.never;
 });
 

@@ -16,7 +16,7 @@ vi.mock(import("../../hooks/useSettings"), async (original) => {
   return { ...actual, useClientSettings };
 });
 
-import { TotThemeEffect } from "./TotThemeEffect";
+import { ThemeEffect, TotThemeEffect } from "./TotThemeEffect";
 
 const THREAD = totThreadId(TotId.make("bob"), "one");
 const OTHER_THREAD = totThreadId(TotId.make("bob"), "two");
@@ -355,5 +355,51 @@ describe("TotThemeEffect", () => {
     settings.totThemeEffects = false;
     await using screen = await render(<Area threadId={THREAD} script={FIXTURE} />);
     expect(screen.container.querySelector("iframe")).toBeNull();
+  });
+});
+
+describe("ThemeEffect", () => {
+  it("runs a companion's effect in the same sandbox, with its working state", async () => {
+    using messages = setup();
+    await using screen = await render(
+      <div style={{ position: "relative", width: 300, height: 200 }}>
+        <ThemeEffect
+          frameKey="yui:main"
+          script={FIXTURE}
+          context={{
+            usedTokens: null,
+            maxTokens: null,
+            usedPercentage: null,
+            working: true,
+            phase: "running",
+          }}
+        />
+      </div>,
+    );
+    const frame = screen.container.querySelector("iframe")!;
+    expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
+    await vi.waitFor(() => {
+      expect(messages.received).toContainEqual({ parentDocument: "blocked" });
+      expect(messages.echoes("context")[0]).toMatchObject({ working: true, phase: "running" });
+    }, FRAME_WAIT);
+  });
+
+  it("draws nothing while theme effects are off", async () => {
+    settings.totThemeEffects = false;
+    await using screen = await render(
+      <ThemeEffect
+        frameKey="yui:main"
+        script={FIXTURE}
+        context={{
+          usedTokens: null,
+          maxTokens: null,
+          usedPercentage: null,
+          working: false,
+          phase: "ready",
+        }}
+      />,
+    );
+    expect(screen.container.querySelector("iframe")).toBeNull();
+    settings.totThemeEffects = true;
   });
 });

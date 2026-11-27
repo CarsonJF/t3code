@@ -683,6 +683,7 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
     updateSettings,
     updateTots: () => Effect.die("Unexpected Tot update"),
     updateGroupChats: () => Effect.die("Unexpected group chat update"),
+    updateExternalCompanions: () => Effect.die("Unexpected companion update"),
     updateProviderInstance: () => Effect.die("Unexpected provider mutation"),
     readThreadGroupHistory: Effect.succeed(EMPTY_THREAD_GROUP_HISTORY),
     withSettingsSnapshot: (use) => Ref.get(settings).pipe(Effect.flatMap(use)),

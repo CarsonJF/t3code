@@ -424,6 +424,8 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   ),
   t3_theme_read: tool(["Read", "Reading", "Read", "themes"], "theme-read"),
   t3_theme_set: tool(["Set", "Setting", "Set", "the theme"], "theme-set"),
+  t3_companion_theme_read: tool(["Read", "Reading", "Read", "a companion theme"], "theme-read"),
+  t3_companion_theme_set: tool(["Set", "Setting", "Set", "a companion theme"], "theme-set"),
   t3_thread_groups_read: tool(["Read", "Reading", "Read", "thread groups"], "thread-groups-read"),
   t3_thread_groups_update: tool(
     ["Update", "Updating", "Updated", "thread groups"],
