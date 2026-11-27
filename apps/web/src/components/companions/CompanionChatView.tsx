@@ -38,9 +38,10 @@ import {
   WrenchIcon,
   XIcon,
 } from "lucide-react";
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { isElectron } from "~/env";
+import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { useClientSettings, useEnvironmentSettings } from "~/hooks/useSettings";
 import { formatShortTimestamp } from "../../timestampFormat";
 import { randomUUID } from "../../lib/utils";
@@ -52,6 +53,7 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import ChatMarkdown from "../ChatMarkdown";
+import { focusComposerAfterEntry } from "../chat/useFocusComposerOnThreadOpen";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
@@ -534,6 +536,17 @@ function Composer(props: {
   // Kept across a failed send so the retry is the same message to the companion.
   const [clientMessageId, setClientMessageId] = useState(() => randomUUID());
   const [sending, setSending] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Thread views skip entry focus on touch, where it would raise the keyboard.
+  const isCoarsePointer = useMediaQuery({ pointer: "coarse" });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- focuses the composer on entry; the chat remounts per channel
+  useEffect(
+    () =>
+      isCoarsePointer
+        ? undefined
+        : focusComposerAfterEntry(() => textareaRef.current?.focus({ preventScroll: true })),
+    [isCoarsePointer],
+  );
   const submit = async () => {
     const body = text.trim();
     if (body === "" || sending) return;
@@ -572,6 +585,7 @@ function Composer(props: {
     >
       <div className="mx-auto flex w-full max-w-3xl items-end gap-2">
         <Textarea
+          ref={textareaRef}
           value={text}
           rows={2}
           disabled={!canSend}
