@@ -50,6 +50,7 @@ it("keeps the tooltip open when highlighting scrolls a row into view", async () 
   const onScroll = vi.fn();
   viewport().addEventListener("scroll", onScroll);
   await screen.rerender(<Menu activeItemId="command:25" />);
-  await vi.waitFor(() => expect(onScroll).toHaveBeenCalled());
+  // Scroll events fire on the next rendering frame, which a loaded runner can delay past 1s.
+  await vi.waitFor(() => expect(onScroll).toHaveBeenCalled(), { timeout: 10_000 });
   expect(tooltipText()).toBe(`${LONG} 25`);
 });
