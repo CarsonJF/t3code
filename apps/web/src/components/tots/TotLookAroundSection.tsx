@@ -33,6 +33,7 @@ import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
+import { TotSettingsSection } from "./TotSettingsSection";
 
 /** A Tot's opt-in read-only sweep: a scheduled task the server keeps from changing anything. */
 export function TotLookAroundSection(props: {
@@ -54,18 +55,13 @@ export function TotLookAroundSection(props: {
   const support = lookAroundSupport(props.tot, providers);
   const ready = props.tot.projectId !== null && props.tot.modelSelection !== null;
   return (
-    <section className="flex flex-col gap-2.5">
-      <div className="min-w-0">
-        <h3 className="font-medium text-foreground text-sm">
-          <T>Look around</T>
-        </h3>
-        <p className="text-muted-foreground text-xs">
-          {gt(
-            "A read-only sweep on a schedule. It can read files, run read-only commands and use T3 Code's read tools; the server refuses every change. It stays quiet when everything is fine and tells {name} when something needs attention.",
-            { name: props.tot.name },
-          )}
-        </p>
-      </div>
+    <TotSettingsSection
+      title={<T>Look around</T>}
+      description={gt(
+        "A read-only sweep on a schedule. It can read files, run read-only commands and use T3 Code's read tools; the server refuses every change. It stays quiet when everything is fine and tells {name} when something needs attention.",
+        { name: props.tot.name },
+      )}
+    >
       {tasksQuery.data === null ? (
         <p className="text-muted-foreground text-xs" role="status">
           <T>Loading…</T>
@@ -93,7 +89,7 @@ export function TotLookAroundSection(props: {
         </p>
       ) : null}
       {task === undefined ? null : <LookAroundLastSweep task={task} />}
-    </section>
+    </TotSettingsSection>
   );
 }
 

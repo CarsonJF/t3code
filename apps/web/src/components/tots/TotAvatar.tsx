@@ -53,10 +53,20 @@ export function TotAvatar(props: TotAvatarProps) {
   const library = useAvatarLibrary();
   if (openBot === undefined) return <BoopFaceAvatar {...props} />;
   if (kit === null) {
+    // The open-bot renderer loads on first use; a tile in the Tot's color holds its place.
     return (
       <span
         aria-hidden="true"
-        style={{ display: "inline-block", width: props.size, height: props.size, flexShrink: 0 }}
+        data-tot-avatar-loading=""
+        style={{
+          display: "inline-block",
+          width: props.size,
+          height: props.size,
+          flexShrink: 0,
+          borderRadius: "30%",
+          backgroundColor: props.avatar.color,
+          opacity: 0.35,
+        }}
       />
     );
   }
