@@ -609,7 +609,7 @@ function ProjectDetail({
                     ? projectIcon.emoji
                     : projectIcon?.kind === "image"
                       ? gt("Custom image")
-                    : (faviconPath ?? gt("Automatic"))
+                      : (faviconPath ?? gt("Automatic"))
             }
             resetAction={
               group.memberProjects.some((member) => !hasDefaultProjectIcon(member)) ? (

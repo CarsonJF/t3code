@@ -3563,7 +3563,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                       section: SidebarSection,
                       // The tree row of the project folder this row sits in.
                       folderRow?: string,
-                        grouped = false,
+                      grouped = false,
                     ) => {
                       const threadKey = scopedThreadKey(
                         scopeThreadRef(thread.environmentId, thread.id),
@@ -3577,9 +3577,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                         : isCard
                           ? "card"
                           : "slim";
-                        const ThreadRow = grouped ? StaticThreadRow : SortableThreadRow;
+                      const ThreadRow = grouped ? StaticThreadRow : SortableThreadRow;
                       return (
-                          <ThreadRow
+                        <ThreadRow
                           key={threadKey}
                           sortableId={threadKey}
                           contextDrag={isContextDrag}
@@ -3683,38 +3683,38 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                         onDraftContextMenu={handleDraftContextMenu}
                       />,
                     ];
-                      let threadGroupsRendered = false;
-                      const pushThreadGroups = () => {
-                        threadGroupsRendered = true;
-                        const visibleGroupIds = threadGroupSections.map(
-                          (section) => section.group.id,
+                    let threadGroupsRendered = false;
+                    const pushThreadGroups = () => {
+                      threadGroupsRendered = true;
+                      const visibleGroupIds = threadGroupSections.map(
+                        (section) => section.group.id,
+                      );
+                      for (const section of threadGroupSections) {
+                        items.push(
+                          <SidebarThreadGroupHeader
+                            key={`thread-group:${section.group.id}`}
+                            group={section.group}
+                            visibleGroupIds={visibleGroupIds}
+                            count={section.count}
+                            expanded={section.expanded}
+                            statusThreads={section.statusThreads}
+                          />,
                         );
-                        for (const section of threadGroupSections) {
-                          items.push(
-                            <SidebarThreadGroupHeader
-                              key={`thread-group:${section.group.id}`}
-                              group={section.group}
-                              visibleGroupIds={visibleGroupIds}
-                              count={section.count}
-                              expanded={section.expanded}
-                              statusThreads={section.statusThreads}
-                            />,
-                          );
-                          for (const thread of section.threads) {
-                            items.push(renderThreadRow(thread, "active", undefined, true));
-                          }
+                        for (const thread of section.threads) {
+                          items.push(renderThreadRow(thread, "active", undefined, true));
                         }
-                      };
+                      }
+                    };
                     for (const item of sidebarListItems) {
-                        if (
-                          !threadGroupsRendered &&
-                          item.kind === "marker" &&
-                          (item.marker === "working-header" ||
-                            item.marker === "snoozed-header" ||
-                            item.marker === "settled-header")
-                        ) {
-                          pushThreadGroups();
-                        }
+                      if (
+                        !threadGroupsRendered &&
+                        item.kind === "marker" &&
+                        (item.marker === "working-header" ||
+                          item.marker === "snoozed-header" ||
+                          item.marker === "settled-header")
+                      ) {
+                        pushThreadGroups();
+                      }
                       if (item.kind === "thread") {
                         // Folders draw active rows in their own place below.
                         if (projectFolders !== null && item.section === "active") continue;
@@ -3856,7 +3856,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                           break;
                       }
                     }
-                      if (!threadGroupsRendered) pushThreadGroups();
+                    if (!threadGroupsRendered) pushThreadGroups();
                     return items;
                   })()}
                   {settledShelfExpanded && hiddenSettledCount > 0 ? (
