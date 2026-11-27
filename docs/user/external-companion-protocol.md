@@ -123,6 +123,10 @@ Answer `202` with `{ "messageId": "…" }`. A retry after a failure sends the sa
 
 When the socket drops, T3 Code reconnects with backoff (1 second, doubling to a minute) and reads the manifest and every channel's newest history page again, so events missed while away are recovered from history. Keep history as the source of truth.
 
+## Themes
+
+A companion cannot style its own conversation: T3 ignores any CSS or script in its manifest or events. The person running T3 sets a theme in Settings → External Companions, or an agent does it with `t3_companion_theme_set`. It works like a Tot's theme, scoped to `[data-companion-id="<id>"]`, and child channels share it; their view also carries `data-companion-channel="child:<id>"` for rules that should apply to one child. A Tot theme's `css` and `effect` work unchanged, so a Tot theme export's `theme` object can be passed straight to `t3_companion_theme_set`.
+
 ## MCP access back into T3 Code
 
 A companion can also call T3 Code's own MCP server, for example to start threads. See [MCP access for a companion](./external-companions.md#mcp-access-for-a-companion).

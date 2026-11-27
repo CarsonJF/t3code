@@ -397,7 +397,9 @@ const makeWith = Effect.fn("ExternalCompanions.make")(function* (
     }
   });
 
-  const fingerprint = (config: ExternalCompanionConfig) => JSON.stringify(config);
+  // The theme is only T3's own styling: changing it must not reconnect the companion.
+  const fingerprint = ({ theme: _theme, ...config }: ExternalCompanionConfig) =>
+    JSON.stringify(config);
 
   const syncConfigs = Effect.fn("ExternalCompanions.syncConfigs")(function* (
     next: ReadonlyArray<ExternalCompanionConfig>,

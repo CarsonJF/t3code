@@ -7,7 +7,7 @@ import type { SessionPhase } from "~/types";
 
 import { buildEffectDocument } from "./totThemeEffect.logic";
 
-type EffectContext = {
+export type EffectContext = {
   usedTokens: number | null;
   maxTokens: number | null;
   usedPercentage: number | null;
@@ -49,12 +49,10 @@ export function TotThemeEffect(props: {
   working: boolean;
   phase: SessionPhase;
 }) {
-  const enabled = useClientSettings((settings) => settings.totThemeEffects);
-  if (!enabled || !props.script || parseTotThreadId(props.threadId) === null) return null;
-  // Keyed by thread so navigating away always tears the old document down.
+  if (parseTotThreadId(props.threadId) === null) return null;
   return (
-    <EffectFrame
-      key={props.threadId}
+    <ThemeEffect
+      frameKey={props.threadId}
       script={props.script}
       context={{
         usedTokens: props.contextWindow?.usedTokens ?? null,
@@ -65,6 +63,20 @@ export function TotThemeEffect(props: {
       }}
     />
   );
+}
+
+/**
+ * A theme effect in its sandboxed frame, off when theme effects are off. Keyed by
+ * `frameKey` so navigating to another conversation always tears the old document down.
+ */
+export function ThemeEffect(props: {
+  frameKey: string;
+  script: string | undefined;
+  context: EffectContext;
+}) {
+  const enabled = useClientSettings((settings) => settings.totThemeEffects);
+  if (!enabled || !props.script) return null;
+  return <EffectFrame key={props.frameKey} script={props.script} context={props.context} />;
 }
 
 function EffectFrame({ script, context }: { script: string; context: EffectContext }) {
