@@ -12,6 +12,7 @@ import { modelPickerModelKey } from "./modelPickerKeys";
 import { ModelIdentityTooltipContent } from "./ModelIdentityTooltip";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { SharedTooltipTrigger } from "../ui/shared-tooltip";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export const ModelListRow = memo(function ModelListRow(props: {
   index: number;
