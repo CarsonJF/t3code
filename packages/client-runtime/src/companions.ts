@@ -1,12 +1,19 @@
-import type {
-  CompanionAvatar,
-  CompanionMessage,
-  CompanionNeedsYou,
-  ExternalCompanionChannelEvent,
-  TotAvatar,
-  TotFaceState,
-  TotOpenBotMaterial,
+import {
+  ThreadId,
+  type CompanionAvatar,
+  type CompanionLinkedThread,
+  type CompanionManifest,
+  type CompanionMessage,
+  type CompanionNeedsYou,
+  type EnvironmentId,
+  type ExternalCompanionChannelEvent,
+  type TotAvatar,
+  type TotFaceState,
+  type TotOpenBotMaterial,
 } from "@t3tools/contracts";
+import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 /** A channel as its viewer sees it: the newest page plus everything since, in order. */
 export interface CompanionChannelView {
@@ -144,6 +151,37 @@ export function withOlderMessages(
 
 export const companionChannelId = (childId: string | null) =>
   childId === null ? "main" : `child:${childId}`;
+
+/** The child a channel belongs to, or null for `main`. */
+export const companionChannelChildId = (channel: string): string | null =>
+  channel.startsWith("child:") ? channel.slice("child:".length) : null;
+
+/** Unread messages across a companion's children, as its collapsed row shows them. */
+export const companionUnreadCount = (manifest: CompanionManifest | null): number =>
+  (manifest?.children ?? []).reduce((total, child) => total + child.unreadCount, 0);
+
+const decodeThreadId = Schema.decodeUnknownOption(ThreadId);
+
+/** The thread a linked-thread card names: its link's environment if it has one, else the companion's. */
+export function companionLinkedThreadTarget(
+  thread: CompanionLinkedThread,
+  environmentId: EnvironmentId,
+): { readonly environmentId: EnvironmentId; readonly threadId: ThreadId } | null {
+  const parsed = thread.link === undefined ? null : parseThreadLinkHref(thread.link);
+  if (parsed !== null)
+    return { environmentId: parsed.environmentId ?? environmentId, threadId: parsed.threadId };
+  const threadId = Option.getOrNull(decodeThreadId(thread.threadId));
+  return threadId === null ? null : { environmentId, threadId };
+}
+
+/** What a resolved needs-you item was answered with, when the companion said. */
+export const companionResolutionText = (
+  resolution: CompanionNeedsYou["resolution"],
+): string | null => {
+  if (resolution === undefined || resolution === null) return null;
+  if (typeof resolution === "string") return resolution;
+  return resolution.answer ?? resolution.decision ?? null;
+};
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const MATERIALS: ReadonlyArray<TotOpenBotMaterial> = ["flat", "fluffy", "glass", "soft"];

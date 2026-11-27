@@ -3,7 +3,10 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   EMPTY_CHANNEL_VIEW,
   companionAvatar,
+  companionChannelChildId,
   companionFaceState,
+  companionLinkedThreadTarget,
+  companionResolutionText,
   withOlderMessages,
   type CompanionChannelView,
 } from "@t3tools/client-runtime/companions";
@@ -11,20 +14,17 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import {
-  ThreadId,
-  type CompanionAvatar,
-  type CompanionLinkedThread,
-  type CompanionMessage,
-  type CompanionNeedsYou,
-  type CompanionToolCall,
-  type EnvironmentId,
-  type ExternalCompanionStatus,
+import type {
+  CompanionAvatar,
+  CompanionLinkedThread,
+  CompanionMessage,
+  CompanionNeedsYou,
+  CompanionToolCall,
+  EnvironmentId,
+  ExternalCompanionStatus,
 } from "@t3tools/contracts";
-import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
 import { useNavigate } from "@tanstack/react-router";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/reactivity";
 import { T, useGT, Var } from "gt-react";
 import {
@@ -66,8 +66,6 @@ import { ConversationHero } from "../tots/TotThreadHero";
 import { ThemeSheet } from "../tots/TotThemeStyles";
 import { CompanionFace } from "./CompanionFace";
 import { CompanionNeedsYouActions } from "./CompanionNeedsYouActions";
-
-const decodeThreadId = Schema.decodeUnknownOption(ThreadId);
 
 function reportFailure(title: string, result: Parameters<typeof squashAtomCommandFailure>[0]) {
   const error = squashAtomCommandFailure(result);
@@ -121,7 +119,7 @@ function ConnectedChat(props: {
 }) {
   const { companion, environmentId, channel } = props;
   const gt = useGT();
-  const childId = channel.startsWith("child:") ? channel.slice("child:".length) : null;
+  const childId = companionChannelChildId(channel);
   const child =
     childId === null
       ? undefined
@@ -420,22 +418,13 @@ function ToolCard(props: { readonly toolCall: CompanionToolCall }) {
   );
 }
 
-/** The thread a card names: its link's environment if it has one, else the companion's. */
-function linkedTarget(thread: CompanionLinkedThread, environmentId: EnvironmentId) {
-  const parsed = thread.link === undefined ? null : parseThreadLinkHref(thread.link);
-  if (parsed !== null)
-    return { environmentId: parsed.environmentId ?? environmentId, threadId: parsed.threadId };
-  const threadId = Option.getOrNull(decodeThreadId(thread.threadId));
-  return threadId === null ? null : { environmentId, threadId };
-}
-
 function LinkedThreadCard(props: {
   readonly thread: CompanionLinkedThread;
   readonly environmentId: EnvironmentId;
 }) {
   const navigate = useNavigate();
   const connected = useConnectedEnvironmentIds();
-  const target = linkedTarget(props.thread, props.environmentId);
+  const target = companionLinkedThreadTarget(props.thread, props.environmentId);
   const shell = useThreadShell(
     target === null || !connected.includes(target.environmentId)
       ? null
@@ -473,12 +462,6 @@ function LinkedThreadCard(props: {
   );
 }
 
-const resolutionText = (resolution: CompanionNeedsYou["resolution"]) => {
-  if (resolution === undefined || resolution === null) return null;
-  if (typeof resolution === "string") return resolution;
-  return resolution.answer ?? resolution.decision ?? null;
-};
-
 function NeedsYouCard(props: {
   readonly needsYou: CompanionNeedsYou;
   readonly environmentId: EnvironmentId;
@@ -487,7 +470,7 @@ function NeedsYouCard(props: {
   const { needsYou } = props;
   const pending = needsYou.status === "pending";
   const Icon = needsYou.kind === "approval" ? ShieldQuestionIcon : MessageCircleQuestionIcon;
-  const resolved = resolutionText(needsYou.resolution);
+  const resolved = companionResolutionText(needsYou.resolution);
   return (
     <div
       className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2.5 data-[pending=false]:border-border data-[pending=false]:bg-card"

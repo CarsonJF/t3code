@@ -1,4 +1,4 @@
-import { companionChannelId } from "@t3tools/client-runtime/companions";
+import { companionChannelId, companionUnreadCount } from "@t3tools/client-runtime/companions";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { T, useGT } from "gt-react";
 import { ChevronRightIcon } from "lucide-react";
@@ -56,7 +56,7 @@ const CompanionRow = memo(function CompanionRow(props: {
   const manifest = companion.manifest;
   const online = companion.connection === "connected";
   const children = manifest?.children ?? [];
-  const unread = children.reduce((total, child) => total + child.unreadCount, 0);
+  const unread = companionUnreadCount(manifest);
   const open = (channel: string) =>
     void navigate({
       to: "/companions/$environmentId/$companionId",

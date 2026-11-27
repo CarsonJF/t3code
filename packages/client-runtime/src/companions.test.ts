@@ -1,10 +1,19 @@
-import type { CompanionMessage, ExternalCompanionChannelEvent } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  type CompanionMessage,
+  type ExternalCompanionChannelEvent,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   EMPTY_CHANNEL_VIEW,
   companionAvatar,
+  companionChannelChildId,
+  companionChannelId,
   companionFaceState,
+  companionLinkedThreadTarget,
+  companionResolutionText,
+  companionUnreadCount,
   reduceCompanionChannel,
   withOlderMessages,
 } from "./companions.ts";
@@ -142,5 +151,58 @@ describe("companionFaceState", () => {
     expect(companionFaceState("blocked", true)).toBe("failure");
     expect(companionFaceState("dancing", true)).toBe("idle");
     expect(companionFaceState("working", false)).toBe("sleep");
+  });
+});
+
+describe("channel helpers", () => {
+  it("round-trips a child's channel id", () => {
+    expect(companionChannelChildId(companionChannelId("scout"))).toBe("scout");
+    expect(companionChannelChildId(companionChannelId(null))).toBeNull();
+  });
+
+  it("totals unread messages across children", () => {
+    expect(companionUnreadCount(null)).toBe(0);
+    expect(
+      companionUnreadCount({
+        protocol: "companion.v1",
+        id: "yui",
+        name: "Yui",
+        capabilities: {},
+        children: [
+          { id: "a", name: "A", unreadCount: 2 },
+          { id: "b", name: "B", unreadCount: 3 },
+        ],
+      }),
+    ).toBe(5);
+  });
+});
+
+describe("companionLinkedThreadTarget", () => {
+  const home = EnvironmentId.make("env-home");
+
+  it("prefers the link's own environment and falls back to the companion's", () => {
+    expect(
+      companionLinkedThreadTarget(
+        { threadId: "ignored", link: "t3-thread://v2/env-1/thread-a" },
+        home,
+      ),
+    ).toEqual({ environmentId: "env-1", threadId: "thread-a" });
+    expect(
+      companionLinkedThreadTarget({ threadId: "x", link: "t3-thread://v1/thread-b" }, home),
+    ).toEqual({ environmentId: home, threadId: "thread-b" });
+    expect(companionLinkedThreadTarget({ threadId: "thread:c" }, home)).toEqual({
+      environmentId: home,
+      threadId: "thread:c",
+    });
+  });
+});
+
+describe("companionResolutionText", () => {
+  it("reads a plain or structured resolution", () => {
+    expect(companionResolutionText(undefined)).toBeNull();
+    expect(companionResolutionText(null)).toBeNull();
+    expect(companionResolutionText("yes")).toBe("yes");
+    expect(companionResolutionText({ answer: "blue" })).toBe("blue");
+    expect(companionResolutionText({ decision: "decline" })).toBe("decline");
   });
 });
