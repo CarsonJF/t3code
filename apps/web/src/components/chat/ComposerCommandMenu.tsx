@@ -210,16 +210,16 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                         {section}
                       </div>
                     ) : null}
-                <ComposerCommandMenuItem
-                  optionId={composerSuggestionOptionId(props.listId, item.id)}
-                  item={item}
-                  triggerKind={props.triggerKind}
-                  resolvedTheme={props.resolvedTheme}
-                  isActive={props.activeItemId === item.id}
-                  descriptionDismissed={props.activeItemId === item.id && descriptionDismissed}
-                  onHighlight={props.onHighlightedItemChange}
-                  onSelect={props.onSelect}
-                />
+                    <ComposerCommandMenuItem
+                      optionId={composerSuggestionOptionId(props.listId, item.id)}
+                      item={item}
+                      triggerKind={props.triggerKind}
+                      resolvedTheme={props.resolvedTheme}
+                      isActive={props.activeItemId === item.id}
+                      descriptionDismissed={props.activeItemId === item.id && descriptionDismissed}
+                      onHighlight={props.onHighlightedItemChange}
+                      onSelect={props.onSelect}
+                    />
                   </Fragment>
                 );
               })}

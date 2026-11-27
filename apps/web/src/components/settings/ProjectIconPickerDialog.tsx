@@ -118,7 +118,7 @@ function ProjectIconPickerBody({
           ? { kind: "lucide", name: iconName, color }
           : mode === "image" && imageDataUrl
             ? { kind: "image", dataUrl: imageDataUrl }
-          : { kind: "emoji", emoji },
+            : { kind: "emoji", emoji },
     );
     onClose();
   };
@@ -227,7 +227,7 @@ function ProjectIconPickerBody({
                           iconName === name && "border-border bg-accent",
                           selectedColorClassName,
                         )}
-                    style={projectIconColorStyle(color)}
+                        style={projectIconColorStyle(color)}
                         onClick={() => setIconName(name)}
                       >
                         <PickerIcon name={name} />

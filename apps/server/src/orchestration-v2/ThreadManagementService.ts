@@ -1324,16 +1324,16 @@ const make = Effect.gen(function* () {
             request.kind !== "auth_refresh",
         );
         if (asked !== undefined || current.run.status === "waiting") {
-        const attention: "question" | "approval" | undefined =
-          asked === undefined ? undefined : asked.kind === "user_input" ? "question" : "approval";
-        return {
-          ...current,
-          settled: true,
-          resultRun: undefined,
-          attention,
-          attentionRequestId: asked?.id,
-        };
-      }
+          const attention: "question" | "approval" | undefined =
+            asked === undefined ? undefined : asked.kind === "user_input" ? "question" : "approval";
+          return {
+            ...current,
+            settled: true,
+            resultRun: undefined,
+            attention,
+            attentionRequestId: asked?.id,
+          };
+        }
       }
       if (!current.settled || !untilDelegatedWorkSettled) {
         return {

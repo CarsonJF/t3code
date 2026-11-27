@@ -426,27 +426,27 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
   ),
   t3_submit_output: McpToolAccess.actsAsCaller(
     (input) =>
-    Effect.gen(function* () {
-      const { scope, threads } = yield* readCaller();
-      if (scope.thread === undefined) return yield* unavailable();
-      return yield* threads
-        .submitRunOutput({
-          threadId: scope.thread.threadId,
-          commandId: yield* newCommandId(),
-          json: input.json,
-        })
-        .pipe(
-          Effect.mapError((error) =>
-            error._tag === "ThreadManagementRunOutputRejectedError"
-              ? new OrchestratorMcpFailure({
-                  code: "invalid_request",
-                  // The agent wrote the value, so it is told what in it did not fit.
-                  message: rejectionText(error),
-                })
-              : unavailable(),
-          ),
-        );
-    }),
+      Effect.gen(function* () {
+        const { scope, threads } = yield* readCaller();
+        if (scope.thread === undefined) return yield* unavailable();
+        return yield* threads
+          .submitRunOutput({
+            threadId: scope.thread.threadId,
+            commandId: yield* newCommandId(),
+            json: input.json,
+          })
+          .pipe(
+            Effect.mapError((error) =>
+              error._tag === "ThreadManagementRunOutputRejectedError"
+                ? new OrchestratorMcpFailure({
+                    code: "invalid_request",
+                    // The agent wrote the value, so it is told what in it did not fit.
+                    message: rejectionText(error),
+                  })
+                : unavailable(),
+            ),
+          );
+      }),
     { restrictedRuns: "allowed" },
   ),
   t3_queue: McpToolAccess.either(

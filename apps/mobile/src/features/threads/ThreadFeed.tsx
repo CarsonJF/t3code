@@ -4519,7 +4519,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
                 ? {
                     title: gt("No conversation yet"),
                     detail: gt(
-                "Ask the agent to inspect the repo, run a command, or continue the active thread.",
+                      "Ask the agent to inspect the repo, run a command, or continue the active thread.",
                     ),
                   }
                 : {
