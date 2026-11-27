@@ -1002,10 +1002,10 @@ export const layer: Layer.Layer<
         yield* settleStartFailure(
           error._tag === "RuntimePolicyAboveCeilingError"
             ? {
-          signal: "runtime-mode-above-ceiling",
-          title: "Thread mode is above the policy limit",
-          error,
-          message: error.message,
+                signal: "runtime-mode-above-ceiling",
+                title: "Thread mode is above the policy limit",
+                error,
+                message: error.message,
               }
             : {
                 signal: "read-only-unsupported",

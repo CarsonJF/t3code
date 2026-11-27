@@ -39,35 +39,35 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
     text || (row.message.streaming || row.suppressEmptyResponse ? "" : gt("(empty response)"));
   const speaker = useTotThreadSpeaker(ctx.threadRef);
   const body = (
-        <div data-thread-find-text="true">
-          <AssistantCitationSource
-            messageId={row.message.id}
-            {...(ctx.threadRef ? { threadRef: ctx.threadRef } : {})}
-            itemKey={row.id}
-            request={ctx.citationRequest}
-            listRef={ctx.listRef}
-          >
-            <ChatMarkdown
-              text={messageText}
-              renderInsights
-              cwd={ctx.markdownCwd}
-              agentDirectories={() =>
-                ctx.threadRef && row.projectedItem
-                  ? agentWorkingDirectories(readThreadTurnItems(ctx.threadRef), row.projectedItem)
-                  : []
-              }
-              threadRef={ctx.threadRef ?? undefined}
-              isStreaming={Boolean(row.message.streaming)}
-              streamingId={row.message.id}
-              lineBreaks={shouldPreserveAssistantLineBreaks(messageText)}
-              skills={ctx.skills}
-              headingLevelOffset={MESSAGE_HEADING_LEVEL}
-              onUseArtifactTemplate={ctx.onUseArtifactTemplate}
-              onRunShellCommand={ctx.onRunShellCommand}
-              onImageExpand={ctx.onImageExpand}
-            />
-          </AssistantCitationSource>
-        </div>
+    <div data-thread-find-text="true">
+      <AssistantCitationSource
+        messageId={row.message.id}
+        {...(ctx.threadRef ? { threadRef: ctx.threadRef } : {})}
+        itemKey={row.id}
+        request={ctx.citationRequest}
+        listRef={ctx.listRef}
+      >
+        <ChatMarkdown
+          text={messageText}
+          renderInsights
+          cwd={ctx.markdownCwd}
+          agentDirectories={() =>
+            ctx.threadRef && row.projectedItem
+              ? agentWorkingDirectories(readThreadTurnItems(ctx.threadRef), row.projectedItem)
+              : []
+          }
+          threadRef={ctx.threadRef ?? undefined}
+          isStreaming={Boolean(row.message.streaming)}
+          streamingId={row.message.id}
+          lineBreaks={shouldPreserveAssistantLineBreaks(messageText)}
+          skills={ctx.skills}
+          headingLevelOffset={MESSAGE_HEADING_LEVEL}
+          onUseArtifactTemplate={ctx.onUseArtifactTemplate}
+          onRunShellCommand={ctx.onRunShellCommand}
+          onImageExpand={ctx.onImageExpand}
+        />
+      </AssistantCitationSource>
+    </div>
   );
 
   return (
