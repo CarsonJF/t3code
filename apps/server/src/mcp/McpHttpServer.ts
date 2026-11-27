@@ -968,13 +968,13 @@ const registerImageTool = Effect.fn("McpHttpServer.registerImageTool")(function*
                 screenshot === undefined
                   ? rest
                   : {
-                ...rest,
-                screenshot: {
-                  mimeType: screenshot.mimeType,
-                  width: screenshot.width,
-                  height: screenshot.height,
-                },
-              };
+                      ...rest,
+                      screenshot: {
+                        mimeType: screenshot.mimeType,
+                        width: screenshot.width,
+                        height: screenshot.height,
+                      },
+                    };
               return Effect.succeed(
                 new McpSchema.CallToolResult({
                   isError: false,
@@ -984,11 +984,11 @@ const registerImageTool = Effect.fn("McpHttpServer.registerImageTool")(function*
                     ...(screenshot === undefined
                       ? []
                       : [
-                    {
-                      type: "image" as const,
-                      data: new Uint8Array(Buffer.from(screenshot.data, "base64")),
-                      mimeType: screenshot.mimeType,
-                    },
+                          {
+                            type: "image" as const,
+                            data: new Uint8Array(Buffer.from(screenshot.data, "base64")),
+                            mimeType: screenshot.mimeType,
+                          },
                         ]),
                   ],
                 }),
