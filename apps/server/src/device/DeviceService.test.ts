@@ -426,6 +426,7 @@ const fixture = Effect.fn("fixture")(function* (
       ServerSettings.ServerSettingsService.of({
         updateTots: () => Effect.die("Unexpected Tot update"),
         updateGroupChats: () => Effect.die("Unexpected group chat update"),
+        updateExternalCompanions: () => Effect.die("Unexpected companion update"),
         updateProviderInstance: () => Effect.die("Unexpected provider mutation"),
         readThreadGroupHistory: Effect.succeed(EMPTY_THREAD_GROUP_HISTORY),
         withSettingsSnapshot: (use) => Effect.flatMap(Ref.get(settings), use),

@@ -80,6 +80,8 @@ import * as Feedback from "../feedback/FeedbackService.ts";
 import { EnvironmentToolkit } from "./toolkits/environment/tools.ts";
 import * as EnvironmentHandlers from "./toolkits/environment/handlers.ts";
 import { ThemeToolkit } from "./toolkits/theme/tools.ts";
+import { CompanionThemeToolkit } from "./toolkits/companions/tools.ts";
+import * as CompanionThemeHandlers from "./toolkits/companions/handlers.ts";
 import * as ThemeHandlers from "./toolkits/theme/handlers.ts";
 import { TotToolkit } from "./toolkits/tots/tools.ts";
 import * as TotService from "../tots/TotService.ts";
@@ -1587,6 +1589,11 @@ const layerThemeToolkit = toolkitRegistration(ThemeToolkit, ThemeHandlers.layer)
   Layer.provide(ThreadCommandExecutor.layer),
 );
 
+const layerCompanionThemeToolkit = toolkitRegistration(
+  CompanionThemeToolkit,
+  CompanionThemeHandlers.layer,
+);
+
 export const layerProjectRegistration = toolkitRegistration(ProjectToolkit, ProjectHandlers.layer);
 
 // Reports may name any tool this server advertises, read when a report arrives.
@@ -1669,6 +1676,7 @@ export const layerTools = Layer.mergeAll(
   layerFeedbackToolkit,
   layerEnvironmentToolkit,
   layerThemeToolkit,
+  layerCompanionThemeToolkit,
   layerTotToolkit,
   layerPreviewControlsRegistration,
   layerWorktreeToolkitRegistration,

@@ -36,7 +36,7 @@ import {
   totSlug,
   totThreadId,
 } from "@t3tools/contracts";
-import { totThemeProblem } from "@t3tools/shared/totTheme";
+import { mergeTheme, totThemeProblem } from "@t3tools/shared/totTheme";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -244,19 +244,11 @@ const make = Effect.gen(function* () {
   const replace = (next: Tot) =>
     writeTots((tots) => tots.map((tot) => (tot.id === next.id ? next : tot)));
 
-  /**
-   * A theme write merges: an absent field keeps its stored value, and `""` or
-   * null clears that field alone. `effect` is opaque text: stored, never read.
-   */
+  /** `effect` is opaque text: stored, never read. */
   const withTheme = (tot: Tot, patch: TotThemePatch): Tot => {
-    const css = patch.css === undefined ? tot.theme?.css : (patch.css ?? "");
-    const effect = patch.effect === undefined ? tot.theme?.effect : (patch.effect ?? "");
-    const { theme: _previous, ...rest } = tot;
-    const theme = {
-      ...(css === undefined || css === "" ? {} : { css }),
-      ...(effect === undefined || effect === "" ? {} : { effect }),
-    };
-    return Object.keys(theme).length === 0 ? rest : { ...rest, theme };
+    const { theme: previous, ...rest } = tot;
+    const theme = mergeTheme(previous, patch);
+    return theme === undefined ? rest : { ...rest, theme };
   };
 
   const liveShell = (threadId: ThreadId) =>

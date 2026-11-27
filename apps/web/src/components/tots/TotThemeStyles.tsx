@@ -8,7 +8,7 @@ import {
 import { useEffect } from "react";
 
 import { useEnvironmentSettings } from "../../hooks/useSettings";
-import { applyTotThemeCss } from "./totThemeCss";
+import { applyThemeCss, type ThemeScope } from "./totThemeCss";
 
 /**
  * Mounts the open Tot's own theme. ChatView renders it for every thread, so a
@@ -31,11 +31,20 @@ export function TotThemeSheet(props: {
   readonly totId: TotId | null;
   readonly theme: TotTheme | undefined;
 }) {
-  const css = props.theme?.css;
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps an adopted stylesheet in step with the open Tot thread until it unmounts
+  return <ThemeSheet kind="tot" scopeId={props.totId} css={props.theme?.css} />;
+}
+
+/** Keeps one scoped theme sheet adopted while mounted; a companion view renders it too. */
+export function ThemeSheet(props: {
+  readonly kind: ThemeScope["kind"];
+  readonly scopeId: string | null;
+  readonly css: string | undefined;
+}) {
+  const { kind, scopeId, css } = props;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps an adopted stylesheet in step with the open conversation until it unmounts
   useEffect(() => {
-    if (props.totId === null || css === undefined || css === "") return;
-    return applyTotThemeCss(props.totId, css);
-  }, [props.totId, css]);
+    if (scopeId === null || css === undefined || css === "") return;
+    return applyThemeCss({ kind, id: scopeId }, css);
+  }, [kind, scopeId, css]);
   return null;
 }

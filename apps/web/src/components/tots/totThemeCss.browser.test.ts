@@ -1,7 +1,13 @@
 import { TotId } from "@t3tools/contracts";
 import { expect, it } from "vite-plus/test";
 
-import { applyTotThemeCss, scopeSelectorToTot, splitSelectors } from "./totThemeCss";
+import {
+  applyThemeCss,
+  applyTotThemeCss,
+  scopeSelector,
+  scopeSelectorToTot,
+  splitSelectors,
+} from "./totThemeCss";
 
 const yui = TotId.make("yui");
 
@@ -38,6 +44,55 @@ it("scopes one selector to the Tot conversation, keeping appearance context", ()
   // An author's own scoping is already the hook, so it is not doubled.
   expect(scopeSelectorToTot('[data-tot-id="yui"] .row', yui)).toBe('[data-tot-id="yui"] .row');
   expect(scopeSelectorToTot("[data-tot-id] .row", yui)).toBe("[data-tot-id] .row");
+});
+
+it("scopes a companion's CSS to its view and reads a Tot theme's root as that view", () => {
+  const companion = { kind: "companion", id: "yui" } as const;
+  expect(scopeSelector(".chat-markdown a", companion)).toBe(
+    '[data-companion-id="yui"] .chat-markdown a',
+  );
+  expect(scopeSelector(":root", companion)).toBe('[data-companion-id="yui"]');
+  expect(scopeSelector(":root.dark .row", companion)).toBe(
+    ':root.dark [data-companion-id="yui"] .row',
+  );
+  // Yui's Tot theme export, unchanged.
+  expect(scopeSelector('[data-tot-id="yui"][data-thread-id]', companion)).toBe(
+    '[data-companion-id="yui"]',
+  );
+  expect(
+    scopeSelector('[data-tot-id="yui"][data-thread-id]>iframe[title="Theme effect"]', companion),
+  ).toBe('[data-companion-id="yui"]>iframe[title="Theme effect"]');
+  expect(scopeSelector('[data-tot-id="yui"] ::selection', companion)).toBe(
+    '[data-companion-id="yui"] ::selection',
+  );
+  expect(
+    scopeSelector('[data-companion-id="yui"][data-companion-channel="child:chef"] .x', companion),
+  ).toBe('[data-companion-id="yui"][data-companion-channel="child:chef"] .x');
+  // The Tot root mapping is only for companions: a Tot keeps its own rules.
+  expect(scopeSelectorToTot('[data-companion-id="yui"] .x', yui)).toBe(
+    '[data-tot-id="yui"] [data-companion-id="yui"] .x',
+  );
+});
+
+it("styles only the companion's view, not a Tot's or the sidebar", () => {
+  const view = document.createElement("div");
+  view.dataset.companionId = "yui";
+  view.innerHTML = '<p class="probe">Hi</p>';
+  const tot = document.createElement("div");
+  tot.dataset.totId = "yui";
+  tot.innerHTML = '<p class="probe">Hi</p>';
+  document.body.append(view, tot);
+  using _dom = { [Symbol.dispose]: () => (view.remove(), tot.remove()) };
+  using _sheet = {
+    [Symbol.dispose]: applyThemeCss(
+      { kind: "companion", id: "yui" },
+      '[data-tot-id="yui"] .probe { color: rgb(1, 2, 3); background: url(https://example.com/a.png); }',
+    ),
+  };
+  const probe = view.querySelector(".probe")!;
+  expect(getComputedStyle(probe).color).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(probe).backgroundImage).toBe("none");
+  expect(getComputedStyle(tot.querySelector(".probe")!).color).not.toBe("rgb(1, 2, 3)");
 });
 
 it("splits a selector list without breaking :is()", () => {
