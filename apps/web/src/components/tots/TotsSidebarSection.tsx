@@ -128,7 +128,7 @@ const TotRow = memo(function TotRow(props: {
     const running = tot.threadId !== null;
     const items = [
       running ? { id: "open", label: "Open" } : { id: "turn-on", label: "Turn on" },
-      { id: "edit", label: "Edit", icon: "settings" },
+      { id: "edit", label: "Settings", icon: "settings" },
       { id: "memory", label: "Memory" },
       ...(actions.hasInstructionsFile ? [{ id: "instructions", label: "Instructions" }] : []),
       ...(running

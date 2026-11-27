@@ -25,6 +25,7 @@ import { ScheduledRelativeLabel } from "../settings/ScheduledTasksSettings";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
+import { TotSettingsEmpty, TotSettingsSection } from "./TotSettingsSection";
 import { workListGroups } from "./totWorkSection.logic";
 
 const STATUS_LABELS: Record<TotObjectiveStatus, string> = {
@@ -64,17 +65,14 @@ export function TotWorkSection(props: {
   const objectives = work.data?.objectives ?? [];
   const m = useMessages();
   return (
-    <section className="flex flex-col gap-2.5">
-      <div className="min-w-0">
-        <h3 className="font-medium text-foreground text-sm">
-          <T>Work</T>
-        </h3>
-        <p className="text-muted-foreground text-xs">
-          <T>
-            Objectives <Var>{props.tot.name}</Var> started work for. Status follows its threads.
-          </T>
-        </p>
-      </div>
+    <TotSettingsSection
+      title={<T>Work</T>}
+      description={
+        <T>
+          Objectives <Var>{props.tot.name}</Var> started work for. Status follows its threads.
+        </T>
+      }
+    >
       {work.error !== null ? (
         <p className="text-destructive-foreground text-xs">
           <T>Could not load work:</T> {work.error}
@@ -84,13 +82,11 @@ export function TotWorkSection(props: {
           <T>Loading work…</T>
         </p>
       ) : objectives.length === 0 ? (
-        <div className="rounded-md border border-border/60 p-2.5">
-          <p className="text-muted-foreground text-xs">
-            <T>
-              Nothing yet. Work <Var>{props.tot.name}</Var> launches with an objective shows here.
-            </T>
-          </p>
-        </div>
+        <TotSettingsEmpty>
+          <T>
+            Nothing yet. Work <Var>{props.tot.name}</Var> launches with an objective shows here.
+          </T>
+        </TotSettingsEmpty>
       ) : (
         workListGroups(objectives).map((group) => (
           <div key={group.status} className="flex flex-col gap-1.5">
@@ -109,7 +105,7 @@ export function TotWorkSection(props: {
           </div>
         ))
       )}
-    </section>
+    </TotSettingsSection>
   );
 }
 

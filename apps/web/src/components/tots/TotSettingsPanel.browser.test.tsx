@@ -1,5 +1,7 @@
 import {
   DEFAULT_HOME_TOT,
+  DEFAULT_SERVER_SETTINGS,
+  type ExternalCompanionConfig,
   EnvironmentId,
   ProjectId,
   ProviderInstanceId,
@@ -17,7 +19,7 @@ import { page, userEvent } from "vite-plus/test/browser";
 import "~/index.css";
 import { render } from "../../../test/render";
 import { ConfirmDialogHost } from "../ConfirmDialogHost";
-import { TotSettingsPanel } from "./TotSettingsPanel";
+import { TotSettingsHost, TotSettingsPanel } from "./TotSettingsPanel";
 
 const environmentId = EnvironmentId.make("laptop");
 const totId = TotId.make("yui");
@@ -34,6 +36,8 @@ const tot: Tot = {
   modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
 };
 
+const otherTot: Tot = { ...DEFAULT_HOME_TOT, id: TotId.make("cardinal"), name: "Cardinal" };
+
 const state = vi.hoisted(() => ({
   tasks: [] as ReadonlyArray<ScheduledTask>,
   objectives: [] as ReadonlyArray<TotObjective>,
@@ -41,6 +45,8 @@ const state = vi.hoisted(() => ({
   remove: vi.fn(),
   updateWork: vi.fn(),
   upsert: vi.fn(),
+  update: vi.fn(),
+  companions: [] as ReadonlyArray<ExternalCompanionConfig>,
   providerDriver: "codex",
 }));
 
@@ -54,6 +60,8 @@ function setup(tasks: ReadonlyArray<ScheduledTask>) {
   state.objectives = [];
   state.updateWork.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
   state.upsert.mockReset().mockResolvedValue({ _tag: "Success", value: {} });
+  state.update.mockReset().mockResolvedValue({ _tag: "Success", value: tot });
+  state.companions = [];
   state.providerDriver = "codex";
 }
 
@@ -137,13 +145,22 @@ vi.mock(import("../../state/session"), async (original) => ({
 
 vi.mock(import("../../hooks/useSettings"), async (original) => ({
   ...(await original()),
-  useEnvironmentSettings: ((_id: EnvironmentId, selector: (settings: unknown) => unknown) =>
-    selector({ tots: [tot] })) as never,
+  useEnvironmentSettings: ((_id: EnvironmentId, selector?: (settings: unknown) => unknown) => {
+    const settings = {
+      ...DEFAULT_SERVER_SETTINGS,
+      tots: [tot, otherTot],
+      externalCompanions: state.companions,
+    };
+    return selector === undefined ? settings : selector(settings);
+  }) as never,
 }));
 
 vi.mock(import("~/state/tots"), async (original) => ({
   ...(await original()),
-  useTots: () => [{ environmentId, tot }],
+  useTots: () => [
+    { environmentId, tot },
+    { environmentId, tot: otherTot },
+  ],
 }));
 
 vi.mock(import("../../state/entities"), async (original) => ({
@@ -175,7 +192,7 @@ vi.mock(import("../../state/server"), async (original) => {
   const actual = await original();
   const { Atom } = await import("effect/reactivity");
   const allowed = Atom.make(true);
-  const provider = (driver: string) => [{ instanceId: "codex", driver }];
+  const provider = (driver: string) => [{ instanceId: "codex", driver, models: [] }];
   const codexProviders = Atom.make(provider("codex"));
   const otherProviders = Atom.make(provider("opencode"));
   return {
@@ -194,7 +211,11 @@ vi.mock(import("../../state/server"), async (original) => {
         ...actual.serverEnvironment.setScheduledTaskEnabled,
         permissionAtom: () => allowed,
       },
-      updateTot: { ...actual.serverEnvironment.updateTot, permissionAtom: () => allowed },
+      updateTot: {
+        ...actual.serverEnvironment.updateTot,
+        run: state.update,
+        permissionAtom: () => allowed,
+      },
       updateTotWork: {
         ...actual.serverEnvironment.updateTotWork,
         run: state.updateWork,
@@ -379,7 +400,7 @@ describe("TotSettingsPanel Who can ask", () => {
 
     await expect.element(screen.getByText("Trusted by default").first()).toBeInTheDocument();
     expect(screen.getByText("Trusted by default").all()).toHaveLength(3);
-    await screen.getByRole("button", { name: "Add", exact: true }).click();
+    await screen.getByRole("button", { name: "Add caller" }).click();
     await expect
       .element(screen.getByText("Give every caller an id, or * for everyone from that origin."))
       .toBeInTheDocument();
@@ -392,5 +413,69 @@ describe("TotSettingsPanel Who can ask", () => {
     // Removing a default works like any other entry.
     await screen.getByRole("button", { name: "Remove caller" }).first().click();
     expect(screen.getByText("Trusted by default").all()).toHaveLength(2);
+  });
+});
+
+const yuiCompanion: ExternalCompanionConfig = {
+  id: "yui",
+  label: "Yui companion",
+  baseUrl: "http://127.0.0.1:4790",
+  token: "token",
+};
+
+describe("TotSettingsPanel Who can ask picker", () => {
+  it("adds a registered External Companion by name and saves it as companion:<id>", async () => {
+    setup([]);
+    state.companions = [yuiCompanion];
+    await using screen = await render(<Panel />);
+
+    await screen.getByRole("button", { name: "Add caller" }).click();
+    const row = screen.container.querySelector('[data-caller-origin="companion"]');
+    expect(row).not.toBeNull();
+    await expect.element(screen.getByText("Yui companion")).toBeInTheDocument();
+    // A known caller needs no hand-typed id.
+    expect(screen.getByRole("textbox", { name: "Companion id or client name" }).query()).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await vi.waitFor(() => expect(state.update).toHaveBeenCalledOnce());
+    const [, call] = state.update.mock.calls[0]!;
+    expect(call.input.whoCanAsk).toContainEqual({
+      origin: "companion",
+      id: "yui",
+      mode: "ask",
+      label: "Yui companion",
+    });
+  });
+
+  it("offers other Tots and companions by name, with a typed id as the fallback", async () => {
+    setup([]);
+    state.companions = [yuiCompanion];
+    await using screen = await render(<Panel />);
+
+    // The first default entry trusts every other Tot.
+    await screen.getByRole("combobox", { name: "Caller" }).first().click();
+    await expect.element(page.getByRole("option", { name: "Cardinal" })).toBeVisible();
+    await expect.element(page.getByRole("option", { name: "Enter an id…" })).toBeVisible();
+    await userEvent.click(page.getByRole("option", { name: "Cardinal" }));
+    expect(screen.getByText("Trusted by default").all()).toHaveLength(2);
+  });
+});
+
+describe("Tot settings page", () => {
+  it("edits Who can ask from Settings → Tots, the same as the thread panel", async () => {
+    setup([]);
+    state.companions = [yuiCompanion];
+    await using screen = await render(
+      <TotSettingsHost environmentId={environmentId} totId={totId} layout="page" />,
+    );
+
+    await expect.element(screen.getByRole("heading", { name: "Who can ask" })).toBeVisible();
+    await expect.element(screen.getByRole("heading", { name: "Model" })).toBeVisible();
+    await screen.getByRole("button", { name: "Add caller" }).click();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await vi.waitFor(() => expect(state.update).toHaveBeenCalledOnce());
+    expect(state.update.mock.calls[0]![1].input.whoCanAsk).toContainEqual(
+      expect.objectContaining({ origin: "companion", id: "yui" }),
+    );
   });
 });

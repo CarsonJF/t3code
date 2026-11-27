@@ -4,6 +4,7 @@ import {
   totWatchReportsOf,
   totWhoCanAskOf,
   type ScheduledTask,
+  type ModelSelection,
   type ScheduledTaskWebhookFilter,
   type Tot,
   type TotAskEntry,
@@ -23,6 +24,8 @@ export interface TotSettingsDraft {
   readonly avatar: TotAvatar;
   readonly scope: TotScope;
   readonly instructions: string;
+  /** Null until picked: the Tot runs with the environment's default. */
+  readonly modelSelection: ModelSelection | null;
   readonly theme: TotThemeDraft;
   readonly watchReports: TotWatchReports;
   readonly autoSettle: boolean;
@@ -42,6 +45,7 @@ export function totSettingsDraftFromTot(tot: Tot): TotSettingsDraft {
     avatar: tot.avatar,
     scope: tot.scope,
     instructions: tot.instructions,
+    modelSelection: tot.modelSelection,
     theme: { css: tot.theme?.css ?? "", effect: tot.theme?.effect ?? "" },
     watchReports: totWatchReportsOf(tot),
     autoSettle: tot.autoSettle === true,
@@ -84,6 +88,7 @@ export function totSettingsDraftKey(draft: TotSettingsDraft): string {
     ],
     scope: normalizedScope(draft.scope),
     instructions: draft.instructions,
+    modelSelection: draft.modelSelection,
     theme: draft.theme,
     watchReports: draft.watchReports,
     autoSettle: draft.autoSettle,
@@ -127,6 +132,7 @@ export function totSettingsDraftUpdate(draft: TotSettingsDraft): TotSettingsDraf
     avatar: draft.avatar,
     scope: draft.scope,
     instructions: draft.instructions,
+    modelSelection: draft.modelSelection,
     theme: { css: draft.theme.css, effect: draft.theme.effect },
     watchReports: draft.watchReports,
     autoSettle: draft.autoSettle,
