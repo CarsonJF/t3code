@@ -88,22 +88,12 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
   const updateTot = useAtomCommand(serverEnvironment.updateTot, { reportFailure: false });
   const enableTot = useAtomCommand(serverEnvironment.enableTot, { reportFailure: false });
   const removeTot = useAtomCommand(serverEnvironment.removeTot, { reportFailure: false });
-  const designAvatar = useAtomCommand(serverEnvironment.designTotAvatar, { reportFailure: false });
   const scopedThemes = useScopedThemes();
   const [themeId, setThemeId] = useState<string | null>(
     editing === null
       ? null
       : (scopedThemes.scoped.tots[scopedThemeKey(target.environmentId, editing.id)] ?? null),
   );
-  const [designPrompt, setDesignPrompt] = useState("");
-  const [designState, setDesignState] = useState<"idle" | "asking" | "asked">("idle");
-  const [designFailure, setDesignFailure] = useState<string | null>(null);
-  const savedDesigns =
-    (editing === null
-      ? undefined
-      : tots.find(
-          (entry) => entry.environmentId === target.environmentId && entry.tot.id === editing.id,
-        )?.tot.designs) ?? [];
   const applyFace = (face: TotAvatarValue) => {
     setColor(face.color);
     setSkin(face.skin ?? null);
@@ -112,22 +102,6 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
     setAntenna(face.antenna === true);
     setAccessories(face.accessories ?? []);
     setLook(totFaceLookOf(face));
-  };
-  const askForDesign = async () => {
-    if (editing === null || designPrompt.trim() === "") return;
-    setDesignState("asking");
-    setDesignFailure(null);
-    const result = await designAvatar({
-      environmentId: target.environmentId,
-      input: { id: editing.id, prompt: designPrompt.trim() },
-    });
-    if (result._tag === "Failure") {
-      setDesignState("idle");
-      if (!isAtomCommandInterrupted(result))
-        setDesignFailure(String(squashAtomCommandFailure(result)));
-      return;
-    }
-    setDesignState("asked");
   };
   const readTotMemory = useAtomCommand(serverEnvironment.readTotMemory, { reportFailure: false });
   const writeTotMemory = useAtomCommand(serverEnvironment.writeTotMemory, { reportFailure: false });
@@ -324,10 +298,11 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
           }}
         >
           <DialogHeader>
-            <DialogTitle>{editing === null ? "New Tot" : `Edit ${editing.name}`}</DialogTitle>
+            <DialogTitle>{editing === null ? "New Tot" : `Move ${editing.name}`}</DialogTitle>
             <DialogDescription>
-              A Tot is an agent you talk to in one thread. It starts, watches and answers the
-              threads in its scope for you.
+              {editing === null
+                ? "A Tot is an agent you talk to in one thread. It starts, watches and answers the threads in its scope for you."
+                : "Pick the machine it lives on. Everything else stays in its settings."}
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
@@ -369,27 +344,29 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                   ) : null}
                 </div>
               ) : null}
-              <div className="flex items-center gap-3">
-                <TotAvatar
-                  avatar={totFaceOf(color, skin, shape, antenna, accessories, look)}
-                  state="idle"
-                  animation={animate && !reducedMotion ? "full" : "still"}
-                  size={56}
-                />
-                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                  <Label htmlFor="tot-name">Name</Label>
-                  <Input
-                    id="tot-name"
-                    value={name}
-                    placeholder="Yui"
-                    aria-invalid={errors.name !== undefined}
-                    onChange={(event) => setName(event.target.value)}
+              {editing === null ? (
+                <div className="flex items-center gap-3">
+                  <TotAvatar
+                    avatar={totFaceOf(color, skin, shape, antenna, accessories, look)}
+                    state="idle"
+                    animation={animate && !reducedMotion ? "full" : "still"}
+                    size={56}
                   />
-                  {errors.name ? (
-                    <p className="text-destructive-foreground text-xs">{errors.name}</p>
-                  ) : null}
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <Label htmlFor="tot-name">Name</Label>
+                    <Input
+                      id="tot-name"
+                      value={name}
+                      placeholder="Yui"
+                      aria-invalid={errors.name !== undefined}
+                      onChange={(event) => setName(event.target.value)}
+                    />
+                    {errors.name ? (
+                      <p className="text-destructive-foreground text-xs">{errors.name}</p>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               {hosts.length > 1 ? (
                 <div className="flex items-center justify-between gap-2">
@@ -423,83 +400,25 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                 </p>
               ) : null}
 
-              <fieldset className="flex flex-col gap-1.5">
-                <legend className="mb-1.5 font-medium text-sm">Face</legend>
-                <TotFaceEditor
-                  value={totFaceOf(color, skin, shape, antenna, accessories, look)}
-                  onChange={applyFace}
-                  skinSeries={skinSeries}
-                  onSkinSeriesChange={setSkinSeries}
-                  error={errors.color}
-                  onManageShapes={() => setLibraryOpen(true)}
-                >
-                  {editing === null ? null : (
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Input
-                          aria-label="Describe a face"
-                          value={designPrompt}
-                          placeholder={`Ask ${editing.name} to design its own face…`}
-                          onChange={(event) => {
-                            setDesignPrompt(event.target.value);
-                            setDesignState("idle");
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={
-                            designState === "asking" ||
-                            designPrompt.trim() === "" ||
-                            editing.threadId === null
-                          }
-                          onClick={() => void askForDesign()}
-                        >
-                          Ask
-                        </Button>
-                      </div>
-                      {editing.threadId === null ? (
-                        <p className="text-muted-foreground text-xs">
-                          Turn {editing.name} on first.
-                        </p>
-                      ) : designState === "asked" ? (
-                        <p className="text-muted-foreground text-xs">
-                          Asked. {editing.name}'s design shows up below when it answers.
-                        </p>
-                      ) : null}
-                      {designFailure ? (
-                        <p className="text-destructive-foreground text-xs">{designFailure}</p>
-                      ) : null}
-                      {savedDesigns.length > 0 ? (
-                        <div
-                          className="flex flex-wrap items-center gap-1.5"
-                          role="group"
-                          aria-label="Designs"
-                        >
-                          {savedDesigns.map((design, index) => (
-                            <button
-                              key={JSON.stringify(design)}
-                              type="button"
-                              aria-label={`Use design ${index + 1}`}
-                              className="rounded-md border border-transparent p-0.5 hover:border-ring"
-                              onClick={() => applyFace(design)}
-                            >
-                              <TotAvatar avatar={design} state="idle" animation="still" size={28} />
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
-                </TotFaceEditor>
-                <AvatarLibraryDialog
-                  environmentId={environmentId}
-                  open={libraryOpen}
-                  onOpenChange={setLibraryOpen}
-                  color={color}
-                />
-              </fieldset>
+              {editing === null ? (
+                <fieldset className="flex flex-col gap-1.5">
+                  <legend className="mb-1.5 font-medium text-sm">Face</legend>
+                  <TotFaceEditor
+                    value={totFaceOf(color, skin, shape, antenna, accessories, look)}
+                    onChange={applyFace}
+                    skinSeries={skinSeries}
+                    onSkinSeriesChange={setSkinSeries}
+                    error={errors.color}
+                    onManageShapes={() => setLibraryOpen(true)}
+                  />
+                  <AvatarLibraryDialog
+                    environmentId={environmentId}
+                    open={libraryOpen}
+                    onOpenChange={setLibraryOpen}
+                    color={color}
+                  />
+                </fieldset>
+              ) : null}
 
               <fieldset className="flex flex-col gap-1.5">
                 <legend className="mb-1.5 font-medium text-sm">Scope</legend>
@@ -530,15 +449,17 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                 ) : null}
               </fieldset>
 
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="tot-instructions">Personality and instructions</Label>
-                <Textarea
-                  id="tot-instructions"
-                  value={instructions}
-                  placeholder="Warm and brief. Owns everything Cardinal Systems."
-                  onChange={(event) => setInstructions(event.target.value)}
-                />
-              </div>
+              {editing === null ? (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="tot-instructions">Personality and instructions</Label>
+                  <Textarea
+                    id="tot-instructions"
+                    value={instructions}
+                    placeholder="Warm and brief. Owns everything Cardinal Systems."
+                    onChange={(event) => setInstructions(event.target.value)}
+                  />
+                </div>
+              ) : null}
 
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-sm">Model</span>
@@ -563,15 +484,17 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
                 )}
               </div>
 
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-sm">Theme</span>
-                <ScopedThemeSelect
-                  label="Theme"
-                  value={themeId}
-                  inheritLabel="Same as the project"
-                  onChange={setThemeId}
-                />
-              </div>
+              {editing === null ? (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-sm">Theme</span>
+                  <ScopedThemeSelect
+                    label="Theme"
+                    value={themeId}
+                    inheritLabel="Same as the project"
+                    onChange={setThemeId}
+                  />
+                </div>
+              ) : null}
 
               {failure ? <p className="text-destructive-foreground text-sm">{failure}</p> : null}
             </div>
@@ -580,8 +503,14 @@ function TotEditorDialog(props: { readonly target: TotEditorTarget }) {
             <Button type="button" variant="outline" onClick={closeTotEditor}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending}>
-              {editing === null ? (pending ? "Creating…" : "Create and start") : "Save"}
+            <Button type="submit" disabled={pending || (editing !== null && !moving)}>
+              {editing === null
+                ? pending
+                  ? "Creating…"
+                  : "Create and start"
+                : pending
+                  ? "Moving…"
+                  : "Move"}
             </Button>
           </DialogFooter>
         </form>

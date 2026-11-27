@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { requestConfirmDialog } from "../../confirmDialog";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useCompanions } from "../../state/companions";
@@ -53,6 +54,7 @@ import { SecretSourceInput, useSecretSources } from "./SecretSourceInput";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSearchableSetting } from "./settingsSearch";
 import { useSettingsScope } from "./SettingsScopeContext";
+import { SettingsSectionIntro } from "./SettingsSectionIntro";
 
 const ACCESS_LABELS: Record<AuthMcpClientAccess, string> = {
   "read-only": msg("Read only"),
@@ -92,10 +94,9 @@ export function ExternalCompanionsSettings() {
     <SettingsPageContainer>
       {environmentId === null ? (
         <SettingsSection {...setting("external-companions")}>
-          <SettingsRow
-            title={<T>External Companions</T>}
-            description={<T>Connect an environment to manage its companions.</T>}
-          />
+          <SettingsSectionIntro>
+            <T>Connect an environment to manage its companions.</T>
+          </SettingsSectionIntro>
         </SettingsSection>
       ) : (
         <CompanionList key={environmentId} environmentId={environmentId} />
@@ -152,19 +153,16 @@ function CompanionList(props: { readonly environmentId: EnvironmentId }) {
         </Button>
       }
     >
-      <SettingsRow
-        title={<T>Companions</T>}
-        description={
-          <T>
-            Agent services you run elsewhere that speak External Companion Protocol v1. This server
-            talks to them, so their tokens stay here.
-          </T>
-        }
-      />
+      <SettingsSectionIntro>
+        <T>
+          Agent services you run elsewhere that speak External Companion Protocol v1. This server
+          talks to them, so their tokens stay here.
+        </T>
+      </SettingsSectionIntro>
       {configs.length === 0 ? (
         <SettingsRow
           title={<T>No companions yet</T>}
-          description={<T>Add one with its URL and token.</T>}
+          description={<T>Start one with Add companion: its URL and token.</T>}
         />
       ) : null}
       {configs.map((config) => {
@@ -176,7 +174,16 @@ function CompanionList(props: { readonly environmentId: EnvironmentId }) {
             status={status}
             canWrite={canWrite}
             onEdit={() => setEditing({ config, isNew: false })}
-            onRemove={() => void save(configs.filter((entry) => entry.id !== config.id))}
+            onRemove={async () => {
+              const message = gt(
+                "Remove {name}?\nIts token is forgotten; add it again to reconnect.",
+                { name: status?.label ?? (config.label || config.id) },
+              );
+              const confirmed =
+                (await requestConfirmDialog(message, { variant: "destructive" })) ??
+                window.confirm(message);
+              if (confirmed) await save(configs.filter((entry) => entry.id !== config.id));
+            }}
             onGrant={() => (status === undefined ? undefined : setGranting(status))}
             onTheme={() => setTheming(config)}
             environmentId={props.environmentId}
@@ -229,7 +236,7 @@ function CompanionSettingsRow(props: {
   readonly status: ExternalCompanionStatus | undefined;
   readonly canWrite: boolean;
   readonly onEdit: () => void;
-  readonly onRemove: () => void;
+  readonly onRemove: () => Promise<void>;
   readonly onGrant: () => void;
   readonly onTheme: () => void;
 }) {
@@ -342,7 +349,7 @@ function CompanionSettingsRow(props: {
             variant="ghost"
             aria-label={gt("Remove")}
             disabled={!props.canWrite}
-            onClick={props.onRemove}
+            onClick={() => void props.onRemove()}
           >
             <Trash2Icon />
           </Button>

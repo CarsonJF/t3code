@@ -4,7 +4,10 @@ import {
   totFaceInputFromShell,
   totFaceState,
 } from "@t3tools/client-runtime/tots";
-import { HOME_TOT_ID, type EnvironmentId, type Tot } from "@t3tools/contracts";
+import { HOME_TOT_ID, type EnvironmentId, type Tot, type TotId } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
+import { useGT } from "gt-react";
+import { ChevronLeftIcon, PlusIcon } from "lucide-react";
 import type { EnvironmentGroupChat } from "@t3tools/client-runtime/tots";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useClientSettings, useEnvironmentSettings } from "../../hooks/useSettings";
@@ -13,6 +16,7 @@ import { useGroupChats, useTotHosts, useTots } from "../../state/tots";
 import { GroupChatAvatar, useGroupChatMembers } from "../tots/GroupChatAvatar";
 import { openGroupChatEditor } from "../tots/GroupChatEditorDialog";
 import { TotAvatar } from "../tots/TotAvatar";
+import { TotSettingsHost } from "../tots/TotSettingsPanel";
 import { useGroupChatActions } from "../tots/useGroupChatActions";
 import { openTotMemory } from "../tots/TotMemoryDialog";
 import { openTotEditor, useTotHostEnvironmentId } from "../tots/totEditorStore";
@@ -20,14 +24,128 @@ import { useTotActions } from "../tots/useTotActions";
 import { Button } from "../ui/button";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSearchableSetting } from "./settingsSearch";
+import { SettingsSectionIntro } from "./SettingsSectionIntro";
 import { TotMemoryTidySettings } from "./TotMemoryTidySettings";
 
 const TOTS_DESCRIPTION =
   "Agents you talk to in one thread each. A Tot starts, watches and answers threads in its scope, on every machine it can reach.";
 
-export function TotsSettings() {
+export function TotsSettings(props: {
+  readonly environmentId?: EnvironmentId;
+  readonly tot?: TotId;
+}) {
+  const hostEnvironmentId = useTotHostEnvironmentId();
+  const environmentId = props.environmentId ?? hostEnvironmentId;
+  if (props.tot !== undefined && environmentId !== null) {
+    return <TotSettingsPage environmentId={environmentId} totId={props.tot} />;
+  }
+  return <TotsList environmentId={environmentId} />;
+}
+
+function TotSettingsPage(props: { readonly environmentId: EnvironmentId; readonly totId: TotId }) {
+  const gt = useGT();
+  const navigate = useNavigate();
+  const tot = useEnvironmentSettings(props.environmentId, (settings) =>
+    settings.tots.find((candidate) => candidate.id === props.totId),
+  );
+  const back = () => void navigate({ to: "/settings/tots", search: {} });
+  return (
+    <SettingsPageContainer>
+      <div className="-mb-4 px-1">
+        <Button size="sm" variant="ghost" onClick={back}>
+          <ChevronLeftIcon />
+          {gt("All Tots")}
+        </Button>
+      </div>
+      {tot === undefined ? (
+        <SettingsSection title={gt("Tot not found")}>
+          <SettingsRow
+            title={gt("This Tot is no longer available.")}
+            description={gt("It may have been deleted or moved to another machine.")}
+          />
+        </SettingsSection>
+      ) : (
+        <TotSettingsPageSection key={tot.id} environmentId={props.environmentId} tot={tot} />
+      )}
+    </SettingsPageContainer>
+  );
+}
+
+function TotSettingsPageSection(props: {
+  readonly environmentId: EnvironmentId;
+  readonly tot: Tot;
+}) {
+  const { environmentId, tot } = props;
+  const gt = useGT();
+  const animate = useClientSettings((settings) => settings.animateTotAvatars);
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const shell = useThreadShell(
+    tot.threadId === null ? null : scopeThreadRef(environmentId, tot.threadId),
+  );
+  const actions = useTotActions(environmentId, tot);
+  return (
+    <SettingsSection
+      title={tot.name}
+      icon={
+        <TotAvatar
+          avatar={tot.avatar}
+          state={totFaceState(totFaceInputFromShell(tot, shell))}
+          animation={resolveTotAnimation("other", animate, reducedMotion)}
+          size={22}
+        />
+      }
+      headerAction={
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          {tot.threadId === null ? null : (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => void actions.openThread(tot.threadId!)}
+            >
+              {gt("Open thread")}
+            </Button>
+          )}
+          <Button size="xs" variant="outline" onClick={actions.openMemory}>
+            {gt("Memory")}
+          </Button>
+          {actions.hasInstructionsFile ? (
+            <Button size="xs" variant="outline" onClick={() => void actions.editInstructions()}>
+              {gt("Open AGENTS.md")}
+            </Button>
+          ) : null}
+          {tot.threadId === null ? null : (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={actions.pending}
+              onClick={() => void actions.startFresh()}
+            >
+              {gt("Start fresh")}
+            </Button>
+          )}
+          {tot.id === HOME_TOT_ID ? null : (
+            <Button
+              size="xs"
+              variant="destructive-outline"
+              disabled={actions.pending}
+              onClick={() => void actions.remove()}
+            >
+              {gt("Delete")}
+            </Button>
+          )}
+        </div>
+      }
+    >
+      <div className="px-3 py-3 sm:px-4">
+        <TotSettingsHost environmentId={environmentId} totId={tot.id} layout="page" />
+      </div>
+    </SettingsSection>
+  );
+}
+
+function TotsList(props: { readonly environmentId: EnvironmentId | null }) {
   const searchableSetting = useSearchableSetting();
-  const environmentId = useTotHostEnvironmentId();
+  const { environmentId } = props;
   const hosts = useTotHosts();
   const tots = useTots();
   // The default machine, plus every other machine already running Tots.
@@ -38,32 +156,35 @@ export function TotsSettings() {
   );
   return (
     <SettingsPageContainer>
-      <SettingsSection title="Tots">
+      <SettingsSection
+        {...searchableSetting("tots")}
+        headerAction={
+          environmentId === null ? undefined : (
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => openTotMemory({ environmentId, tot: null })}
+              >
+                Shared memory
+              </Button>
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => openTotEditor({ mode: "create", environmentId })}
+              >
+                <PlusIcon />
+                New Tot
+              </Button>
+            </div>
+          )
+        }
+      >
         {environmentId === null ? (
-          <SettingsRow {...searchableSetting("tots")} description="Connect to a T3 server first." />
+          <SettingsSectionIntro>Connect to a T3 server first.</SettingsSectionIntro>
         ) : (
           <>
-            <SettingsRow
-              {...searchableSetting("tots")}
-              description={TOTS_DESCRIPTION}
-              control={
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => openTotMemory({ environmentId, tot: null })}
-                  >
-                    Shared memory
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => openTotEditor({ mode: "create", environmentId })}
-                  >
-                    New Tot
-                  </Button>
-                </div>
-              }
-            />
+            <SettingsSectionIntro>{TOTS_DESCRIPTION}</SettingsSectionIntro>
             {machines.map((host) => (
               <TotsRows
                 key={host.environmentId}
@@ -85,16 +206,26 @@ function GroupChatsSection(props: { readonly environmentId: EnvironmentId | null
   const { environmentId } = props;
   if (environmentId === null) return null;
   return (
-    <SettingsSection title="Group chats">
-      <SettingsRow
-        title="Talk to several Tots at once"
-        description="One shared thread you and several Tots talk in. Name a Tot with @ to ask it; with no name, the moderator answers. Tots can answer each other up to a limit you set."
-        control={
-          <Button size="sm" onClick={() => openGroupChatEditor({ mode: "create", environmentId })}>
-            New group chat
-          </Button>
-        }
-      />
+    <SettingsSection
+      title="Group chats"
+      headerAction={
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={() => openGroupChatEditor({ mode: "create", environmentId })}
+        >
+          <PlusIcon />
+          New group chat
+        </Button>
+      }
+    >
+      <SettingsSectionIntro>
+        One shared thread you and several Tots talk in. Name a Tot with @ to ask it; with no name,
+        the moderator answers. Tots can answer each other up to a limit you set.
+      </SettingsSectionIntro>
+      {rooms.length === 0 ? (
+        <SettingsRow title="No group chats yet" description="Start one with New group chat." />
+      ) : null}
       {rooms.map((entry) => (
         <GroupChatRow key={`${entry.environmentId}:${entry.room.id}`} entry={entry} />
       ))}
@@ -184,7 +315,13 @@ function TotRow(props: { readonly environmentId: EnvironmentId; readonly tot: To
           {tot.name}
         </span>
       }
-      description={tot.threadId === null ? "Off" : tot.scope === "all" ? "Everything" : "Scoped"}
+      description={
+        tot.threadId === null
+          ? "Off"
+          : tot.scope === "all"
+            ? "On · everything in scope"
+            : "On · scoped"
+      }
       control={
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           {tot.threadId === null ? (
@@ -201,46 +338,8 @@ function TotRow(props: { readonly environmentId: EnvironmentId; readonly tot: To
             </Button>
           )}
           <Button size="sm" variant="outline" onClick={actions.edit}>
-            Edit
+            Settings
           </Button>
-          <Button size="sm" variant="outline" onClick={actions.openMemory}>
-            Memory
-          </Button>
-          {actions.hasInstructionsFile ? (
-            <Button size="sm" variant="outline" onClick={() => void actions.editInstructions()}>
-              Instructions
-            </Button>
-          ) : null}
-          {tot.threadId === null ? null : (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={actions.pending}
-                onClick={() => void actions.startFresh()}
-              >
-                Start fresh
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={actions.pending}
-                onClick={() => void actions.turnOff()}
-              >
-                Turn off
-              </Button>
-            </>
-          )}
-          {tot.id === HOME_TOT_ID ? null : (
-            <Button
-              size="sm"
-              variant="destructive-outline"
-              disabled={actions.pending}
-              onClick={() => void actions.remove()}
-            >
-              Delete
-            </Button>
-          )}
         </div>
       }
     />

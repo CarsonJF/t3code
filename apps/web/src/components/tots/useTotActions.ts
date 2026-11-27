@@ -13,8 +13,8 @@ import { useProject } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
+import { requestConfirmDialog } from "../../confirmDialog";
 import { toastManager } from "../ui/toast";
-import { openTotEditor } from "./totEditorStore";
 import { openTotMemory } from "./TotMemoryDialog";
 import { useTotModelChoice } from "./useTotModelChoice";
 
@@ -71,7 +71,8 @@ export function useTotActions(environmentId: EnvironmentId, tot: Tot) {
     pending,
     hasInstructionsFile: project !== null,
     openThread,
-    edit: () => openTotEditor({ mode: "edit", environmentId, tot }),
+    /** Its full settings, in Settings → Tots. */
+    edit: () => void navigate({ to: "/settings/tots", search: { environmentId, tot: tot.id } }),
     openMemory: () => openTotMemory({ environmentId, tot }),
     async turnOn() {
       const started = await run(`Could not turn on ${tot.name}`, () =>
@@ -97,6 +98,11 @@ export function useTotActions(environmentId: EnvironmentId, tot: Tot) {
       );
     },
     async remove() {
+      const message = `Delete ${tot.name}?\nThis cannot be undone.`;
+      const confirmed =
+        (await requestConfirmDialog(message, { variant: "destructive" })) ??
+        window.confirm(message);
+      if (!confirmed) return;
       await run(`Could not delete ${tot.name}`, () =>
         removeTot({ environmentId, input: { id: tot.id } }),
       );

@@ -16,6 +16,8 @@ import {
   type ScheduledTask,
   type ScopedThreadRef,
   type Tot,
+  type TotAvatar as TotAvatarValue,
+  type TotId,
   type TotScope,
   type TotWatch,
   type TotWatchReports,
@@ -25,20 +27,30 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { createModelSelection } from "@t3tools/shared/model";
 import { TOT_THEME_TOKEN_NAMES } from "@t3tools/shared/totThemeTokens";
 import { EyeIcon, Globe2, PlayIcon, Trash2Icon } from "lucide-react";
 import { T, useGT } from "gt-react";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 
 import { useClientSettings, useEnvironmentSettings } from "../../hooks/useSettings";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { requestConfirmDialog } from "../../confirmDialog";
 import { useThreadGroupsStore } from "../../threadGroupsStore";
+import { useScopedThemes } from "../../hooks/useScopedThemes";
+import { getCustomModelOptionsByInstance } from "../../modelSelection";
+import { scopedThemeKey } from "../../scopedThemes.logic";
+import { ProviderModelPicker } from "../chat/ProviderModelPicker";
+import { ScopedThemeSelect } from "../settings/ScopedThemeSelect";
+import { SETTINGS_PICKER_TRIGGER_CLASSNAME } from "../settings/settingsLayout";
+import { openTotEditor } from "./totEditorStore";
+import { TotSettingsEmpty, TotSettingsSection } from "./TotSettingsSection";
+import { useTotModelChoice } from "./useTotModelChoice";
 import { useProjects, useQuietThreadShell, useThreadShell } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { readEnvironmentScope } from "../../state/session";
-import { useTots } from "../../state/tots";
+import { useTotHosts, useTots } from "../../state/tots";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { ScheduledRelativeLabel } from "../settings/ScheduledTasksSettings";
 import { scheduleLabel } from "../settings/scheduledTasksSettings.logic";
@@ -108,19 +120,20 @@ export function TotSettingsPanel(props: {
   const totId = parseTotThreadId(props.threadRef.threadId);
   if (totId === null) return null;
   return (
-    <TotSettingsPanelHost
+    <TotSettingsHost
       key={`${props.environmentId}:${totId}`}
       environmentId={props.environmentId}
-      threadRef={props.threadRef}
       totId={totId}
+      layout="panel"
     />
   );
 }
 
-function TotSettingsPanelHost(props: {
+/** One Tot's settings, wherever they show: the thread's right panel or Settings → Tots. */
+export function TotSettingsHost(props: {
   readonly environmentId: EnvironmentId;
-  readonly threadRef: ScopedThreadRef;
-  readonly totId: NonNullable<ReturnType<typeof parseTotThreadId>>;
+  readonly totId: TotId;
+  readonly layout: "panel" | "page";
 }) {
   const tot = useEnvironmentSettings(props.environmentId, (settings) =>
     settings.tots.find((candidate) => candidate.id === props.totId),
@@ -136,27 +149,34 @@ function TotSettingsPanelHost(props: {
     <TotSettingsEditor
       key={tot.id}
       environmentId={props.environmentId}
-      threadRef={props.threadRef}
       tot={tot}
+      layout={props.layout}
     />
   );
 }
 
 function TotSettingsEditor(props: {
   readonly environmentId: EnvironmentId;
-  readonly threadRef: ScopedThreadRef;
   readonly tot: Tot;
+  readonly layout: "panel" | "page";
 }) {
   const { environmentId, tot } = props;
+  const gt = useGT();
   const [libraryOpen, setLibraryOpen] = useState(false);
   const animate = useClientSettings((settings) => settings.animateTotAvatars);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const shell = useThreadShell(props.threadRef);
+  const shell = useThreadShell(
+    tot.threadId === null ? null : scopeThreadRef(environmentId, tot.threadId),
+  );
   const faceState = totFaceState(totFaceInputFromShell(tot, shell));
   const canEdit = useAtomValue(serverEnvironment.updateTot.permissionAtom(environmentId));
   const updateTot = useAtomCommand(serverEnvironment.updateTot, { reportFailure: false });
   const enableTot = useAtomCommand(serverEnvironment.enableTot, { reportFailure: false });
   const disableTot = useAtomCommand(serverEnvironment.disableTot, { reportFailure: false });
+  const model = useTotModelChoice(environmentId, null);
+  const hosts = useTotHosts();
+  const scopedThemes = useScopedThemes();
+  const themeId = scopedThemes.scoped.tots[scopedThemeKey(environmentId, tot.id)] ?? null;
   const [draft, setDraft] = useState<TotSettingsDraft>(() => totSettingsDraftFromTot(tot));
   const [savedKey, setSavedKey] = useState(() => totSettingsDraftKey(draft));
   const [skinSeries, setSkinSeries] = useState<TotSkinSeries>(() =>
@@ -167,14 +187,21 @@ function TotSettingsEditor(props: {
   const errors = totSettingsDraftErrors(draft);
   const dirty = totSettingsDraftKey(draft) !== savedKey;
   const enabled = tot.threadId !== null;
+  const modelSelection = draft.modelSelection ?? model.selection;
+  const host = hosts.find((entry) => entry.environmentId === environmentId);
 
   const save = async () => {
     if (!canEdit || saving || !dirty || Object.keys(errors).length > 0) return;
     const update = totSettingsDraftUpdate(draft);
+    const { modelSelection: savedModel, ...rest } = update;
     setSaving(true);
     const result = await updateTot({
       environmentId,
-      input: { id: tot.id, ...update },
+      input: {
+        id: tot.id,
+        ...rest,
+        ...(savedModel === null ? {} : { modelSelection: savedModel }),
+      },
     });
     setSaving(false);
     if (result._tag === "Failure") {
@@ -199,7 +226,10 @@ function TotSettingsEditor(props: {
     if (!canEdit || savingEnabled) return;
     setSavingEnabled(true);
     const result = next
-      ? await enableTot({ environmentId, input: { id: tot.id } })
+      ? await enableTot({
+          environmentId,
+          input: { id: tot.id, ...(modelSelection === null ? {} : { modelSelection }) },
+        })
       : await disableTot({ environmentId, input: { id: tot.id } });
     setSavingEnabled(false);
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
@@ -210,10 +240,14 @@ function TotSettingsEditor(props: {
     }
   };
 
+  const page = props.layout === "page";
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex flex-col gap-5 p-4">
+    <div
+      className={page ? "flex flex-col" : "flex h-full min-h-0 flex-col bg-background"}
+      data-tot-settings={tot.id}
+    >
+      <div className={page ? "" : "min-h-0 flex-1 overflow-y-auto"}>
+        <div className={page ? "flex flex-col gap-5 py-2" : "flex flex-col gap-5 p-4"}>
           <div className="flex items-center gap-3">
             <TotAvatar
               avatar={draft.avatar}
@@ -222,9 +256,9 @@ function TotSettingsEditor(props: {
               size={52}
             />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <Label htmlFor="tot-panel-name">Name</Label>
+              <Label htmlFor={`tot-settings-name-${props.layout}`}>Name</Label>
               <Input
-                id="tot-panel-name"
+                id={`tot-settings-name-${props.layout}`}
                 value={draft.name}
                 placeholder="Yui"
                 disabled={!canEdit}
@@ -237,68 +271,92 @@ function TotSettingsEditor(props: {
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-medium text-sm">Enabled</p>
-              <p className="text-xs text-muted-foreground">
-                {enabled
-                  ? "On. It has its own thread to work in."
-                  : "Off. Turning it on starts a thread for it."}
-              </p>
-            </div>
-            <Switch
-              checked={enabled}
-              disabled={!canEdit || savingEnabled}
-              aria-label={enabled ? `Turn off ${tot.name}` : `Turn on ${tot.name}`}
-              onCheckedChange={(next) => void setEnabled(next)}
-            />
-          </div>
+          <TotSettingsSection
+            title="Enabled"
+            description={
+              enabled
+                ? "On. It has its own thread to work in."
+                : "Off. Turning it on starts a thread for it."
+            }
+            action={
+              <Switch
+                checked={enabled}
+                disabled={!canEdit || savingEnabled}
+                aria-label={enabled ? `Turn off ${tot.name}` : `Turn on ${tot.name}`}
+                onCheckedChange={(next) => void setEnabled(next)}
+              />
+            }
+          />
 
-          <Separator />
-
-          <TotWorkSection environmentId={environmentId} tot={tot} />
-
-          <Separator />
-
-          <PanelSection title="Face" description="The face shown in the sidebar and this thread.">
-            <TotFaceEditor
-              value={draft.avatar}
-              onChange={(avatar) => setDraft({ ...draft, avatar })}
-              skinSeries={skinSeries}
-              onSkinSeriesChange={setSkinSeries}
-              error={errors.color}
-              onManageShapes={() => setLibraryOpen(true)}
-            >
-              {tot.designs !== undefined && tot.designs.length > 0 ? (
-                <div
-                  className="flex flex-wrap items-center gap-1.5"
-                  role="group"
-                  aria-label="Faces this Tot designed"
+          {hosts.length > 1 ? (
+            <TotSettingsSection
+              title={gt("Lives on")}
+              description={gt(
+                "{machine}. Moving starts a new thread on the other machine and brings its memory along.",
+                { machine: host?.label ?? gt("This machine") },
+              )}
+              action={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!canEdit}
+                  onClick={() => openTotEditor({ mode: "edit", environmentId, tot })}
                 >
-                  {tot.designs.map((design, index) => (
-                    <button
-                      key={JSON.stringify(design)}
-                      type="button"
-                      aria-label={`Use saved face ${index + 1}`}
-                      className="rounded-md border border-transparent p-0.5 hover:border-ring"
-                      onClick={() => {
-                        setDraft({ ...draft, avatar: design });
-                        setSkinSeries(totSkinSeriesOf(design.skin ?? null));
-                      }}
-                    >
-                      <TotAvatar avatar={design} state="idle" animation="still" size={28} />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </TotFaceEditor>
-            <AvatarLibraryDialog
-              environmentId={environmentId}
-              open={libraryOpen}
-              onOpenChange={setLibraryOpen}
-              color={draft.avatar.color}
+                  {gt("Move…")}
+                </Button>
+              }
             />
-          </PanelSection>
+          ) : null}
+
+          <Separator />
+
+          <TotSettingsSection
+            title="Instructions"
+            description="Personality and instructions, saved to AGENTS.md in this Tot's folder."
+          >
+            <Textarea
+              aria-label="Tot instructions"
+              className="min-h-36 resize-y"
+              value={draft.instructions}
+              disabled={!canEdit}
+              placeholder="Warm and brief. Owns everything Cardinal Systems."
+              onChange={(event) => setDraft({ ...draft, instructions: event.target.value })}
+            />
+          </TotSettingsSection>
+
+          <Separator />
+
+          <TotSettingsSection
+            title={gt("Model")}
+            description={gt("What {name} runs with. A change applies from its next turn.", {
+              name: tot.name,
+            })}
+            action={
+              modelSelection === null ? (
+                <span className="text-muted-foreground text-xs">
+                  {gt("No providers available.")}
+                </span>
+              ) : (
+                <ProviderModelPicker
+                  environmentId={environmentId}
+                  activeInstanceId={modelSelection.instanceId}
+                  model={modelSelection.model}
+                  lockedProvider={null}
+                  instanceEntries={model.entries}
+                  modelOptionsByInstance={getCustomModelOptionsByInstance(
+                    model.settings,
+                    model.providers,
+                    modelSelection.instanceId,
+                    modelSelection.model,
+                  )}
+                  triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+                  onInstanceModelChange={(instanceId, next) =>
+                    setDraft({ ...draft, modelSelection: createModelSelection(instanceId, next) })
+                  }
+                />
+              )
+            }
+          />
 
           <Separator />
 
@@ -312,26 +370,67 @@ function TotSettingsEditor(props: {
 
           <Separator />
 
-          <PanelSection
-            title="Instructions"
-            description="Personality and instructions, saved to AGENTS.md in this Tot's folder."
-          >
-            <Textarea
-              aria-label="Tot instructions"
-              className="min-h-36 resize-y"
-              value={draft.instructions}
-              disabled={!canEdit}
-              placeholder="Warm and brief. Owns everything Cardinal Systems."
-              onChange={(event) => setDraft({ ...draft, instructions: event.target.value })}
-            />
-          </PanelSection>
+          <TotWhoCanAskSection
+            environmentId={environmentId}
+            totId={tot.id}
+            totName={tot.name}
+            value={draft.whoCanAsk}
+            disabled={!canEdit}
+            error={errors.whoCanAsk}
+            onChange={(whoCanAsk) => setDraft({ ...draft, whoCanAsk })}
+          />
 
           <Separator />
 
-          <PanelSection
+          <TotSettingsSection
+            title="Face"
+            description="The face shown in the sidebar and this Tot's thread."
+          >
+            <TotFaceEditor
+              value={draft.avatar}
+              onChange={(avatar) => setDraft({ ...draft, avatar })}
+              skinSeries={skinSeries}
+              onSkinSeriesChange={setSkinSeries}
+              error={errors.color}
+              onManageShapes={() => setLibraryOpen(true)}
+            >
+              <TotDesignAsk
+                environmentId={environmentId}
+                tot={tot}
+                onUse={(design) => {
+                  setDraft({ ...draft, avatar: design });
+                  setSkinSeries(totSkinSeriesOf(design.skin ?? null));
+                }}
+              />
+            </TotFaceEditor>
+            <AvatarLibraryDialog
+              environmentId={environmentId}
+              open={libraryOpen}
+              onOpenChange={setLibraryOpen}
+              color={draft.avatar.color}
+            />
+          </TotSettingsSection>
+
+          <Separator />
+
+          <TotSettingsSection
             title="Theme"
             description="This Tot's own conversation only; the sidebar and other threads keep the app's theme."
           >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium text-xs">{gt("App theme")}</p>
+                <p className="text-muted-foreground text-xs">
+                  {gt("Saved on this device right away.")}
+                </p>
+              </div>
+              <ScopedThemeSelect
+                label={gt("App theme")}
+                value={themeId}
+                inheritLabel={gt("Same as the project")}
+                onChange={(next) => scopedThemes.set("tots", environmentId, tot.id, next)}
+              />
+            </div>
             <label className="flex flex-col gap-1">
               <span className="font-medium text-xs">CSS</span>
               <Textarea
@@ -378,11 +477,11 @@ function TotSettingsEditor(props: {
                 <p className="text-destructive-foreground text-xs">{errors.themeEffect}</p>
               ) : null}
             </label>
-          </PanelSection>
+          </TotSettingsSection>
 
           <Separator />
 
-          <TotLookAroundSection environmentId={environmentId} tot={tot} />
+          <TotWorkSection environmentId={environmentId} tot={tot} />
 
           <Separator />
 
@@ -390,10 +489,37 @@ function TotSettingsEditor(props: {
 
           <Separator />
 
+          <TotLookAroundSection environmentId={environmentId} tot={tot} />
+
+          <Separator />
+
+          <TotWatchesSection environmentId={environmentId} tot={tot} />
+
+          <Separator />
+
           <TotWatchReportsSection
             value={draft.watchReports}
             disabled={!canEdit}
             onChange={(watchReports) => setDraft({ ...draft, watchReports })}
+          />
+
+          <Separator />
+
+          <TotSettingsSection
+            title="Auto-settle its thread"
+            description={
+              draft.autoSettle
+                ? "Its thread settles after inactivity, like other threads."
+                : "Its thread stays open, whatever the auto-settle settings say."
+            }
+            action={
+              <Switch
+                checked={draft.autoSettle}
+                disabled={!canEdit}
+                aria-label={`Auto-settle ${tot.name}'s thread`}
+                onCheckedChange={(autoSettle) => setDraft({ ...draft, autoSettle })}
+              />
+            }
           />
 
           <Separator />
@@ -415,42 +541,15 @@ function TotSettingsEditor(props: {
             disabled={!canEdit}
             onChange={(memoryTidy) => setDraft({ ...draft, memoryTidy })}
           />
-
-          <Separator />
-
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-medium text-sm">Auto-settle its thread</p>
-              <p className="text-xs text-muted-foreground">
-                {draft.autoSettle
-                  ? "Its thread settles after inactivity, like other threads."
-                  : "Its thread stays open, whatever the auto-settle settings say."}
-              </p>
-            </div>
-            <Switch
-              checked={draft.autoSettle}
-              disabled={!canEdit}
-              aria-label={`Auto-settle ${tot.name}'s thread`}
-              onCheckedChange={(autoSettle) => setDraft({ ...draft, autoSettle })}
-            />
-          </div>
-
-          <Separator />
-
-          <TotWhoCanAskSection
-            totName={tot.name}
-            value={draft.whoCanAsk}
-            disabled={!canEdit}
-            error={errors.whoCanAsk}
-            onChange={(whoCanAsk) => setDraft({ ...draft, whoCanAsk })}
-          />
-
-          <Separator />
-
-          <TotWatchesSection environmentId={environmentId} tot={tot} />
         </div>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/60 bg-background p-3">
+      <div
+        className={
+          page
+            ? "sticky bottom-0 z-10 -mx-1 mt-4 flex flex-wrap items-center justify-end gap-2 rounded-lg border border-border/60 bg-background p-3 shadow-sm"
+            : "flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/60 bg-background p-3"
+        }
+      >
         {dirty ? (
           <span className="mr-auto text-xs text-muted-foreground">Unsaved changes</span>
         ) : null}
@@ -465,6 +564,90 @@ function TotSettingsEditor(props: {
           {saving ? "Saving…" : "Save"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** Saved faces this Tot designed, and asking it for a new one. */
+function TotDesignAsk(props: {
+  readonly environmentId: EnvironmentId;
+  readonly tot: Tot;
+  readonly onUse: (design: TotAvatarValue) => void;
+}) {
+  const gt = useGT();
+  const designAvatar = useAtomCommand(serverEnvironment.designTotAvatar, { reportFailure: false });
+  const [prompt, setPrompt] = useState("");
+  const [state, setState] = useState<"idle" | "asking" | "asked">("idle");
+  const [failure, setFailure] = useState<string | null>(null);
+  const designs = props.tot.designs ?? [];
+  const off = props.tot.threadId === null;
+  const ask = async () => {
+    if (prompt.trim() === "") return;
+    setState("asking");
+    setFailure(null);
+    const result = await designAvatar({
+      environmentId: props.environmentId,
+      input: { id: props.tot.id, prompt: prompt.trim() },
+    });
+    if (result._tag === "Failure") {
+      setState("idle");
+      if (!isAtomCommandInterrupted(result)) setFailure(String(squashAtomCommandFailure(result)));
+      return;
+    }
+    setState("asked");
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5">
+        <Input
+          size="sm"
+          aria-label={gt("Describe a face")}
+          value={prompt}
+          disabled={off}
+          placeholder={gt("Ask {name} to design its own face…", { name: props.tot.name })}
+          onChange={(event) => {
+            setPrompt(event.target.value);
+            setState("idle");
+          }}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={off || state === "asking" || prompt.trim() === ""}
+          onClick={() => void ask()}
+        >
+          {gt("Ask")}
+        </Button>
+      </div>
+      {off ? (
+        <p className="text-muted-foreground text-xs">
+          {gt("Turn {name} on to ask it for a face.", { name: props.tot.name })}
+        </p>
+      ) : state === "asked" ? (
+        <p className="text-muted-foreground text-xs">
+          {gt("Asked. Its design shows up below when it answers.")}
+        </p>
+      ) : null}
+      {failure ? <p className="text-destructive-foreground text-xs">{failure}</p> : null}
+      {designs.length > 0 ? (
+        <div
+          className="flex flex-wrap items-center gap-1.5"
+          role="group"
+          aria-label="Faces this Tot designed"
+        >
+          {designs.map((design, index) => (
+            <button
+              key={JSON.stringify(design)}
+              type="button"
+              aria-label={`Use saved face ${index + 1}`}
+              className="rounded-md border border-transparent p-0.5 hover:border-ring"
+              onClick={() => props.onUse(design)}
+            >
+              <TotAvatar avatar={design} state="idle" animation="still" size={28} />
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -495,30 +678,25 @@ function TotMemoryTidySection(props: {
     toastManager.add({ type: "success", title: gt("Last memory tidy-up reverted") });
   };
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-medium text-sm">
-            <T>Nightly memory tidy-up</T>
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {gt(
-              "Around 03:30 a cheap model dedupes and condenses its {memory}, keeping lines you deleted out. The previous copy is kept as {backup} and the diff in {diff}.",
-              {
-                memory: "MEMORY.md",
-                backup: "MEMORY.md.pre-tidy",
-                diff: "memory/tidy/last.diff",
-              },
-            )}
-          </p>
-        </div>
+    <TotSettingsSection
+      title={<T>Nightly memory tidy-up</T>}
+      description={gt(
+        "Around 03:30 a cheap model dedupes and condenses its {memory}, keeping lines you deleted out. The previous copy is kept as {backup} and the diff in {diff}.",
+        {
+          memory: "MEMORY.md",
+          backup: "MEMORY.md.pre-tidy",
+          diff: "memory/tidy/last.diff",
+        },
+      )}
+      action={
         <Switch
           checked={props.value}
           disabled={props.disabled}
           aria-label={gt("Nightly memory tidy-up for {name}", { name: props.tot.name })}
           onCheckedChange={props.onChange}
         />
-      </div>
+      }
+    >
       <Button
         size="sm"
         variant="outline"
@@ -528,29 +706,7 @@ function TotMemoryTidySection(props: {
       >
         {reverting ? gt("Reverting…") : gt("Revert last tidy-up")}
       </Button>
-    </div>
-  );
-}
-
-function PanelSection(props: {
-  readonly title: string;
-  readonly description?: string;
-  readonly action?: ReactNode;
-  readonly children: ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-2.5">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="font-medium text-foreground text-sm">{props.title}</h3>
-          {props.description ? (
-            <p className="text-muted-foreground text-xs">{props.description}</p>
-          ) : null}
-        </div>
-        {props.action}
-      </div>
-      {props.children}
-    </section>
+    </TotSettingsSection>
   );
 }
 
@@ -601,7 +757,7 @@ function TotScopeEditor(props: {
     });
   };
   return (
-    <PanelSection title="Scope" description="What this Tot owns and watches.">
+    <TotSettingsSection title="Scope" description="What this Tot owns and watches.">
       <label className="flex items-center gap-2 text-sm">
         <Checkbox
           checked={props.scope === "all"}
@@ -653,7 +809,7 @@ function TotScopeEditor(props: {
         </div>
       )}
       {props.error ? <p className="text-destructive-foreground text-xs">{props.error}</p> : null}
-    </PanelSection>
+    </TotSettingsSection>
   );
 }
 
@@ -699,7 +855,7 @@ function TotScheduledTasksSection(props: {
     setClearing(false);
   };
   return (
-    <PanelSection
+    <TotSettingsSection
       title="Scheduled tasks"
       description="Routines this Tot runs on a schedule or from a webhook."
       action={
@@ -724,11 +880,9 @@ function TotScheduledTasksSection(props: {
           Loading scheduled tasks…
         </p>
       ) : tasks.length === 0 ? (
-        <div className="rounded-md border border-border/60 p-2.5">
-          <p className="text-muted-foreground text-xs">
-            No scheduled tasks for this Tot. Ask {props.tot.name} to make one.
-          </p>
-        </div>
+        <TotSettingsEmpty>
+          No scheduled tasks for this Tot. Ask {props.tot.name} to make one.
+        </TotSettingsEmpty>
       ) : (
         <ul className="flex list-none flex-col gap-2 p-0">
           {tasks.map((task) => (
@@ -747,7 +901,7 @@ function TotScheduledTasksSection(props: {
           ))}
         </ul>
       )}
-    </PanelSection>
+    </TotSettingsSection>
   );
 }
 
@@ -909,7 +1063,7 @@ function TotWatchReportsSection(props: {
 }) {
   const option = WATCH_REPORTS[props.value];
   return (
-    <PanelSection title="Watch reports" description={option.help}>
+    <TotSettingsSection title="Watch reports" description={option.help}>
       <Select
         value={props.value}
         onValueChange={(value) => props.onChange(value as TotWatchReports)}
@@ -925,7 +1079,7 @@ function TotWatchReportsSection(props: {
           ))}
         </SelectPopup>
       </Select>
-    </PanelSection>
+    </TotSettingsSection>
   );
 }
 
@@ -938,7 +1092,7 @@ function TotIdleCompactionSection(props: {
 }) {
   const option = TOT_IDLE_COMPACTION[props.value];
   return (
-    <PanelSection title="Compact when idle" description={option.help}>
+    <TotSettingsSection title="Compact when idle" description={option.help}>
       <Select
         value={props.value}
         onValueChange={(value) => props.onChange(value as TotIdleCompactionChoice)}
@@ -954,13 +1108,13 @@ function TotIdleCompactionSection(props: {
           ))}
         </SelectPopup>
       </Select>
-    </PanelSection>
+    </TotSettingsSection>
   );
 }
 
 function TotWatchesSection(props: { readonly environmentId: EnvironmentId; readonly tot: Tot }) {
   return (
-    <PanelSection
+    <TotSettingsSection
       title="Watches"
       description="Threads this Tot is told about. Read-only here; it manages these itself."
     >
@@ -987,7 +1141,7 @@ function TotWatchesSection(props: { readonly environmentId: EnvironmentId; reado
           ))
         )}
       </div>
-    </PanelSection>
+    </TotSettingsSection>
   );
 }
 
