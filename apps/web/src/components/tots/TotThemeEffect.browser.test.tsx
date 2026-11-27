@@ -45,6 +45,9 @@ const FIXTURE = `
   parent.postMessage({ type: "pointer", x: 1, y: 1, inside: true }, "*");
 `;
 
+// The sandboxed frame boots its own document, which can take seconds on a loaded runner.
+const FRAME_WAIT = { timeout: 10_000 };
+
 function setup() {
   settings.totThemeEffects = true;
   const received: unknown[] = [];
@@ -94,7 +97,7 @@ describe("TotThemeEffect", () => {
     await vi.waitFor(() => {
       expect(messages.received).toContainEqual({ parentDocument: "blocked" });
       expect(messages.received).toContainEqual({ fetch: "blocked" });
-    });
+    }, FRAME_WAIT);
   });
 
   it("lets pointer input reach the conversation underneath", async () => {
@@ -108,7 +111,7 @@ describe("TotThemeEffect", () => {
   it("coalesces pointer moves into one message per frame in iframe-local px", async () => {
     using messages = setup();
     await using screen = await render(<Area threadId={THREAD} script={FIXTURE} />);
-    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1), FRAME_WAIT);
     expect(messages.echoes("resize")[0]).toMatchObject({ width: 300, height: 200 });
 
     const area = screen.container.querySelector<HTMLElement>("[data-testid=area]")!;
@@ -122,7 +125,7 @@ describe("TotThemeEffect", () => {
         }),
       );
     }
-    await vi.waitFor(() => expect(messages.echoes("pointer")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("pointer")).toHaveLength(1), FRAME_WAIT);
     // The iframe's own spoofed pointer and ready messages changed nothing.
     expect(messages.echoes("pointer")[0]).toEqual({ type: "pointer", x: 30, y: 5, inside: true });
   });
@@ -130,7 +133,7 @@ describe("TotThemeEffect", () => {
   it("posts a pointerdown in area-local px with its button", async () => {
     using messages = setup();
     await using screen = await render(<Area threadId={THREAD} script={FIXTURE} />);
-    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1), FRAME_WAIT);
 
     const area = screen.container.querySelector<HTMLElement>("[data-testid=area]")!;
     const rect = area.getBoundingClientRect();
@@ -142,7 +145,7 @@ describe("TotThemeEffect", () => {
         button: 2,
       }),
     );
-    await vi.waitFor(() => expect(messages.echoes("pointerdown")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("pointerdown")).toHaveLength(1), FRAME_WAIT);
     expect(messages.echoes("pointerdown")[0]).toEqual({
       type: "pointerdown",
       x: 40,
@@ -155,7 +158,7 @@ describe("TotThemeEffect", () => {
   it("posts a pointerup in the frame it shares with its pointerdown", async () => {
     using messages = setup();
     await using screen = await render(<Area threadId={THREAD} script={FIXTURE} />);
-    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1), FRAME_WAIT);
 
     const area = screen.container.querySelector<HTMLElement>("[data-testid=area]")!;
     const rect = area.getBoundingClientRect();
@@ -173,7 +176,7 @@ describe("TotThemeEffect", () => {
         clientY: rect.top + 10,
       }),
     );
-    await vi.waitFor(() => expect(messages.echoes("pointerup")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("pointerup")).toHaveLength(1), FRAME_WAIT);
     expect(messages.echoes("pointerdown")[0]).toEqual({
       type: "pointerdown",
       x: 7,
@@ -193,7 +196,7 @@ describe("TotThemeEffect", () => {
   it("ignores presses outside the area", async () => {
     using messages = setup();
     await using screen = await render(<Area threadId={THREAD} script={FIXTURE} />);
-    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1), FRAME_WAIT);
 
     const area = screen.container.querySelector<HTMLElement>("[data-testid=area]")!;
     const rect = area.getBoundingClientRect();
@@ -214,7 +217,7 @@ describe("TotThemeEffect", () => {
         clientY: rect.top + 5,
       }),
     );
-    await vi.waitFor(() => expect(messages.echoes("pointer")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("pointer")).toHaveLength(1), FRAME_WAIT);
     expect(messages.echoes("pointerdown")).toHaveLength(0);
     expect(messages.echoes("pointerup")).toHaveLength(0);
   });
@@ -230,7 +233,7 @@ describe("TotThemeEffect", () => {
         phase="running"
       />,
     );
-    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1), FRAME_WAIT);
     expect(messages.echoes("context")[0]).toEqual({
       type: "context",
       usedTokens: 25_000,
@@ -246,7 +249,7 @@ describe("TotThemeEffect", () => {
     await using screen = await render(
       <Area threadId={THREAD} script={FIXTURE} contextWindow={CONTEXT_WINDOW} />,
     );
-    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1), FRAME_WAIT);
 
     await screen.rerender(
       <Area
@@ -257,7 +260,7 @@ describe("TotThemeEffect", () => {
         phase="running"
       />,
     );
-    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(2));
+    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(2), FRAME_WAIT);
     expect(messages.echoes("context")[1]).toMatchObject({
       usedTokens: 150_000,
       maxTokens: 200_000,
@@ -272,7 +275,7 @@ describe("TotThemeEffect", () => {
     await using screen = await render(
       <Area threadId={THREAD} script={FIXTURE} contextWindow={CONTEXT_WINDOW} />,
     );
-    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1), FRAME_WAIT);
 
     await screen.rerender(
       <Area
@@ -293,7 +296,7 @@ describe("TotThemeEffect", () => {
         clientY: rect.top + 5,
       }),
     );
-    await vi.waitFor(() => expect(messages.echoes("pointer")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("pointer")).toHaveLength(1), FRAME_WAIT);
     expect(messages.echoes("context")).toHaveLength(1);
   });
 
@@ -302,7 +305,7 @@ describe("TotThemeEffect", () => {
     await using _screen = await render(
       <Area threadId={THREAD} script={FIXTURE} contextWindow={CONTEXT_WINDOW} />,
     );
-    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("context")).toHaveLength(1), FRAME_WAIT);
     const message = messages.echoes("context")[0] as Record<string, unknown>;
     expect(Object.keys(message).sort()).toEqual([
       "maxTokens",
@@ -325,7 +328,7 @@ describe("TotThemeEffect", () => {
   it("stops listening once the effect unmounts", async () => {
     using messages = setup();
     await using screen = await render(<Area threadId={THREAD} script={FIXTURE} />);
-    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1));
+    await vi.waitFor(() => expect(messages.echoes("resize")).toHaveLength(1), FRAME_WAIT);
     await screen.rerender(<Area threadId={THREAD} />);
     expect(screen.container.querySelector("iframe")).toBeNull();
 
