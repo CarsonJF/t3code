@@ -169,7 +169,7 @@ export function DraftHeroHeadline({
             )[0]!.projectKey,
     },
     pickerOpen,
-        );
+  );
   const projectItem = (group: (typeof menuGroups)[number], value?: string) => ({
     value: value ?? group.projectKey,
     label: group.displayName,
@@ -254,7 +254,10 @@ export function DraftHeroHeadline({
         ) : entry ? (
           <ProjectFavicon project={entry.group} className="size-4 shrink-0" />
         ) : null}
-        <SharedTooltipTrigger render={<span className="min-w-0 flex-1 text-sm" />} label={item.label}>
+        <SharedTooltipTrigger
+          render={<span className="min-w-0 flex-1 text-sm" />}
+          label={item.label}
+        >
           <DraftProjectName value={item.label} />
         </SharedTooltipTrigger>
         {entry && canPinProjectGroup(entry.group) ? (

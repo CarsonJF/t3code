@@ -217,7 +217,7 @@ function SidebarUtilityItem({
     <SidebarMenuItem className="shrink-0">
       <SharedTooltipTrigger
         render={
-            <SidebarMenuButton aria-label={label} onClick={onClick} size="icon">
+          <SidebarMenuButton aria-label={label} onClick={onClick} size="icon">
             {icon}
           </SidebarMenuButton>
         }
