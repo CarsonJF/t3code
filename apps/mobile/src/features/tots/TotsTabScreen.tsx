@@ -11,6 +11,7 @@ import { AppText } from "../../components/ui/AppText";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { useTotsTabDisclosure } from "../../state/companions";
 import { serverEnvironment } from "../../state/server";
 import {
   useAnimateTotAvatars,
@@ -22,8 +23,10 @@ import {
 import { useWorkspaceSettledContentWidth } from "../layout/workspace-content-width";
 import { useWorkspaceListBottomInset } from "../layout/workspace/workspace-list-insets";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
+import { CompanionsSection } from "../companions/CompanionsSection";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { TOT_CARD_MIN_HEIGHT, TotCard } from "./TotCard";
+import { TotsTabSectionHeader } from "./TotsTabSectionHeader";
 import {
   TOT_GRID_GAP,
   TOT_GRID_MAX_WIDTH,
@@ -108,6 +111,8 @@ export function TotsTabScreen() {
   const tots = useTots();
   const hosts = useTotHosts();
   const navigation = useNavigation();
+  const disclosure = useTotsTabDisclosure();
+  const totsExpanded = disclosure.sectionExpanded("tots");
   const host = hosts[0]?.environmentId ?? null;
   const hostSettings = useAtomValue(
     host === null ? NO_SETTINGS_ATOM : serverEnvironment.settingsValueAtom(host),
@@ -151,6 +156,16 @@ export function TotsTabScreen() {
         contentContainerStyle={{ paddingBottom: bottomInset }}
         onLayout={(event) => setMeasuredWidth(event.nativeEvent.layout.width)}
       >
+        {rows.length === 0 ? null : (
+          <TotsTabSectionHeader
+            testID="tots-tab-tots-toggle"
+            // oxlint-disable-next-line t3code/no-untranslated-copy -- the feature's name, as in the tab title
+            label="Tots"
+            count={rows.length}
+            expanded={totsExpanded}
+            onToggle={() => disclosure.toggleSection("tots")}
+          />
+        )}
         {rows.length === 0 ? (
           <EmptyState
             variant="plain"
@@ -158,7 +173,7 @@ export function TotsTabScreen() {
             detail="A Tot is an agent you talk to in one thread. It starts, watches and answers the threads in its scope for you."
             {...(newTot === undefined ? {} : { actionLabel: "New Tot", onAction: newTot })}
           />
-        ) : (
+        ) : !totsExpanded ? null : (
           <View className="gap-3">
             {totGridRows(cells, columns).map((row) => (
               <View key={row[0]?.key} className="flex-row" style={{ gap: TOT_GRID_GAP }}>
@@ -167,7 +182,7 @@ export function TotsTabScreen() {
             ))}
           </View>
         )}
-        {rows.length === 0 ? null : (
+        {rows.length === 0 || !totsExpanded ? null : (
           <AppText className="mt-4 px-1 text-sm text-foreground-muted">
             A Tot is an agent you talk to in one thread. It starts, watches and answers the threads
             in its scope for you.
@@ -179,6 +194,7 @@ export function TotsTabScreen() {
             machines.
           </AppText>
         )}
+        <CompanionsSection />
       </ScrollView>
     </SettingsScreen>
   );
