@@ -293,7 +293,10 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
                   text: input.message ?? "",
                   attachments: input.attachments,
                 });
-          if (schemaProblem !== null || (input.outputSchema !== undefined && !input.message?.trim()))
+          if (
+            schemaProblem !== null ||
+            (input.outputSchema !== undefined && !input.message?.trim())
+          )
             return yield* new OrchestratorMcpFailure({
               code: "invalid_request",
               message: schemaProblem ?? "outputSchema needs a message that asks for the result.",
